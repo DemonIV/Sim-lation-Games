@@ -18,6 +18,12 @@ namespace Sim.Runtime
         [SerializeField] private float damagePerHit = 40f;
         [SerializeField] private float weaponRange = 90f;
 
+        [Header("Guided Munition")]
+        // When true, firing launches a proportional-navigation GuidedMunition instead of applying
+        // instant damage. See GuidedMunition (Sim.Runtime) + ProportionalNavigation (Sim.Core).
+        [SerializeField] private bool useGuidedMunition = true;
+        [SerializeField] private float munitionSpeed = 180f;
+
         private WeaponSystem _weapon;
 
         /// <summary>Read-only access to the fire-control state (ammo, cooldown) for HUD/telemetry.</summary>
@@ -54,10 +60,55 @@ namespace Sim.Runtime
 
             if (_weapon.TryFire(true))
             {
-                target.TakeDamage(damagePerHit);
-                // Visualize the shot for a single frame.
-                Debug.DrawLine(self, intercept, Color.red);
+                if (useGuidedMunition)
+                {
+                    // Launch a guided munition (proportional navigation + ballistic model) rather than
+                    // applying instant damage. The munition homes on the resolved target Targetable.
+                    LaunchMunition(self, target);
+                }
+                else
+                {
+                    target.TakeDamage(damagePerHit);
+                    // Visualize the shot for a single frame.
+                    Debug.DrawLine(self, intercept, Color.red);
+                }
             }
+        }
+
+        /// <summary>
+        /// Spawns a placeholder sphere munition at the launcher, attaches a <see cref="GuidedMunition"/>,
+        /// and fires it at the given target along the current heading. The target is the one already
+        /// resolved from the lock via <see cref="TargetRegistry.FindById"/> (DetectedId).
+        /// </summary>
+        private void LaunchMunition(Vector3 origin, Targetable target)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            go.name = "GuidedMunition";
+            go.transform.position = origin;
+            go.transform.localScale = Vector3.one * 0.6f;
+            go.transform.forward = transform.forward;
+
+            // Bright, self-lit placeholder so the munition reads clearly against the scene.
+            var renderer = go.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                Shader shader = Shader.Find("Unlit/Color");
+                if (shader == null) shader = Shader.Find("Standard");
+                if (shader != null)
+                {
+                    var mat = new Material(shader) { color = Color.yellow };
+                    if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.yellow);
+                    if (mat.HasProperty("_EmissionColor"))
+                    {
+                        mat.EnableKeyword("_EMISSION");
+                        mat.SetColor("_EmissionColor", Color.yellow);
+                    }
+                    renderer.material = mat;
+                }
+            }
+
+            var munition = go.AddComponent<GuidedMunition>();
+            munition.Launch(target, transform.forward * munitionSpeed);
         }
     }
 }

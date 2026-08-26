@@ -27,3 +27,13 @@ with abstract, gamified, educational mechanics.
 ## Branch convention
 
 - Develop on the assigned feature branch (do not commit directly to a shared default branch).
+
+## Physics & electronic-warfare layer
+
+- Additional Core systems (all in `Sim.Core`, all covered by EditMode tests): `Atmosphere`,
+  `BallisticProjectile`, `RadarSystem`, `RadarCrossSection`, `ElectronicWarfare`, `TargetTracker`,
+  `SeekerGimbal`, `ProportionalNavigation`.
+- Runtime glue (thin MonoBehaviours in `Sim.Runtime`): `RadarSensor`, `RcsComponent`, `Jammer`,
+  `GuidedMunition`.
+- **Rule:** all guidance, sensor, and ballistics logic lives in `Sim.Core` with EditMode tests;
+  the MonoBehaviours stay thin, only wiring Core logic into the scene.

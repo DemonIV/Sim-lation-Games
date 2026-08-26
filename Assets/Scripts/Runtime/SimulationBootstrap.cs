@@ -29,9 +29,10 @@ namespace Sim.Runtime
             SpawnSiha("SIHA_1", new Vector3(0f, 14f, -30f), RectangleRoute(new Vector3(0f, 14f, -30f), 40f, 20f), new Color(1f, 0.35f, 0.2f));
 
             // Three hostile targets (grey cubes) scattered on the field.
-            SpawnHostile("Hostile_1", new Vector3(15f, 1f, 10f));
-            SpawnHostile("Hostile_2", new Vector3(-25f, 1f, 5f));
-            SpawnHostile("Hostile_3", new Vector3(5f, 1f, -15f));
+            // Hostile_2 carries a noise jammer to demonstrate EW: it is harder to detect at range.
+            SpawnHostile("Hostile_1", new Vector3(15f, 1f, 10f), false);
+            SpawnHostile("Hostile_2", new Vector3(-25f, 1f, 5f), true);
+            SpawnHostile("Hostile_3", new Vector3(5f, 1f, -15f), false);
         }
 
         /// <summary>Creates a main camera looking down over the field plus a directional light, if none exist.</summary>
@@ -78,6 +79,10 @@ namespace Sim.Runtime
 
             var ctrl = go.AddComponent<IhaController>();
             AssignRoute(ctrl, route);
+
+            // Realistic radar sensor (RCS^0.25 range, jamming, alpha-beta tracking).
+            // hostileFaction defaults to 1, matching the grey-cube targets.
+            go.AddComponent<RadarSensor>();
         }
 
         /// <summary>Spawns an armed SİHA drone (red capsule) with a patrol route and friendly Targetable.</summary>
@@ -91,10 +96,13 @@ namespace Sim.Runtime
 
             var ctrl = go.AddComponent<SihaController>();
             AssignRoute(ctrl, route);
+
+            // Realistic radar sensor (hostileFaction defaults to 1).
+            go.AddComponent<RadarSensor>();
         }
 
-        /// <summary>Spawns a hostile target (grey cube, Faction = 1).</summary>
-        private void SpawnHostile(string name, Vector3 position)
+        /// <summary>Spawns a hostile target (grey cube, Faction = 1). Optionally fits a noise jammer.</summary>
+        private void SpawnHostile(string name, Vector3 position, bool withJammer)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
             go.name = name;
@@ -105,6 +113,12 @@ namespace Sim.Runtime
             var targetable = go.AddComponent<Targetable>();
             targetable.Faction = 1;
             targetable.MaxHealth = 100f;
+
+            // Aspect-dependent radar signature so hostile RadarSensors see angle-varying RCS.
+            go.AddComponent<RcsComponent>();
+
+            // One hostile carries onboard noise jamming to demonstrate EW range degradation.
+            if (withJammer) go.AddComponent<Jammer>();
         }
 
         /// <summary>Marks a drone GameObject as a friendly Targetable (Faction = 0).</summary>

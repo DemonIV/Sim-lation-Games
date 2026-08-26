@@ -47,6 +47,32 @@ Proje, test edilebilirliği ön planda tutan üç katmana ayrılmıştır:
 
 ---
 
+## Gerçekçi Fizik ve Elektronik Harp Katmanı
+
+Simülasyona, ders kitabı fiziğiyle soyutlanmış gerçekçi bir fizik + elektronik harp (EH) katmanı eklenmiştir. Tüm çekirdek sistemler saf mantıktır ve EditMode birim testleriyle kapsanmıştır.
+
+### Yeni Çekirdek Sistemler (`Sim.Core`)
+
+- **`Atmosphere`** — üstel atmosfer modeli: irtifaya bağlı hava yoğunluğu (deniz seviyesinde 1.225 kg/m³, 8500 m ölçek yüksekliği).
+- **`BallisticProjectile`** — nokta-kütle balistik entegratörü: yerçekimi, karesel aerodinamik sürükleme, rüzgar ve irtifaya bağlı hava yoğunluğu; yarı-örtük (semi-implicit) Euler.
+- **`RadarSystem`** — basitleştirilmiş monostatik radar: tespit menzili RCS'nin dördüncü köküyle ölçeklenir (radar menzil denklemi), hüzme genişliği ve görüş hattıyla sınırlıdır.
+- **`RadarCrossSection`** — açıya (aspect) bağlı radar kesit alanı: burun/kuyruk yönü en düşük, yan (broadside) en yüksek.
+- **`ElectronicWarfare`** — EH etkileri: gürültü karıştırması (jamming) etkin tespit menzilini/yakma (burn-through) menzilini düşürür; ECM kilitlenme olasılığını azaltır.
+- **`TargetTracker`** — alfa-beta filtresi: gürültülü konum ölçümlerinden konum ve hız kestirimi.
+- **`SeekerGimbal`** — gimbal üzerindeki arayıcı başlık: azami dönüş oranı ve azami eksen-dışı (off-boresight) açı sınırlarıyla hedefe yönelir.
+- **`ProportionalNavigation`** — oransal seyrüsefer güdüm yasası: görüş hattı dönüş oranıyla orantılı yanal ivme komutu; kapanma hızı hesabı.
+
+### Yeni Çalışma Zamanı Bileşenleri (`Sim.Runtime`)
+
+- **`RadarSensor`** — naif tespiti değiştiren gerçekçi sensör: `RadarSystem` + açıya bağlı RCS + karıştırma menzil düşümü + alfa-beta hedef takibi (gürültülü ölçümlerle).
+- **`RcsComponent`** — bir Targetable'a açıya bağlı radar imzası ekler.
+- **`Jammer`** — düşman radar tespit menzilini kısaltan onboard gürültü karıştırıcı.
+- **`GuidedMunition`** — oransal seyrüsefer + balistik model kullanan SİHA güdümlü mühimmatı; yakınlık tapasıyla hasar verir. `SihaController` artık kilitlenince anında hasar yerine güdümlü mühimmat fırlatır.
+
+Bu sistemlerin tamamı **EditMode birim testleri** ile kapsanmıştır (`Assets/Tests/EditMode`).
+
+---
+
 ## English Summary
 
 **İHA / SİHA Simulation** is a 3D Unity desktop simulation of an unmanned aerial vehicle (İHA) and an armed unmanned aerial vehicle (SİHA), built with abstract, gamified mechanics as an educational/game project — not a real military system.
