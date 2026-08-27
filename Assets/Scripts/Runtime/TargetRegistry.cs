@@ -19,8 +19,18 @@ namespace Sim.Runtime
         /// <summary>The pure-logic health pool backing this object. Created in Awake.</summary>
         public Health Health { get; private set; }
 
+        private static int _nextId = 1;
+
+        /// <summary>
+        /// Stable simulation id, handed out on Awake. Deliberately ours rather than Unity's
+        /// instance id: those are an engine detail (and <c>GetInstanceID</c> is obsolete in
+        /// Unity 6), while <see cref="Sim.Core.DetectableTarget.Id"/> only needs a unique int.
+        /// </summary>
+        public int Id { get; private set; }
+
         private void Awake()
         {
+            Id = _nextId++;
             Health = new Health(MaxHealth);
             TargetRegistry.Register(this);
         }
@@ -76,18 +86,18 @@ namespace Sim.Runtime
                 if (t == null) continue;
                 if (t.Faction != factionFilter) continue;
                 if (t.Health != null && t.Health.IsDestroyed) continue;
-                result.Add(new DetectableTarget(t.GetInstanceID(), t.transform.position, Vector3.zero));
+                result.Add(new DetectableTarget(t.Id, t.transform.position, Vector3.zero));
             }
             return result;
         }
 
-        /// <summary>Finds a registered targetable by its GameObject instance id, or null.</summary>
+        /// <summary>Finds a registered targetable by its <see cref="Targetable.Id"/>, or null.</summary>
         public static Targetable FindById(int id)
         {
             for (int i = 0; i < All.Count; i++)
             {
                 Targetable t = All[i];
-                if (t != null && t.GetInstanceID() == id) return t;
+                if (t != null && t.Id == id) return t;
             }
             return null;
         }
