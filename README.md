@@ -4,7 +4,9 @@
 
 ## Önerilen Unity Sürümü
 
-- **Unity 2022.3 LTS** (proje `2022.3.40f1` ile oluşturulmuştur).
+- **Unity 6 (6000.5.9f1)** (proje bu sürüm için yapılandırılmıştır).
+
+> **Not:** Proje Unity 6 (`6000.5.9f1`) için yapılandırılmıştır ancak gerektiğinde 2022.3 LTS ile de açılabilir. İlk açılışta Package Manager paketleri güncellemeyi önerebilir; öneriyi kabul edin.
 
 ## Mimari
 
@@ -27,7 +29,7 @@ Proje, test edilebilirliği ön planda tutan üç katmana ayrılmıştır:
 ## Projeyi Açma
 
 1. Depoyu klonlayın.
-2. Unity Hub'da **2022.3 LTS** ile klasörü açın.
+2. Unity Hub'da **Unity 6 (6000.5.9f1)** ile klasörü açın (gerektiğinde 2022.3 LTS de kullanılabilir).
 
 ## Demoyu Çalıştırma
 
@@ -77,9 +79,9 @@ Bu sistemlerin tamamı **EditMode birim testleri** ile kapsanmıştır (`Assets/
 
 **İHA / SİHA Simulation** is a 3D Unity desktop simulation of an unmanned aerial vehicle (İHA) and an armed unmanned aerial vehicle (SİHA), built with abstract, gamified mechanics as an educational/game project — not a real military system.
 
-- **Recommended Unity version:** 2022.3 LTS.
+- **Recommended Unity version:** Unity 6 (6000.5.9f1); also opens in 2022.3 LTS if needed.
 - **Architecture:** `Sim.Core` (pure, testable C# logic — flight, navigation, targeting, weapons, ballistics, health), `Sim.Runtime` (MonoBehaviour glue for the 3D scene), `Sim.Tests.EditMode` (NUnit unit tests).
-- **Open:** clone the repo and open the folder in Unity Hub with 2022.3 LTS.
+- **Open:** clone the repo and open the folder in Unity Hub with Unity 6 (6000.5.9f1).
 - **Run the demo:** create an empty scene, add a GameObject, attach `SimulationBootstrap`, and press Play.
 - **Run tests:** `Window > General > Test Runner > EditMode > Run All`.
 - The physical/visual scene is built at runtime by `SimulationBootstrap`; 3D models and materials can be swapped in later.

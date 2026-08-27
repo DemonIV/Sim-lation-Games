@@ -1,6 +1,6 @@
 # CLAUDE.md — Guide for future Claude Code sessions
 
-This repository is a **Unity 2022.3 LTS** project simulating İHA (recon UAV) and SİHA (armed UAV)
+This repository is a **Unity 6 (6000.5.9f1)** project simulating İHA (recon UAV) and SİHA (armed UAV)
 with abstract, gamified, educational mechanics.
 
 ## Layout
