@@ -5,11 +5,15 @@ using Sim.Core;
 namespace Sim.Runtime
 {
     /// <summary>
-    /// Realistic radar sensor that replaces the naive line-of-sight detector on a drone. It couples
-    /// the pure-logic <see cref="Sim.Core.RadarSystem"/> (RCS^0.25 range equation, beam limits) with
-    /// aspect-dependent <see cref="RcsComponent"/> signatures, <see cref="Jammer"/> range degradation
-    /// via <see cref="Sim.Core.ElectronicWarfare"/>, and an alpha-beta <see cref="Sim.Core.TargetTracker"/>
-    /// that smooths a noisy measured position into a position/velocity estimate.
+    /// Realistic radar sensor that replaces the naive line-of-sight detector on a drone. It gathers
+    /// aspect-dependent <see cref="RcsComponent"/> signatures and <see cref="Jammer"/> strengths from
+    /// the scene, hands them to the pure-logic <see cref="Sim.Core.RadarScan"/> sweep (RCS^0.25 range
+    /// equation + burn-through + beam limits), and smooths the resulting contact through an
+    /// alpha-beta <see cref="Sim.Core.TargetTracker"/>.
+    ///
+    /// The sweep is driven by the owning controller via <see cref="Scan"/> rather than by its own
+    /// Update, so it always runs against the drone's post-move pose instead of a frame-order lottery.
+    /// See <see cref="IhaController.RunSensing"/>.
     ///
     /// This is a GAME / EDUCATIONAL model with abstract, gamified parameters.
     /// </summary>
@@ -25,6 +29,9 @@ namespace Sim.Runtime
         private RadarSystem _radar;
         private TargetTracker _tracker;
 
+        // Reused between sweeps so a per-frame scan does not allocate.
+        private readonly List<RadarScanTarget> _candidates = new List<RadarScanTarget>();
+
         /// <summary>True while the sensor holds a smoothed contact on a hostile.</summary>
         public bool HasContact { get; private set; }
 
@@ -37,7 +44,7 @@ namespace Sim.Runtime
         /// <summary>Filtered estimated velocity of the current contact.</summary>
         public Vector3 EstimatedVelocity { get; private set; }
 
-        private void Start()
+        private void Awake()
         {
             _radar = new RadarSystem
             {
@@ -48,72 +55,47 @@ namespace Sim.Runtime
             _tracker = new TargetTracker();
         }
 
-        private void Update()
+        /// <summary>
+        /// Runs one radar sweep and advances the track filter. Called by the owning controller after
+        /// it has moved the drone, so the sweep uses the current pose.
+        /// </summary>
+        public void Scan(float dt)
         {
-            float dt = Time.deltaTime;
             Vector3 self = transform.position;
-            Vector3 forward = transform.forward;
 
+            // Gather what the scene knows about each hostile: aspect RCS and jamming strength.
+            _candidates.Clear();
             List<DetectableTarget> snapshot = TargetRegistry.GetSnapshot(hostileFaction);
-
-            bool found = false;
-            int bestId = -1;
-            Vector3 bestPos = Vector3.zero;
-            float bestDist = float.MaxValue;
-
             for (int i = 0; i < snapshot.Count; i++)
             {
                 DetectableTarget candidate = snapshot[i];
-
-                // Resolve the live Targetable so we can read aspect RCS and jamming state.
                 Targetable t = TargetRegistry.FindById(candidate.Id);
 
-                // Aspect-dependent RCS if the target carries an RcsComponent, else the nominal value.
                 float rcs = referenceRcs;
+                float jamming = 0f;
                 if (t != null)
                 {
                     RcsComponent rcsComp = t.GetComponent<RcsComponent>();
                     if (rcsComp != null) rcs = rcsComp.RcsFrom(self);
-                }
 
-                // Baseline detection range from the radar range equation.
-                float range = _radar.DetectionRange(rcs);
-
-                // Noise jamming shortens the burn-through range.
-                if (t != null)
-                {
                     Jammer jammer = t.GetComponent<Jammer>();
-                    if (jammer != null)
-                        range = ElectronicWarfare.EffectiveRange(range, jammer.Strength);
+                    if (jammer != null) jamming = jammer.Strength;
                 }
 
-                // Detectable if inside the (jamming-reduced) range and within the beam.
-                Vector3 to = candidate.Position - self;
-                float dist = to.magnitude;
-                if (dist > range) continue;
-                if (dist > 1e-6f && Vector3.Angle(forward, to) > beamWidthDeg * 0.5f) continue;
-
-                // Keep the nearest detectable candidate.
-                if (dist < bestDist)
-                {
-                    bestDist = dist;
-                    bestId = candidate.Id;
-                    bestPos = candidate.Position;
-                    found = true;
-                }
+                _candidates.Add(new RadarScanTarget(candidate.Id, candidate.Position, rcs, jamming));
             }
 
-            if (found)
+            // The range equation, burn-through and beam limits all live in Sim.Core.
+            if (RadarScan.FindNearest(_radar, self, transform.forward, _candidates, out RadarContact contact))
             {
                 // A brand-new contact restarts the filter.
-                if (bestId != ContactId) _tracker.Reset();
+                if (contact.Id != ContactId) _tracker.Reset();
 
                 // Feed a noisy measurement into the alpha-beta filter.
-                Vector3 measurement = bestPos + GaussianVector() * measurementNoise;
-                _tracker.Update(measurement, dt);
+                _tracker.Update(contact.Position + GaussianVector() * measurementNoise, dt);
 
                 HasContact = true;
-                ContactId = bestId;
+                ContactId = contact.Id;
                 EstimatedPosition = _tracker.Position;
                 EstimatedVelocity = _tracker.Velocity;
 

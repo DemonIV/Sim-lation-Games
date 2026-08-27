@@ -8,6 +8,11 @@ namespace Sim.Runtime
     /// Recon-drone (İHA) MonoBehaviour. Drives a pure-logic <see cref="FlightModel"/> along a
     /// <see cref="WaypointNavigator"/> patrol route and runs a <see cref="TargetingSystem"/> to
     /// detect and lock hostile <see cref="Targetable"/> objects. No weapon.
+    ///
+    /// Detection comes from a <see cref="RadarSensor"/> when one is fitted, so radar cross section
+    /// and enemy jamming actually govern what the drone can see. Without a radar it falls back to
+    /// the naive range/FOV detector in <see cref="TargetingSystem"/>. Either way the lock timer
+    /// itself stays in <see cref="TargetingSystem"/>.
     /// </summary>
     public class IhaController : MonoBehaviour
     {
@@ -32,6 +37,9 @@ namespace Sim.Runtime
         protected FlightModel _flight;
         protected WaypointNavigator _nav;
         protected TargetingSystem _targeting;
+
+        // Optional radar. When present it supplies the contact instead of the naive detector.
+        private RadarSensor _radar;
 
         /// <summary>True when a hostile target is currently detected within range and FOV.</summary>
         public bool HasTarget { get; private set; }
@@ -66,6 +74,8 @@ namespace Sim.Runtime
                 DetectionRange = detectionRange,
                 FieldOfViewDeg = fovDeg
             };
+
+            _radar = GetComponent<RadarSensor>();
         }
 
         protected virtual void Update()
@@ -98,16 +108,34 @@ namespace Sim.Runtime
         /// <summary>Runs detection against hostile targets and advances the lock timer.</summary>
         protected void RunSensing(float dt)
         {
-            List<DetectableTarget> snapshot = TargetRegistry.GetSnapshot(hostileFaction);
-            bool found = _targeting.TryDetect(transform.position, _flight.Forward, snapshot, out DetectableTarget best);
+            bool found;
+            int contactId;
+            Vector3 contactPos;
+
+            if (_radar != null)
+            {
+                // Radar-driven sensing: RCS, jamming and track filtering all apply.
+                _radar.Scan(dt);
+                found = _radar.HasContact;
+                contactId = found ? _radar.ContactId : -1;
+                contactPos = _radar.EstimatedPosition;
+            }
+            else
+            {
+                // No radar fitted: fall back to the naive range/FOV detector.
+                List<DetectableTarget> snapshot = TargetRegistry.GetSnapshot(hostileFaction);
+                found = _targeting.TryDetect(transform.position, _flight.Forward, snapshot, out DetectableTarget best);
+                contactId = found ? best.Id : -1;
+                contactPos = found ? best.Position : Vector3.zero;
+            }
 
             HasTarget = found;
-            DetectedId = found ? best.Id : -1;
-            _targeting.UpdateLock(found, DetectedId, dt);
+            DetectedId = contactId;
+            _targeting.UpdateLock(found, contactId, dt);
 
             if (found)
             {
-                Debug.DrawLine(transform.position, best.Position,
+                Debug.DrawLine(transform.position, contactPos,
                     _targeting.IsLocked ? Color.red : Color.yellow);
             }
         }

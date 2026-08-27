@@ -31,8 +31,8 @@ with abstract, gamified, educational mechanics.
 ## Physics & electronic-warfare layer
 
 - Additional Core systems (all in `Sim.Core`, all covered by EditMode tests): `Atmosphere`,
-  `BallisticProjectile`, `RadarSystem`, `RadarCrossSection`, `ElectronicWarfare`, `TargetTracker`,
-  `SeekerGimbal`, `ProportionalNavigation`.
+  `BallisticProjectile`, `RadarSystem`, `RadarCrossSection`, `RadarScan`, `ElectronicWarfare`,
+  `TargetTracker`, `SeekerGimbal`, `ProportionalNavigation`, `MunitionAutopilot`.
 - Runtime glue (thin MonoBehaviours in `Sim.Runtime`): `RadarSensor`, `RcsComponent`, `Jammer`,
   `GuidedMunition`.
 - **Rule:** all guidance, sensor, and ballistics logic lives in `Sim.Core` with EditMode tests;

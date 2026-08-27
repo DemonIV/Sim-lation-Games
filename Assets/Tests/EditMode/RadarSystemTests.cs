@@ -42,5 +42,20 @@ namespace Sim.Tests
             var r = new RadarSystem { ReferenceRange = 100f, BeamWidthDeg = 120f }; // half = 60
             Assert.IsFalse(r.CanDetect(Vector3.zero, Vector3.forward, new Vector3(80f, 0, 0), 1f)); // 90deg off
         }
+
+        [Test]
+        public void IsWithinBeam_AcceptsInsideAndRejectsOutside()
+        {
+            var r = new RadarSystem { BeamWidthDeg = 120f }; // half = 60
+            Assert.IsTrue(r.IsWithinBeam(Vector3.forward, Quaternion.Euler(0f, 59f, 0f) * Vector3.forward));
+            Assert.IsFalse(r.IsWithinBeam(Vector3.forward, Quaternion.Euler(0f, 61f, 0f) * Vector3.forward));
+        }
+
+        [Test]
+        public void IsWithinBeam_TargetOnTopOfRadar_HasNoBearing()
+        {
+            var r = new RadarSystem { BeamWidthDeg = 120f };
+            Assert.IsTrue(r.IsWithinBeam(Vector3.forward, Vector3.zero));
+        }
     }
 }

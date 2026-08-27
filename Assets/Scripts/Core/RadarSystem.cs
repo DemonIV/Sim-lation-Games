@@ -19,19 +19,22 @@ namespace Sim.Core
             return ReferenceRange * Mathf.Pow(rcs / ReferenceRcs, 0.25f);
         }
 
+        /// <summary>
+        /// True when a direction measured from the radar lies inside the scan cone. A target sitting
+        /// on top of the radar has no meaningful bearing and always counts as inside the beam.
+        /// </summary>
+        public bool IsWithinBeam(Vector3 radarForward, Vector3 radarToTarget)
+        {
+            if (radarToTarget.sqrMagnitude <= 1e-12f) return true;
+            return Vector3.Angle(radarForward, radarToTarget) <= BeamWidthDeg * 0.5f;
+        }
+
         /// <summary>True if a target of the given RCS is within detection range, beam and LOS.</summary>
         public bool CanDetect(Vector3 radarPos, Vector3 radarForward, Vector3 targetPos, float rcs)
         {
-            float range = DetectionRange(rcs);
             Vector3 to = targetPos - radarPos;
-            float dist = to.magnitude;
-            if (dist > range) return false;
-            if (dist > 1e-6f)
-            {
-                float ang = Vector3.Angle(radarForward, to);
-                if (ang > BeamWidthDeg * 0.5f) return false;
-            }
-            return true;
+            if (to.magnitude > DetectionRange(rcs)) return false;
+            return IsWithinBeam(radarForward, to);
         }
     }
 }

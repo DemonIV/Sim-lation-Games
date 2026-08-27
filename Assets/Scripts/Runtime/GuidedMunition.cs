@@ -4,11 +4,13 @@ using Sim.Core;
 namespace Sim.Runtime
 {
     /// <summary>
-    /// A SİHA guided munition. Steers with the pure-logic <see cref="Sim.Core.ProportionalNavigation"/>
-    /// guidance law, has a gimballed <see cref="Sim.Core.SeekerGimbal"/> that must keep the target
-    /// within its off-boresight cone, and is perturbed by gravity/drag from a lightweight
-    /// <see cref="Sim.Core.BallisticProjectile"/> model while a thrust term trims speed back toward
-    /// cruise. On proximity it applies gamified damage to the target and self-destructs.
+    /// A SİHA guided munition. All steering and throttle logic lives in the pure-logic
+    /// <see cref="Sim.Core.MunitionAutopilot"/> (proportional navigation under a g-limit, plus an
+    /// axial thrust term that trims speed toward cruise); gravity and drag come from a lightweight
+    /// <see cref="Sim.Core.BallisticProjectile"/> and genuinely shape the trajectory. A gimballed
+    /// <see cref="Sim.Core.SeekerGimbal"/> gates the guidance: once the target leaves the seeker's
+    /// off-boresight cone the munition loses its track and coasts. On proximity it applies gamified
+    /// damage to the target and self-destructs.
     ///
     /// NOTE: this is a GAME / EDUCATIONAL guidance model with abstract, gamified parameters — not a
     /// fidelity-accurate weapon simulation.
@@ -18,6 +20,8 @@ namespace Sim.Runtime
         [Header("Guidance")]
         [SerializeField] private float cruiseSpeed = 180f;
         [SerializeField] private float navGain = 4f;
+        [SerializeField] private float thrustGain = 2f;               // 1/s
+        [SerializeField] private float maxLateralAccel = 200f;        // m/s^2 airframe g-limit
         [SerializeField] private float proximityFuzeRadius = 6f;
         [SerializeField] private float damage = 60f;
         [SerializeField] private float maxLifetime = 12f;
@@ -37,11 +41,15 @@ namespace Sim.Runtime
         private Targetable _target;
         private Vector3 _velocity;
         private SeekerGimbal _seeker;
+        private MunitionAutopilot _autopilot;
         private float _elapsed;
         private bool _launched;
 
         /// <summary>The seeker head state, exposed for HUD/telemetry.</summary>
         public SeekerGimbal Seeker => _seeker;
+
+        /// <summary>True while the seeker still holds the target inside its gimbal cone.</summary>
+        public bool IsGuiding { get; private set; }
 
         /// <summary>Arms and fires the munition toward the given target with an initial velocity.</summary>
         public void Launch(Targetable target, Vector3 initialVelocity)
@@ -54,6 +62,14 @@ namespace Sim.Runtime
                 MaxOffBoresightDeg = maxOffBoresightDeg,
                 MaxSlewRateDeg = maxSlewRateDeg
             };
+            _autopilot = new MunitionAutopilot
+            {
+                CruiseSpeed = cruiseSpeed,
+                NavGain = navGain,
+                ThrustGain = thrustGain,
+                MaxLateralAcceleration = maxLateralAccel
+            };
+            IsGuiding = true;
             _elapsed = 0f;
             _launched = true;
         }
@@ -78,27 +94,21 @@ namespace Sim.Runtime
             // Line of sight to the target and the seeker slew toward it.
             Vector3 los = targetPos - self;
             Vector3 boresight = _velocity.sqrMagnitude > 1e-6f ? _velocity.normalized : transform.forward;
-            _seeker.Track(boresight, los.sqrMagnitude > 1e-6f ? los.normalized : boresight, dt);
+            Vector3 losDir = los.sqrMagnitude > 1e-6f ? los.normalized : boresight;
+            _seeker.Track(boresight, losDir, dt);
 
-            // Proportional navigation guidance (target velocity abstracted to zero for now).
-            Vector3 relPos = targetPos - self;
+            // The seeker can only steer while the target sits inside its gimbal cone. Once it
+            // slides outside, the track is lost for good and the munition coasts to a miss.
+            if (IsGuiding) IsGuiding = _seeker.IsWithinGimbalLimits(boresight, losDir);
+
+            // Steering + throttle from the autopilot (target velocity abstracted to zero for now),
+            // then gravity and drag from the ballistic model on top.
             Vector3 relVel = Vector3.zero - _velocity;
-            Vector3 accel = ProportionalNavigation.Acceleration(relPos, relVel, navGain);
+            Vector3 accel = _autopilot.Acceleration(los, relVel, _velocity, IsGuiding);
+            accel += _ballistic.Acceleration(new BallisticState(self, _velocity));
 
-            // Gravity + aerodynamic drag influence from the ballistic model.
-            var state = new BallisticState(self, _velocity);
-            accel += _ballistic.Acceleration(state);
-
-            // Thrust term: trim speed back toward cruise along the current heading.
-            float speed = _velocity.magnitude;
-            if (speed > 1e-6f)
-                accel += _velocity.normalized * (cruiseSpeed - speed);
-
-            // Integrate velocity and gently renormalize toward cruise so it keeps flying.
+            // Integrate. Speed is left to the thrust/drag balance rather than forced to cruise.
             _velocity += accel * dt;
-            float newSpeed = _velocity.magnitude;
-            if (newSpeed > 1e-6f)
-                _velocity = _velocity.normalized * Mathf.Lerp(newSpeed, cruiseSpeed, 0.1f);
 
             // Move and orient along the velocity vector.
             Vector3 newPos = self + _velocity * dt;
@@ -106,7 +116,7 @@ namespace Sim.Runtime
             if (_velocity.sqrMagnitude > 1e-6f)
                 transform.forward = _velocity.normalized;
 
-            Debug.DrawLine(self, newPos, Color.magenta);
+            Debug.DrawLine(self, newPos, IsGuiding ? Color.magenta : Color.grey);
 
             // Proximity fuze: detonate when close enough.
             if (Vector3.Distance(newPos, targetPos) <= proximityFuzeRadius)

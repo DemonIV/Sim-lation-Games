@@ -10,12 +10,27 @@ namespace Sim.Core
     {
         public float MaxOffBoresightDeg = 40f;
         public float MaxSlewRateDeg = 30f;   // deg/s
+
+        /// <summary>Angular tolerance (deg) within which the seeker counts as pointed at the LOS.</summary>
+        public float TrackToleranceDeg = 1f;
+
         public Vector3 LookDirection { get; private set; }
         public bool HasTrack { get; private set; }
 
         public SeekerGimbal(Vector3 initialLook)
         {
             LookDirection = initialLook.sqrMagnitude > 1e-6f ? initialLook.normalized : Vector3.forward;
+        }
+
+        /// <summary>
+        /// True when the line of sight itself lies inside the gimbal cone — i.e. the seeker can
+        /// physically see the target, regardless of whether the slew has caught up to it yet.
+        /// This is the gate a guidance law should use: outside the cone the target is lost.
+        /// </summary>
+        public bool IsWithinGimbalLimits(Vector3 boresight, Vector3 desiredLos)
+        {
+            if (boresight.sqrMagnitude < 1e-6f || desiredLos.sqrMagnitude < 1e-6f) return false;
+            return Vector3.Angle(boresight, desiredLos) <= MaxOffBoresightDeg;
         }
 
         /// <summary>
@@ -39,7 +54,7 @@ namespace Sim.Core
             }
             else
             {
-                HasTrack = Vector3.Angle(newLook, los) <= 0.5f;
+                HasTrack = Vector3.Angle(newLook, los) <= TrackToleranceDeg;
             }
 
             LookDirection = newLook;

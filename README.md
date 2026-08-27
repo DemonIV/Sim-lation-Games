@@ -58,18 +58,20 @@ Simülasyona, ders kitabı fiziğiyle soyutlanmış gerçekçi bir fizik + elekt
 - **`Atmosphere`** — üstel atmosfer modeli: irtifaya bağlı hava yoğunluğu (deniz seviyesinde 1.225 kg/m³, 8500 m ölçek yüksekliği).
 - **`BallisticProjectile`** — nokta-kütle balistik entegratörü: yerçekimi, karesel aerodinamik sürükleme, rüzgar ve irtifaya bağlı hava yoğunluğu; yarı-örtük (semi-implicit) Euler.
 - **`RadarSystem`** — basitleştirilmiş monostatik radar: tespit menzili RCS'nin dördüncü köküyle ölçeklenir (radar menzil denklemi), hüzme genişliği ve görüş hattıyla sınırlıdır.
+- **`RadarScan`** — tek bir radar taraması: aday listesine menzil denklemini, karıştırma kaynaklı menzil düşümünü ve hüzme sınırını uygulayıp en yakın teması döndürür.
 - **`RadarCrossSection`** — açıya (aspect) bağlı radar kesit alanı: burun/kuyruk yönü en düşük, yan (broadside) en yüksek.
 - **`ElectronicWarfare`** — EH etkileri: gürültü karıştırması (jamming) etkin tespit menzilini/yakma (burn-through) menzilini düşürür; ECM kilitlenme olasılığını azaltır.
 - **`TargetTracker`** — alfa-beta filtresi: gürültülü konum ölçümlerinden konum ve hız kestirimi.
 - **`SeekerGimbal`** — gimbal üzerindeki arayıcı başlık: azami dönüş oranı ve azami eksen-dışı (off-boresight) açı sınırlarıyla hedefe yönelir.
 - **`ProportionalNavigation`** — oransal seyrüsefer güdüm yasası: görüş hattı dönüş oranıyla orantılı yanal ivme komutu; kapanma hızı hesabı.
+- **`MunitionAutopilot`** — güdümlü mühimmat otopilotu: g-limitiyle sınırlanmış oransal seyrüsefer yanal komutu ile hızı seyir hızına çeken eksenel itki komutunu birleştirir. Arayıcı hedefi kaybettiğinde yalnızca itki kalır, mühimmat serbest uçuşa geçer.
 
 ### Yeni Çalışma Zamanı Bileşenleri (`Sim.Runtime`)
 
-- **`RadarSensor`** — naif tespiti değiştiren gerçekçi sensör: `RadarSystem` + açıya bağlı RCS + karıştırma menzil düşümü + alfa-beta hedef takibi (gürültülü ölçümlerle).
+- **`RadarSensor`** — naif tespiti değiştiren gerçekçi sensör: sahnedeki açıya bağlı RCS ve karıştırma değerlerini toplayıp `RadarScan`'e verir, sonucu alfa-beta filtresinden geçirir. Taramayı `IhaController` sürer (`Scan(dt)`), böylece drone hareket ettikten sonraki güncel konumla çalışır. **İHA/SİHA'nın tespiti artık buradan gelir** — RCS ve karıştırma doğrudan oyun mekaniğine etki eder.
 - **`RcsComponent`** — bir Targetable'a açıya bağlı radar imzası ekler.
 - **`Jammer`** — düşman radar tespit menzilini kısaltan onboard gürültü karıştırıcı.
-- **`GuidedMunition`** — oransal seyrüsefer + balistik model kullanan SİHA güdümlü mühimmatı; yakınlık tapasıyla hasar verir. `SihaController` artık kilitlenince anında hasar yerine güdümlü mühimmat fırlatır.
+- **`GuidedMunition`** — SİHA güdümlü mühimmatı: güdüm/gaz kolu mantığı `MunitionAutopilot`'ta, yerçekimi ve sürükleme `BallisticProjectile`'da. `SeekerGimbal` güdümü kapılar — hedef arayıcının eksen-dışı konisinden çıkarsa takip kaybedilir ve mühimmat serbest uçuşa geçip ıskalar. Yakınlık tapasıyla hasar verir. `SihaController` kilitlenince anında hasar yerine bu mühimmatı fırlatır.
 
 Bu sistemlerin tamamı **EditMode birim testleri** ile kapsanmıştır (`Assets/Tests/EditMode`).
 
