@@ -19,9 +19,13 @@ namespace Sim.Runtime
         /// <summary>The pure-logic health pool backing this object. Created in Awake.</summary>
         public Health Health { get; private set; }
 
+        /// <summary>Stable simulation id assigned at Awake, used across detection snapshots.</summary>
+        public int Id { get; private set; }
+
         private void Awake()
         {
             Health = new Health(MaxHealth);
+            Id = TargetRegistry.NextId();
             TargetRegistry.Register(this);
         }
 
@@ -51,6 +55,12 @@ namespace Sim.Runtime
         /// <summary>All currently registered targetables.</summary>
         public static readonly List<Targetable> All = new List<Targetable>();
 
+        /// <summary>Monotonic source of stable per-<see cref="Targetable"/> ids.</summary>
+        private static int _nextId = 1;
+
+        /// <summary>Returns the next stable id for a <see cref="Targetable"/>.</summary>
+        public static int NextId() => _nextId++;
+
         /// <summary>Adds a targetable to the registry.</summary>
         public static void Register(Targetable t)
         {
@@ -76,18 +86,18 @@ namespace Sim.Runtime
                 if (t == null) continue;
                 if (t.Faction != factionFilter) continue;
                 if (t.Health != null && t.Health.IsDestroyed) continue;
-                result.Add(new DetectableTarget(t.GetInstanceID(), t.transform.position, Vector3.zero));
+                result.Add(new DetectableTarget(t.Id, t.transform.position, Vector3.zero));
             }
             return result;
         }
 
-        /// <summary>Finds a registered targetable by its GameObject instance id, or null.</summary>
+        /// <summary>Finds a registered targetable by its stable simulation id, or null.</summary>
         public static Targetable FindById(int id)
         {
             for (int i = 0; i < All.Count; i++)
             {
                 Targetable t = All[i];
-                if (t != null && t.GetInstanceID() == id) return t;
+                if (t != null && t.Id == id) return t;
             }
             return null;
         }

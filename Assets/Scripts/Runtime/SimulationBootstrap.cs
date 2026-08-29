@@ -48,7 +48,7 @@ namespace Sim.Runtime
                 cam.farClipPlane = 1000f;
             }
 
-            if (FindObjectOfType<Light>() == null)
+            if (FindAnyObjectByType<Light>() == null)
             {
                 var lightGo = new GameObject("Directional Light");
                 var light = lightGo.AddComponent<Light>();
