@@ -8,7 +8,9 @@ namespace Sim.Runtime
     /// archetypes (a plain objective target, a long-range SAM, and a short-range fast-firing AAA)
     /// according to <see cref="WavePlan"/>, then waits until the field is cleared before spawning the
     /// next wave. Win/lose is driven by a pure-logic <see cref="ScenarioState"/>: clearing the last
-    /// wave wins; losing all friendly drones fails. The HUD reads this component's accessors.
+    /// wave wins; the mission fails once the friendly squad is combat-ineffective (see
+    /// <see cref="SquadStatus"/> — no drone survives, or every survivor has a dry tank). The HUD reads
+    /// this component's accessors.
     ///
     /// Enemy spawning here mirrors <see cref="SimulationBootstrap"/>'s primitive/Targetable/RcsComponent
     /// pattern, so the scenario is fully self-contained.
@@ -27,6 +29,12 @@ namespace Sim.Runtime
         [SerializeField] private float fighterAltitude = 14f;  // hostile fighters spawn airborne, at cruise
 
         private ScenarioState _state;
+
+        // Friendly controllers, cached and refreshed occasionally so the squad-effectiveness check
+        // below does not allocate a fresh array every frame.
+        private IhaController[] _friendlies;
+        private float _friendlyRefreshTimer;
+        private const float FriendlyRefreshInterval = 1f;
 
         /// <summary>Current scenario outcome (InProgress / Won / Lost).</summary>
         public ScenarioStatus Status => _state != null ? _state.Status : ScenarioStatus.InProgress;
@@ -61,8 +69,26 @@ namespace Sim.Runtime
             LiveEnemies = live;
             _state.UpdateEnemies(live);
 
-            // 3. If every friendly drone (Faction 0) is gone, the scenario fails.
-            if (TargetRegistry.GetSnapshot(0).Count == 0)
+            // 3. Squad effectiveness: the scenario fails when no friendly drone survives OR when every
+            //    survivor has a dry tank (a squad that cannot fly cannot finish the mission).
+            _friendlyRefreshTimer += Time.deltaTime;
+            if (_friendlies == null || _friendlyRefreshTimer >= FriendlyRefreshInterval)
+            {
+                _friendlyRefreshTimer = 0f;
+                _friendlies = FindObjectsByType<IhaController>(FindObjectsSortMode.None);
+            }
+
+            int alive = 0;
+            int fuelled = 0;
+            for (int i = 0; i < _friendlies.Length; i++)
+            {
+                IhaController c = _friendlies[i];
+                if (c == null) continue;   // destroyed since the last refresh
+                alive++;
+                if (!c.IsOutOfFuel) fuelled++;
+            }
+
+            if (SquadStatus.IsCombatIneffective(alive, fuelled))
                 _state.Fail();
         }
 

@@ -60,6 +60,8 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `ScenarioState` | Çok dalgalı senaryo ilerleyişi + kazan/kaybet (dalga temizlenince sonraki, son dalgada zafer). |
 | `GunSystem` | Seri atışlı top/makineli: fişek bandı, atış hızı, etkili menzil, dağılma (saf). |
 | `HitProbability` | Bir top mermisinin isabet olasılığı: menzildeki dağılma konisi yarıçapı ↔ hedef boyutu. |
+| `ThrottleGovernor` | Yakıt durumuna göre kullanılabilir gaz: son %5 rezervde güç azalır, boş depoda sıfırlanır. |
+| `SquadStatus` | Filo muharebe kabiliyeti: hiç drone kalmadıysa veya kalanların hepsinin yakıtı bittiyse etkisiz. |
 
 ### Sim.Runtime (ince MonoBehaviour'lar)
 | Bileşen | Görevi |
@@ -127,6 +129,7 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `bu tur (önceki)` | Dalga tabanlı senaryo sistemi + düşman çeşitliliği (Sabit hedef / SAM / AAA); ScenarioController dalgaları spawn eder ve kazan/kaybet'i yönetir; HUD dalga göstergesi. |
 | `bu tur (1/2)` | Top/makineli sistemi + izli mermi + düşman avcı drone'ları (hava muharebesi). |
 | `bu tur (2/2)` | Oynanabilir pilot modu: dost drone'lardan birini elle uçur (C/Tab/W/S/A/D/↑↓/Space/F). |
+| `bu tur (1/2)` | Yakıt artık gerçekten bitiyor: motor durur, drone süzülerek alçalır ve yere çakılır. |
 
 ---
 
@@ -226,3 +229,18 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   yok sayıyor; `Hud` "PİLOT MODU" paneli (drone, hız, irtifa, top %, füze %) ve ekran ortasında
   nişangâh çiziyor, kontrol ipuçları satırı güncellendi. `SimulationBootstrap` pilot bileşenini
   SimulationDirector nesnesine ekliyor.
+- **Yakıt artık gerçekten bitiyor:** Motor durur, drone süzülerek alçalır ve yere çakılır; tüm
+  drone'lar düşerse veya hepsinin yakıtı biterse görev başarısız olur (pilot modu dahil).
+  Test-driven `ThrottleGovernor` (son %5 rezervde güç azalır, boş depoda sıfır) ve `SquadStatus`
+  (filo etkisiz: hiç drone kalmadı ya da kalanların hepsi kuru) Core + EditMode testleri eklendi.
+  `IhaController` artık uçuş modelini **yönetilen gaz** ile besliyor (`_flight.Step(dir, effThrottle, dt)`)
+  ve aynı değerle yakıt yakıyor; `IsOutOfFuel` iken irtifa-tutma yerine burun aşağı (`dir.y -= 0.6f`)
+  süzülüyor, her kare `sinkRatePerSecond` kadar alçalıyor ve `minAltitude`'a inince kendi
+  `Targetable`'ı üzerinden `TakeDamage(99999)` ile imha oluyor (patlama + dost kayıp sayımı normal
+  düşürülme gibi işliyor). Yeni `IhaController.ConsumeFuel(throttle01, dt)` kancasıyla pilot da aynı
+  depoyu harcıyor (`ManualControl` açıkken YZ tarafındaki yakma atlanıyor, çift tüketim yok);
+  `PlayerDroneController` ulaşılabilir hızı yakıta göre sınırlıyor, depo bitince süzülüp yere
+  çakılıyor ve kontrolü bırakıyor. `ScenarioController` bozgun koşulunu `SquadStatus` ile
+  değiştirdi (dost controller listesi ~1 sn'de bir tazelenir, kare başına allocation yok);
+  `Hud` kuru depoyu drone satırında `[YAKIT BİTTİ]` (kırmızı) ve pilot panelinde
+  `YAKIT BİTTİ - SÜZÜLÜYOR` uyarısıyla gösteriyor.

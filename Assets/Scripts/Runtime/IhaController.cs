@@ -35,6 +35,8 @@ namespace Sim.Runtime
         [Header("Altitude")]
         // Hard floor: the flight model has no ground collision, so never let the drone sink below this.
         [SerializeField] private float minAltitude = 5f;
+        // Unpowered sink rate applied once the tank runs dry (dead-stick glide toward the ground).
+        [SerializeField] private float sinkRatePerSecond = 6f;
 
         // Cruise altitude the drone tries to hold (spawn altitude); keeps it approaching horizontally
         // instead of diving into the terrain. Set from BasePosition.y in Start.
@@ -52,6 +54,10 @@ namespace Sim.Runtime
         // Optional defensive gun, if a GunTurret component is attached to this drone. May be null.
         protected GunTurret _gun;
 
+        // This drone's own Targetable, cached in Start. Used to destroy the drone through the normal
+        // damage path (explosion + friendly-loss accounting) when it crashes out of fuel. May be null.
+        protected Targetable _self;
+
         // Threat memory for evasion: a recorded threat position and the time it expires.
         private Vector3 _threatPos;
         private float _threatExpiry;
@@ -67,6 +73,23 @@ namespace Sim.Runtime
 
         /// <summary>Remaining fuel as a 0..1 fraction (1 when no tank exists yet).</summary>
         public float FuelFraction => _fuel != null ? _fuel.Fraction : 1f;
+
+        /// <summary>
+        /// True once the tank is dry. The engine produces no power (see <see cref="ThrottleGovernor"/>),
+        /// the drone sinks and it is destroyed when it reaches the ground.
+        /// </summary>
+        public bool IsOutOfFuel => FuelFraction <= 0f;
+
+        /// <summary>
+        /// Burns fuel from this drone's tank at the given normalized throttle. Lets an external driver
+        /// (the human pilot in <see cref="PlayerDroneController"/>) spend the same tank the AI uses.
+        /// Null-safe: a no-op before <see cref="Start"/> has built the tank.
+        /// </summary>
+        public void ConsumeFuel(float throttle01, float dt)
+        {
+            if (_fuel == null) return;
+            _fuel.Consume(throttle01, dt);
+        }
 
         /// <summary>Remaining ammunition as a 0..1 fraction. Recon İHA has no weapon, so always 1.</summary>
         public virtual float AmmoFraction => 1f;
@@ -166,6 +189,9 @@ namespace Sim.Runtime
             // Optional defensive gun (added by the spawner). Null when this drone carries none.
             _gun = GetComponent<GunTurret>();
 
+            // Own damage handle, used for the out-of-fuel ground impact.
+            _self = GetComponent<Targetable>();
+
             // Remember the spawn point so ReturnToBase can steer home.
             BasePosition = transform.position;
             // Hold the spawn altitude as the cruise altitude.
@@ -177,8 +203,14 @@ namespace Sim.Runtime
             float dt = Time.deltaTime;
             Vector3 pos = transform.position;
 
-            // Endurance: burn fuel proportional to the current throttle.
-            if (_fuel != null) _fuel.Consume(throttle, dt);
+            // Endurance: a dry tank means no power, so the GOVERNED throttle (see ThrottleGovernor)
+            // drives both the burn and the flight model below — an empty tank stops burning too.
+            float effThrottle = ThrottleGovernor.Effective(throttle, FuelFraction);
+
+            // While a human pilot flies this drone the PlayerDroneController owns the burn (it knows
+            // the pilot's own throttle and afterburner), so the AI-side burn is skipped to avoid
+            // consuming the same tank twice in one frame.
+            if (_fuel != null && !ManualControl) _fuel.Consume(effThrottle, dt);
 
             // Engagement decision from the current fuel/ammo/target situation.
             if (_policy != null)
@@ -235,25 +267,60 @@ namespace Sim.Runtime
                 }
             }
 
-            // Gentle altitude-hold bias: seek the cruise altitude so drones neither climb away nor
-            // sink toward the ground while steering.
-            dir.y += (_cruiseAltitude - pos.y) * 0.5f;
+            if (IsOutOfFuel)
+            {
+                // Dead stick: with no power there is nothing to hold altitude with, so bias the nose
+                // down into a glide instead of seeking the cruise altitude.
+                dir.y -= 0.6f;
+            }
+            else
+            {
+                // Gentle altitude-hold bias: seek the cruise altitude so drones neither climb away nor
+                // sink toward the ground while steering.
+                dir.y += (_cruiseAltitude - pos.y) * 0.5f;
+            }
 
             if (dir.sqrMagnitude <= 1e-6f) dir = _flight.Forward;
 
-            // Flight integration.
-            _flight.Step(dir, throttle, dt);
+            // Flight integration on the GOVERNED throttle: an empty tank produces no thrust at all.
+            _flight.Step(dir, effThrottle, dt);
 
-            // Hard floor: the flight model has no ground collision, so clamp the integrated position
-            // up to the minimum altitude and write it back so _flight.Position and transform.position
-            // stay in sync (no divergence between the model and the scene).
             Vector3 newPos = _flight.Position;
-            if (newPos.y < minAltitude)
+            if (IsOutOfFuel)
             {
-                newPos.y = minAltitude;
+                // Unpowered sink, then a hard ground impact at the minimum altitude. The drone is
+                // destroyed through its own Targetable so the explosion and the friendly-loss
+                // accounting behave exactly like a shoot-down.
+                newPos.y -= sinkRatePerSecond * dt;
                 _flight.Position = newPos;
+                transform.position = newPos;
+                if (newPos.y <= minAltitude)
+                {
+                    if (_self != null)
+                    {
+                        _self.TakeDamage(99999f);
+                        return;
+                    }
+
+                    // Defensive: no Targetable to destroy this drone through, so just rest on the deck.
+                    newPos.y = minAltitude;
+                    _flight.Position = newPos;
+                    transform.position = newPos;
+                }
             }
-            transform.position = newPos;
+            else
+            {
+                // Hard floor: the flight model has no ground collision, so clamp the integrated
+                // position up to the minimum altitude and write it back so _flight.Position and
+                // transform.position stay in sync (no divergence between the model and the scene).
+                if (newPos.y < minAltitude)
+                {
+                    newPos.y = minAltitude;
+                    _flight.Position = newPos;
+                }
+                transform.position = newPos;
+            }
+
             if (_flight.Forward.sqrMagnitude > 1e-6f)
             {
                 Quaternion targetRot = Quaternion.LookRotation(_flight.Forward, Vector3.up);

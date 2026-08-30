@@ -44,6 +44,9 @@ namespace Sim.Runtime
         /// <summary>Pitch authority limit, so the player cannot flip the drone over.</summary>
         private const float MaxPitchDeg = 60f;
 
+        /// <summary>Unpowered sink rate once the tank runs dry, mirroring <see cref="IhaController"/>.</summary>
+        private const float DeadStickSinkRate = 6f;
+
         /// <summary>The drone currently being flown by the player, or null.</summary>
         public IhaController Controlled { get; private set; }
 
@@ -77,6 +80,9 @@ namespace Sim.Runtime
             if (Controlled == null) return;
 
             FlyControlled(Time.deltaTime);
+
+            // FlyControlled can crash (and release) the drone on a dead-stick ground impact.
+            if (Controlled == null) return;
             HandleWeapons();
         }
 
@@ -172,11 +178,22 @@ namespace Sim.Runtime
         private void FlyControlled(float dt)
         {
             if (dt <= 0f) return;
+            if (Controlled == null) return;
 
             // Throttle.
             if (Input.GetKey(KeyCode.W)) _speed += throttleStep * MaxSpeed * dt;
             if (Input.GetKey(KeyCode.S)) _speed -= throttleStep * MaxSpeed * dt;
             _speed = Mathf.Clamp(_speed, 0f, MaxSpeed);
+
+            // Endurance: the pilot burns the SAME tank the AI would (IhaController skips its own burn
+            // while ManualControl is on, so this is the single source of consumption).
+            float commanded = MaxSpeed > 0f ? _speed / MaxSpeed : 0f;
+            Controlled.ConsumeFuel(commanded, dt);
+
+            // A dry tank means no power: the governor caps the achievable speed, tapering it through
+            // the last of the reserve and pinning it at zero when the tank is empty.
+            float maxNow = MaxSpeed * ThrottleGovernor.Effective(1f, Controlled.FuelFraction);
+            if (_speed > maxNow) _speed = maxNow;
 
             // Yaw.
             if (Input.GetKey(KeyCode.D)) _yaw += yawRateDeg * dt;
@@ -195,7 +212,26 @@ namespace Sim.Runtime
             if (forward.sqrMagnitude <= 1e-6f) forward = Controlled.transform.forward;
 
             Vector3 pos = Controlled.transform.position + forward * (_speed * dt);
-            if (pos.y < MinAltitude) pos.y = MinAltitude;
+
+            if (Controlled.IsOutOfFuel)
+            {
+                // Dead stick: the drone's own sink/crash logic is suspended under manual control, so
+                // the pilot glides down and hits the deck here instead.
+                pos.y -= DeadStickSinkRate * dt;
+                if (pos.y <= MinAltitude)
+                {
+                    Targetable wreck = Controlled.GetComponent<Targetable>();
+                    Controlled.transform.position = pos;
+                    // Hand the drone back BEFORE destroying it, so no stale reference survives.
+                    ReleaseControl();
+                    if (wreck != null) wreck.TakeDamage(99999f);
+                    return;
+                }
+            }
+            else if (pos.y < MinAltitude)
+            {
+                pos.y = MinAltitude;
+            }
 
             // Drive the transform AND the drone's pure-logic flight model together.
             Controlled.SyncFlightTo(pos, forward, _speed);
@@ -204,6 +240,8 @@ namespace Sim.Runtime
         /// <summary>Space fires the gun down the nose; F launches a guided munition from a SİHA.</summary>
         private void HandleWeapons()
         {
+            if (Controlled == null) return;
+
             if (Input.GetKey(KeyCode.Space))
             {
                 GunTurret gun = Controlled.Gun;

@@ -131,9 +131,16 @@ namespace Sim.Runtime
                     // Gun ammo only when this drone actually carries a GunTurret.
                     GunTurret gun = c.Gun;
                     string gunText = gun != null ? $"  top={gun.AmmoFraction * 100f:0}%" : string.Empty;
+                    // A dry tank is a death sentence (dead-stick descent), so flag it loudly.
+                    bool dry = c.IsOutOfFuel;
+                    string fuelText = dry ? "  [YAKIT BİTTİ]" : string.Empty;
+
+                    Color prevLine = GUI.color;
+                    if (dry) GUI.color = Color.red;
                     GUILayout.Label(
-                        $"  {c.name}: {c.State}  yakıt={c.FuelFraction * 100f:0}%  mühimmat={c.AmmoFraction * 100f:0}%{gunText}",
+                        $"  {c.name}: {c.State}  yakıt={c.FuelFraction * 100f:0}%  mühimmat={c.AmmoFraction * 100f:0}%{gunText}{fuelText}",
                         _labelStyle);
+                    GUI.color = prevLine;
                     shown++;
                 }
             }
@@ -194,11 +201,21 @@ namespace Sim.Runtime
             IhaController drone = _pilot.Controlled;
             if (drone == null) return;
 
-            GUILayout.BeginArea(new Rect(Screen.width - 270f, 10f, 260f, 170f), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(Screen.width - 270f, 10f, 260f, 210f), GUI.skin.box);
             GUILayout.Label("PİLOT MODU", _titleStyle);
             GUILayout.Label($"Drone: {drone.name}", _labelStyle);
             GUILayout.Label($"Hız: {_pilot.Speed:0} m/s", _labelStyle);
             GUILayout.Label($"İrtifa: {drone.transform.position.y:0} m", _labelStyle);
+            GUILayout.Label($"Yakıt: {drone.FuelFraction * 100f:0}%", _labelStyle);
+
+            if (drone.IsOutOfFuel)
+            {
+                // Dead stick: no power left, the drone is gliding down toward a crash.
+                Color prevFuel = GUI.color;
+                GUI.color = Color.red;
+                GUILayout.Label("YAKIT BİTTİ - SÜZÜLÜYOR", _titleStyle);
+                GUI.color = prevFuel;
+            }
 
             GunTurret gun = drone.Gun;
             float gunAmmo = gun != null ? gun.AmmoFraction * 100f : 0f;
