@@ -46,6 +46,14 @@ namespace Sim.Runtime
         // Optional gun (added by the spawner). May be null.
         private GunTurret _gun;
 
+        // Optional flare/chaff dispenser and this fighter's own Targetable (used to recognise the
+        // munitions that are homing on IT). Both may be null.
+        private CountermeasureDispenser _cm;
+        private Targetable _self;
+
+        // One salvo per threat: latched while a munition is inbound, cleared when the sky is clear.
+        private bool _flaredThisThreat;
+
         // Slowly advancing bearing used for the search orbit, in radians.
         private float _wanderAngle;
 
@@ -71,6 +79,8 @@ namespace Sim.Runtime
             };
 
             _gun = GetComponent<GunTurret>();
+            _cm = GetComponent<CountermeasureDispenser>();
+            _self = GetComponent<Targetable>();
 
             // Seed the search orbit from the spawn bearing so fighters spread out instead of stacking.
             Vector3 pos = transform.position;
@@ -85,6 +95,7 @@ namespace Sim.Runtime
             Vector3 pos = transform.position;
 
             if (_gun != null) _gun.Tick(dt);
+            if (_cm != null) _cm.Tick(dt);
 
             // Sensing: nearest friendly drone within range and FOV.
             List<DetectableTarget> snapshot = TargetRegistry.GetSnapshot(targetFaction);
@@ -111,6 +122,23 @@ namespace Sim.Runtime
                                          Mathf.Sin(_wanderAngle) * radius);
                 Vector3 toLoiter = loiter - pos;
                 dir = toLoiter.sqrMagnitude > 1e-6f ? toLoiter : _flight.Forward;
+            }
+
+            // Self-defence outranks the chase: when a munition is about to arrive, flare once and fly
+            // a named evasive maneuver instead of pressing the attack.
+            GuidedMunition threat = NearestIncomingMissile(pos, out float timeToImpact);
+            if (threat == null)
+            {
+                _flaredThisThreat = false;
+            }
+            else if (timeToImpact < 3f)
+            {
+                if (_cm != null && !_flaredThisThreat && _cm.CanDeploy && _cm.Deploy())
+                    _flaredThisThreat = true;
+
+                ManeuverType maneuver = EvasiveManeuver.Choose(pos.y, minAltitude, timeToImpact);
+                dir = EvasiveManeuver.Direction(maneuver, _flight.Forward,
+                                                threat.transform.position - pos, Vector3.up);
             }
 
             // Gentle altitude-hold bias toward the cruise altitude.
@@ -142,6 +170,43 @@ namespace Sim.Runtime
                 Targetable victim = TargetRegistry.FindById(DetectedId);
                 if (victim != null) _gun.TryFireAt(victim);
             }
+        }
+
+        /// <summary>
+        /// Nearest live <see cref="GuidedMunition"/> homing on THIS fighter, with its time to impact
+        /// (see <see cref="MissileThreat"/>). Returns null (and PositiveInfinity) when nothing is
+        /// inbound or when this fighter carries no <see cref="Targetable"/>.
+        /// </summary>
+        private GuidedMunition NearestIncomingMissile(Vector3 pos, out float timeToImpact)
+        {
+            timeToImpact = float.PositiveInfinity;
+            if (_self == null) return null;
+
+            GuidedMunition nearest = null;
+            float bestRangeSq = float.MaxValue;
+
+            List<GuidedMunition> active = GuidedMunition.Active;
+            for (int i = 0; i < active.Count; i++)
+            {
+                GuidedMunition m = active[i];
+                if (m == null) continue;
+                if (m.Target != _self) continue;
+
+                float d2 = (m.transform.position - pos).sqrMagnitude;
+                if (d2 < bestRangeSq)
+                {
+                    bestRangeSq = d2;
+                    nearest = m;
+                }
+            }
+
+            if (nearest == null) return null;
+
+            // Own velocity abstracted to zero, matching the munition's own guidance convention.
+            Vector3 los = pos - nearest.transform.position;
+            float closing = ProportionalNavigation.ClosingVelocity(los, -nearest.Velocity);
+            timeToImpact = MissileThreat.TimeToImpact(los.magnitude, closing);
+            return nearest;
         }
     }
 }

@@ -232,6 +232,10 @@ namespace Sim.Runtime
             gun.Configure(200, 8f, 55f, 3f, 3.5f);
             gun.SetTracerColor(new Color(1f, 0.35f, 0.35f));
 
+            // Flare/chaff dispenser, also BEFORE the controller so it is picked up in Start. Slightly
+            // leaner than the friendly fit so the player keeps an edge.
+            go.AddComponent<CountermeasureDispenser>().Configure(6, 2.5f, 0.5f);
+
             go.AddComponent<EnemyDroneController>();
         }
 

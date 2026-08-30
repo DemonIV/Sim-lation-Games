@@ -16,7 +16,8 @@ namespace Sim.Runtime
     ///
     /// Controls: <c>C</c> take/release control · <c>Tab</c> pick drone · <c>W</c>/<c>S</c> throttle ·
     /// <c>A</c>/<c>D</c> yaw · <c>↑</c>/<c>↓</c> (or Left-Alt + mouse Y) pitch · <c>Space</c> guns ·
-    /// <c>F</c> guided munition (SİHA only).
+    /// <c>F</c> guided munition (SİHA only) · <c>Q</c> flares/chaff · <c>E</c> (held) afterburner ·
+    /// <c>X</c> automatic evasive maneuver.
     ///
     /// This is a GAME / EDUCATIONAL flight feel with abstract, gamified parameters.
     /// </summary>
@@ -47,6 +48,15 @@ namespace Sim.Runtime
         /// <summary>Unpowered sink rate once the tank runs dry, mirroring <see cref="IhaController"/>.</summary>
         private const float DeadStickSinkRate = 6f;
 
+        /// <summary>Top-speed multiplier while the afterburner (E) is held.</summary>
+        private const float AfterburnerSpeedMultiplier = 1.6f;
+
+        /// <summary>Fuel-burn multiplier while the afterburner is held.</summary>
+        private const float AfterburnerFuelMultiplier = 3f;
+
+        /// <summary>Duration of the one-shot automatic evasive maneuver (X), in seconds.</summary>
+        private const float EvadeDuration = 1.5f;
+
         /// <summary>The drone currently being flown by the player, or null.</summary>
         public IhaController Controlled { get; private set; }
 
@@ -59,6 +69,18 @@ namespace Sim.Runtime
         /// <summary>Advisory gun range for the HUD.</summary>
         public float GunRange => gunRange;
 
+        /// <summary>True while the afterburner (E) is held on a drone that still has fuel.</summary>
+        public bool AfterburnerActive { get; private set; }
+
+        /// <summary>True while the one-shot evasive maneuver (X) is flying the drone instead of the pilot.</summary>
+        public bool EvadeActive { get; private set; }
+
+        /// <summary>True when a munition is homing on the piloted drone. False when nobody is piloting.</summary>
+        public bool MissileIncoming => Controlled != null && Controlled.MissileIncoming;
+
+        /// <summary>Seconds until the incoming munition arrives, or PositiveInfinity when there is none.</summary>
+        public float TimeToImpact => Controlled != null ? Controlled.TimeToImpact : float.PositiveInfinity;
+
         // The drone Tab has highlighted; C takes control of this one.
         private IhaController _selected;
         private int _selectionIndex = -1;
@@ -67,6 +89,9 @@ namespace Sim.Runtime
         private float _speed;
         private float _yaw;
         private float _pitch;
+
+        // Remaining seconds of the one-shot evasive maneuver (X).
+        private float _evadeTimer;
 
         private void Update()
         {
@@ -169,6 +194,11 @@ namespace Sim.Runtime
             Controlled = null;
             if (drone == null) return;
 
+            // Abilities are per-sortie: drop them with the drone.
+            AfterburnerActive = false;
+            EvadeActive = false;
+            _evadeTimer = 0f;
+
             drone.ManualControl = false;
             Transform t = drone.transform;
             drone.SyncFlightTo(t.position, t.forward, _speed);
@@ -180,19 +210,27 @@ namespace Sim.Runtime
             if (dt <= 0f) return;
             if (Controlled == null) return;
 
-            // Throttle.
+            // Special abilities: Q flares, E afterburner, X evasive maneuver.
+            HandleAbilities(dt);
+
+            // Throttle. The afterburner raises the achievable top speed while it is held, and pushes
+            // the drone toward that higher speed on its own.
+            float boost = AfterburnerActive ? AfterburnerSpeedMultiplier : 1f;
             if (Input.GetKey(KeyCode.W)) _speed += throttleStep * MaxSpeed * dt;
             if (Input.GetKey(KeyCode.S)) _speed -= throttleStep * MaxSpeed * dt;
-            _speed = Mathf.Clamp(_speed, 0f, MaxSpeed);
+            if (AfterburnerActive) _speed += throttleStep * MaxSpeed * dt;
+            _speed = Mathf.Clamp(_speed, 0f, MaxSpeed * boost);
 
             // Endurance: the pilot burns the SAME tank the AI would (IhaController skips its own burn
-            // while ManualControl is on, so this is the single source of consumption).
+            // while ManualControl is on, so this is the single source of consumption). FuelTank clamps
+            // throttle to 1, so the afterburner's heavier burn is applied to the time step instead.
             float commanded = MaxSpeed > 0f ? _speed / MaxSpeed : 0f;
-            Controlled.ConsumeFuel(commanded, dt);
+            float burnDt = AfterburnerActive ? dt * AfterburnerFuelMultiplier : dt;
+            Controlled.ConsumeFuel(commanded, burnDt);
 
             // A dry tank means no power: the governor caps the achievable speed, tapering it through
             // the last of the reserve and pinning it at zero when the tank is empty.
-            float maxNow = MaxSpeed * ThrottleGovernor.Effective(1f, Controlled.FuelFraction);
+            float maxNow = MaxSpeed * boost * ThrottleGovernor.Effective(1f, Controlled.FuelFraction);
             if (_speed > maxNow) _speed = maxNow;
 
             // Yaw.
@@ -210,6 +248,9 @@ namespace Sim.Runtime
             Quaternion rotation = Quaternion.Euler(_pitch, _yaw, 0f);
             Vector3 forward = rotation * Vector3.forward;
             if (forward.sqrMagnitude <= 1e-6f) forward = Controlled.transform.forward;
+
+            // The evasive maneuver (X) flies the drone for its short duration, overriding raw input.
+            if (EvadeActive) forward = EvasiveForward(forward);
 
             Vector3 pos = Controlled.transform.position + forward * (_speed * dt);
 
@@ -235,6 +276,69 @@ namespace Sim.Runtime
 
             // Drive the transform AND the drone's pure-logic flight model together.
             Controlled.SyncFlightTo(pos, forward, _speed);
+        }
+
+        /// <summary>
+        /// Reads the special-ability inputs: <c>Q</c> releases a flare/chaff salvo, <c>E</c> holds the
+        /// afterburner (more speed, far heavier burn) and <c>X</c> arms a one-shot evasive maneuver.
+        /// Defensive: every ability is a no-op when the drone lacks the matching hardware.
+        /// </summary>
+        private void HandleAbilities(float dt)
+        {
+            if (Controlled == null) return;
+
+            // Q: one flare/chaff salvo. The dispenser owns charges + cooldown.
+            if (Input.GetKeyDown(KeyCode.Q))
+            {
+                CountermeasureDispenser cm = Controlled.Countermeasures;
+                if (cm != null) cm.Deploy();
+            }
+
+            // E (held): afterburner. A dry tank cannot light it.
+            AfterburnerActive = Input.GetKey(KeyCode.E) && !Controlled.IsOutOfFuel;
+
+            // X: arm the one-shot evasive maneuver, then run its timer down.
+            if (Input.GetKeyDown(KeyCode.X)) _evadeTimer = EvadeDuration;
+            if (_evadeTimer > 0f) _evadeTimer = Mathf.Max(0f, _evadeTimer - dt);
+            EvadeActive = _evadeTimer > 0f;
+        }
+
+        /// <summary>
+        /// Heading for the automatic evasive maneuver: an altitude-aware maneuver against the nearest
+        /// incoming munition, or a plain break turn off the current heading when nothing is inbound.
+        /// Keeps the pilot's yaw/pitch state in step so manual control resumes smoothly afterwards.
+        /// </summary>
+        private Vector3 EvasiveForward(Vector3 forward)
+        {
+            if (Controlled == null) return forward;
+
+            Vector3 pos = Controlled.transform.position;
+
+            // Threat bearing: toward the missile when there is one, otherwise straight ahead (which
+            // makes EvasionSteering jink off the current heading).
+            Vector3 threatDir = forward;
+            ManeuverType maneuver = ManeuverType.BreakTurn;
+
+            if (Controlled.MissileIncoming)
+            {
+                threatDir = Controlled.IncomingMissilePosition - pos;
+                ManeuverType chosen = EvasiveManeuver.Choose(pos.y, MinAltitude, Controlled.TimeToImpact);
+                if (chosen != ManeuverType.None) maneuver = chosen;
+            }
+
+            Vector3 evade = EvasiveManeuver.Direction(maneuver, forward, threatDir, Vector3.up);
+            if (evade.sqrMagnitude <= 1e-6f) return forward;
+
+            evade = evade.normalized;
+
+            // Write the maneuver back into the pilot's own yaw/pitch state (respecting the pitch limit)
+            // and fly the CLAMPED heading, so releasing the maneuver does not snap the drone around.
+            Vector3 euler = Quaternion.LookRotation(evade, Vector3.up).eulerAngles;
+            _yaw = euler.y;
+            _pitch = Mathf.Clamp(NormalizeAngle(euler.x), -MaxPitchDeg, MaxPitchDeg);
+
+            Vector3 clamped = Quaternion.Euler(_pitch, _yaw, 0f) * Vector3.forward;
+            return clamped.sqrMagnitude > 1e-6f ? clamped.normalized : evade;
         }
 
         /// <summary>Space fires the gun down the nose; F launches a guided munition from a SİHA.</summary>

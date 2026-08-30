@@ -58,6 +58,14 @@ namespace Sim.Runtime
         // damage path (explosion + friendly-loss accounting) when it crashes out of fuel. May be null.
         protected Targetable _self;
 
+        // Optional flare/chaff dispenser (added by the spawner). May be null.
+        protected CountermeasureDispenser _cm;
+
+        // World position of the nearest munition currently homing on this drone (valid only while
+        // MissileIncoming is true), and whether a salvo was already fired against the current threat.
+        private Vector3 _missilePos;
+        private bool _flaredThisThreat;
+
         // Threat memory for evasion: a recorded threat position and the time it expires.
         private Vector3 _threatPos;
         private float _threatExpiry;
@@ -112,6 +120,24 @@ namespace Sim.Runtime
 
         /// <summary>Optional defensive gun attached to this drone, or null when unarmed.</summary>
         public GunTurret Gun => _gun;
+
+        /// <summary>Optional flare/chaff dispenser attached to this drone, or null when it carries none.</summary>
+        public CountermeasureDispenser Countermeasures => _cm;
+
+        /// <summary>True while at least one live <see cref="GuidedMunition"/> is homing on this drone.</summary>
+        public bool MissileIncoming { get; private set; }
+
+        /// <summary>
+        /// Seconds until the nearest incoming munition arrives, or PositiveInfinity when nothing is
+        /// closing on this drone. See <see cref="Sim.Core.MissileThreat"/>.
+        /// </summary>
+        public float TimeToImpact { get; private set; } = float.PositiveInfinity;
+
+        /// <summary>
+        /// World position of the nearest incoming munition. Only meaningful while
+        /// <see cref="MissileIncoming"/> is true.
+        /// </summary>
+        public Vector3 IncomingMissilePosition => _missilePos;
 
         /// <summary>Current airspeed from the flight model (m/s), for HUD/telemetry.</summary>
         public float Speed => _flight != null ? _flight.Speed : 0f;
@@ -192,6 +218,9 @@ namespace Sim.Runtime
             // Own damage handle, used for the out-of-fuel ground impact.
             _self = GetComponent<Targetable>();
 
+            // Optional flare/chaff dispenser (added by the spawner). Null when this drone carries none.
+            _cm = GetComponent<CountermeasureDispenser>();
+
             // Remember the spawn point so ReturnToBase can steer home.
             BasePosition = transform.position;
             // Hold the spawn altitude as the cruise altitude.
@@ -216,15 +245,27 @@ namespace Sim.Runtime
             if (_policy != null)
                 State = _policy.Decide(HasTarget, AmmoFraction > 0f, FuelFraction);
 
-            // Gun cooldown always advances, no matter who is flying.
+            // Gun and dispenser cooldowns always advance, no matter who is flying.
             if (_gun != null) _gun.Tick(dt);
+            if (_cm != null) _cm.Tick(dt);
 
-            // Manual control: the player flies and shoots this drone, so skip ALL AI steering and AI
-            // gunnery. Timers above already ticked; sensing still runs so the lock/HUD stay live.
+            // Missile warning: refresh MissileIncoming/TimeToImpact from the live munitions. Runs for
+            // the human pilot too, so the HUD can warn them.
+            ScanForMissiles();
+
+            // Manual control: the player flies and shoots this drone, so skip ALL AI steering, AI
+            // gunnery and AI evasion. Timers above already ticked; sensing still runs so the lock/HUD
+            // stay live.
             if (ManualControl)
             {
                 RunSensing(dt);
                 return;
+            }
+
+            // Self-defence: one flare/chaff salvo per threat, released late enough to matter.
+            if (MissileIncoming && _cm != null && !_flaredThisThreat && TimeToImpact < 3f && _cm.CanDeploy)
+            {
+                if (_cm.Deploy()) _flaredThisThreat = true;
             }
 
             // Navigation: advance waypoints and compute the DEFAULT patrol steering direction.
@@ -236,14 +277,33 @@ namespace Sim.Runtime
                 patrolDir = _flight.Forward;
             }
 
-            // Desired-direction selection, highest priority first. The flight-integration and
-            // orientation code below is unchanged; only this chosen direction differs.
+            // Missile evasion is only FLOWN when the shot is close enough to matter: Choose returns
+            // None for a warning further out than ~6s, and the drone then keeps its normal task.
+            ManeuverType evasive = MissileIncoming
+                ? EvasiveManeuver.Choose(pos.y, minAltitude, TimeToImpact)
+                : ManeuverType.None;
+
+            // Desired-direction selection, HIGHEST PRIORITY FIRST:
+            //   1. ReturnToBase (bingo fuel/ammo) — getting home outranks everything else.
+            //   2. Incoming missile — a named evasive maneuver (break/dive/climb) beats the assigned
+            //      target: a dead drone cannot prosecute it.
+            //   3. Recorded threat (SetThreat) — lateral jink away from a shooter.
+            //   4. Assigned target — fly toward the allocated hostile.
+            //   5. Patrol route (default).
+            // The out-of-fuel behaviour sits ABOVE all of this: it overrides the altitude bias below
+            // and can destroy the drone before the flight integration finishes.
             Vector3 dir = patrolDir;
             if (State == EngagementState.ReturnToBase)
             {
                 // Head home; within ~10m of base fall back to the patrol loop so it loiters, not stalls.
                 Vector3 toBase = BasePosition - pos;
                 dir = toBase.sqrMagnitude > 100f ? toBase : patrolDir;
+            }
+            else if (evasive != ManeuverType.None)
+            {
+                // Defensive maneuver against the nearest incoming munition.
+                Vector3 dirToMissile = _missilePos - pos;
+                dir = EvasiveManeuver.Direction(evasive, _flight.Forward, dirToMissile, Vector3.up);
             }
             else if (IsThreatened)
             {
@@ -337,6 +397,59 @@ namespace Sim.Runtime
                 Targetable gunTarget = TargetRegistry.FindById(DetectedId);
                 if (gunTarget != null) _gun.TryFireAt(gunTarget);
             }
+        }
+
+        /// <summary>
+        /// Refreshes the incoming-missile picture from <see cref="GuidedMunition.Active"/>: picks the
+        /// nearest munition homing on this drone and derives <see cref="TimeToImpact"/> from the range
+        /// and closing velocity (see <see cref="Sim.Core.MissileThreat"/>). Clears the per-threat flare
+        /// latch when the sky is clear again.
+        /// </summary>
+        private void ScanForMissiles()
+        {
+            MissileIncoming = false;
+            TimeToImpact = float.PositiveInfinity;
+
+            if (_self == null)
+            {
+                _flaredThisThreat = false;
+                return;
+            }
+
+            Vector3 pos = transform.position;
+            GuidedMunition nearest = null;
+            float bestRangeSq = float.MaxValue;
+
+            List<GuidedMunition> active = GuidedMunition.Active;
+            for (int i = 0; i < active.Count; i++)
+            {
+                GuidedMunition m = active[i];
+                if (m == null) continue;
+                if (m.Target != _self) continue;
+
+                float d2 = (m.transform.position - pos).sqrMagnitude;
+                if (d2 < bestRangeSq)
+                {
+                    bestRangeSq = d2;
+                    nearest = m;
+                }
+            }
+
+            if (nearest == null)
+            {
+                // Threat gone: rearm the one-salvo-per-threat latch.
+                _flaredThisThreat = false;
+                return;
+            }
+
+            _missilePos = nearest.transform.position;
+
+            // Range and closing velocity along the missile->drone line of sight (own velocity
+            // abstracted to zero, matching the munition's own guidance convention).
+            Vector3 los = pos - _missilePos;
+            float closing = ProportionalNavigation.ClosingVelocity(los, -nearest.Velocity);
+            TimeToImpact = MissileThreat.TimeToImpact(los.magnitude, closing);
+            MissileIncoming = true;
         }
 
         /// <summary>Runs detection against hostile targets and advances the lock timer.</summary>

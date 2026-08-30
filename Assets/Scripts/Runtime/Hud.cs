@@ -134,11 +134,14 @@ namespace Sim.Runtime
                     // A dry tank is a death sentence (dead-stick descent), so flag it loudly.
                     bool dry = c.IsOutOfFuel;
                     string fuelText = dry ? "  [YAKIT BİTTİ]" : string.Empty;
+                    // Flare/chaff charges, only when this drone carries a dispenser.
+                    CountermeasureDispenser cm = c.Countermeasures;
+                    string flareText = cm != null ? $"  flare={cm.ChargeFraction * 100f:0}%" : string.Empty;
 
                     Color prevLine = GUI.color;
                     if (dry) GUI.color = Color.red;
                     GUILayout.Label(
-                        $"  {c.name}: {c.State}  yakıt={c.FuelFraction * 100f:0}%  mühimmat={c.AmmoFraction * 100f:0}%{gunText}{fuelText}",
+                        $"  {c.name}: {c.State}  yakıt={c.FuelFraction * 100f:0}%  mühimmat={c.AmmoFraction * 100f:0}%{gunText}{flareText}{fuelText}",
                         _labelStyle);
                     GUI.color = prevLine;
                     shown++;
@@ -151,6 +154,7 @@ namespace Sim.Runtime
             GUILayout.Label("WASD+Sağ tık: kamera, Tab: drone takip, F: serbest", _labelStyle);
             GUILayout.Label("C: pilot modu  Tab: drone seç  W/S: gaz  A/D: dönüş", _labelStyle);
             GUILayout.Label("↑/↓: yunuslama  Space: top  F: füze", _labelStyle);
+            GUILayout.Label("Q: flare  E: art yakıcı  X: kaçış manevrası", _labelStyle);
 
             float scale = _controls != null ? _controls.CurrentTimeScale : Time.timeScale;
             bool paused = _controls != null ? _controls.IsPaused : Time.timeScale == 0f;
@@ -160,6 +164,7 @@ namespace Sim.Runtime
             GUILayout.EndArea();
 
             DrawPilotPanel();
+            DrawMissileWarning();
 
             // End-of-mission banner. Win/lose is owned by the ScenarioController (waves); if it is
             // missing for any reason we fall back to the MissionState-based result so nothing breaks.
@@ -225,6 +230,21 @@ namespace Sim.Runtime
             if (siha != null)
                 GUILayout.Label($"Füze: {siha.AmmoFraction * 100f:0}%", _labelStyle);
 
+            CountermeasureDispenser cm = drone.Countermeasures;
+            GUILayout.Label(cm != null ? $"flare={cm.ChargeFraction * 100f:0}%" : "flare: yok", _labelStyle);
+
+            // Active special abilities (E afterburner / X evasive maneuver).
+            if (_pilot.AfterburnerActive || _pilot.EvadeActive)
+            {
+                Color prevAbility = GUI.color;
+                GUI.color = Color.yellow;
+                string abilities = _pilot.AfterburnerActive ? "ART YAKICI" : string.Empty;
+                if (_pilot.EvadeActive)
+                    abilities = abilities.Length > 0 ? abilities + "  KAÇIŞ" : "KAÇIŞ";
+                GUILayout.Label(abilities, _labelStyle);
+                GUI.color = prevAbility;
+            }
+
             GUILayout.EndArea();
 
             // Simple centred crosshair.
@@ -232,6 +252,42 @@ namespace Sim.Runtime
             Color prev = GUI.color;
             GUI.color = Color.green;
             GUI.Label(crossRect, "+", _centerHintStyle);
+            GUI.color = prev;
+        }
+
+        /// <summary>
+        /// Big red centred missile warning. Follows the PILOTED drone when the player is flying, and
+        /// otherwise warns about any friendly drone that has a munition homing on it.
+        /// </summary>
+        private void DrawMissileWarning()
+        {
+            bool incoming = false;
+            float tti = float.PositiveInfinity;
+
+            if (_pilot != null && _pilot.IsActive)
+            {
+                incoming = _pilot.MissileIncoming;
+                tti = _pilot.TimeToImpact;
+            }
+            else if (_director != null && _director.Friendlies != null)
+            {
+                IReadOnlyList<IhaController> friendlies = _director.Friendlies;
+                for (int i = 0; i < friendlies.Count; i++)
+                {
+                    IhaController c = friendlies[i];
+                    if (c == null || !c.MissileIncoming) continue;
+                    incoming = true;
+                    if (c.TimeToImpact < tti) tti = c.TimeToImpact;
+                }
+            }
+
+            if (!incoming) return;
+
+            string text = float.IsPositiveInfinity(tti) ? "⚠ FÜZE!" : $"⚠ FÜZE! {tti:0.0}s";
+            Color prev = GUI.color;
+            GUI.color = Color.red;
+            var rect = new Rect(0f, Screen.height * 0.2f, Screen.width, 40f);
+            GUI.Label(rect, text, _centerHintStyle);
             GUI.color = prev;
         }
 

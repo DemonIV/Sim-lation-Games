@@ -62,6 +62,9 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `HitProbability` | Bir top mermisinin isabet olasılığı: menzildeki dağılma konisi yarıçapı ↔ hedef boyutu. |
 | `ThrottleGovernor` | Yakıt durumuna göre kullanılabilir gaz: son %5 rezervde güç azalır, boş depoda sıfırlanır. |
 | `SquadStatus` | Filo muharebe kabiliyeti: hiç drone kalmadıysa veya kalanların hepsinin yakıtı bittiyse etkisiz. |
+| `CountermeasureSystem` | Flare/chaff atıcı: sınırlı hak, salvo arası soğuma, temel aldatma olasılığı. |
+| `MissileThreat` | Gelen füze geometrisi: çarpışmaya kalan süre ve zamanlama+açıya bağlı aldatma şansı. |
+| `EvasiveManeuver` | İsimli kaçış manevraları (Break/Dalış/Tırmanış/Makara) + irtifa duyarlı manevra seçici. |
 
 ### Sim.Runtime (ince MonoBehaviour'lar)
 | Bileşen | Görevi |
@@ -84,7 +87,8 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `GunTurret` | `GunSystem` + `HitProbability` sarmalayıcısı: hedefe veya serbest nişan noktasına top atışı, izli mermi. |
 | `TracerEffect` | Asset'siz izli mermi görseli: `LineRenderer` ile kısa ömürlü parlak çizgi. |
 | `EnemyDroneController` | Düşman avcı drone'u: uçar, dost drone'ları tespit eder ve topla taramaya alır (hava muharebesi). |
-| `PlayerDroneController` | Pilot modu: oyuncu dost bir drone'u devralıp elle uçurur (C/Tab/W/S/A/D/↑↓/Space/F). |
+| `PlayerDroneController` | Pilot modu: oyuncu dost bir drone'u devralıp elle uçurur (C/Tab/W/S/A/D/↑↓/Space/F + Q/E/X). |
+| `CountermeasureDispenser` | `CountermeasureSystem` sarmalayıcısı: flare/chaff salvosu, salvo sayacı (füzeler bunu izler), kısa görsel puf. |
 
 ### Testler (Sim.Tests.EditMode)
 Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştırma:
@@ -130,6 +134,7 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `bu tur (1/2)` | Top/makineli sistemi + izli mermi + düşman avcı drone'ları (hava muharebesi). |
 | `bu tur (2/2)` | Oynanabilir pilot modu: dost drone'lardan birini elle uçur (C/Tab/W/S/A/D/↑↓/Space/F). |
 | `bu tur (1/2)` | Yakıt artık gerçekten bitiyor: motor durur, drone süzülerek alçalır ve yere çakılır. |
+| `bu tur (2/2)` | Füze kaçınması: flare/chaff karşı tedbirleri, kaçış manevraları ve pilot yetenekleri (Q/E/X). |
 
 ---
 
@@ -153,6 +158,13 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   bırakılınca drone'un YZ'si `SyncFlightTo` sayesinde bırakıldığı konum/yön/hızdan devam ediyor.
 - **Hava muharebesi:** Dost İHA/SİHA'lar ve düşman avcı drone'ları `GunTurret` ile birbirine top
   atıyor; isabet `HitProbability` ile menzil, dağılma ve hedef boyutundan olasılıksal hesaplanıyor.
+- **Yakıt bağlayıcı bir kaynak:** Gaz artık `ThrottleGovernor` ile yakıta göre sınırlanıyor; depo bitince
+  motor durur, drone süzülerek alçalır ve yere çakılır (pilot modunda da). Bozgun koşulu `SquadStatus`
+  ile filo bazlı: hiç drone kalmadıysa **veya** kalanların hepsinin yakıtı bittiyse görev başarısız.
+- **Füze kaçınması:** Gelen güdümlü mühimmatlar `GuidedMunition.Active` üzerinden görülüyor; drone'lar
+  `MissileIncoming`/`TimeToImpact` üretiyor, `CountermeasureDispenser` ile flare/chaff atıyor
+  (etkisi zamanlama + açıya bağlı, `MissileThreat`) ve `EvasiveManeuver` ile kaçış manevrası yapıyor.
+  Oyuncu aynı araçlara **Q** (flare), **E** (art yakıcı) ve **X** (otomatik kaçış) ile erişiyor.
 - **Skor:** `imha×100 − kayıp×150`. (Önceki sürümdeki saniyelik zaman cezası kaldırıldı; geçen süre HUD'da ayrı
   gösterilir.)
 
@@ -244,3 +256,21 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   değiştirdi (dost controller listesi ~1 sn'de bir tazelenir, kare başına allocation yok);
   `Hud` kuru depoyu drone satırında `[YAKIT BİTTİ]` (kırmızı) ve pilot panelinde
   `YAKIT BİTTİ - SÜZÜLÜYOR` uyarısıyla gösteriyor.
+- **Füze kaçınması + özel yetenekler:** Artık gelen füzeler görülüyor, aldatılabiliyor ve onlardan
+  kaçılabiliyor. Test-driven `CountermeasureSystem` (hak + soğuma), `MissileThreat` (çarpışmaya kalan
+  süre; aldatma şansı erken atışta en yüksek, füze burna doğruyken yarıya iner) ve `EvasiveManeuver`
+  (Break / Dalış / Tırmanış / Makara + irtifa duyarlı `Choose`) Core + EditMode testleri eklendi.
+  `GuidedMunition` artık statik `Active` listesinde kayıtlı (fırlatmada eklenir, `OnDestroy`'da
+  çıkarılır) ve `Target` / `Velocity` kancalarını açıyor; hedefin **yeni** salvosu için (dispenser'ın
+  `SalvoCount`'u ile bir kez) `MissileThreat.DecoyChance(...)` zarı atılıyor — tutarsa kilit kopuyor
+  (`_target = null`) ve mevcut ıskalama yolu füzeyi imha ediyor. Yeni `CountermeasureDispenser`
+  (ince sarmalayıcı, `Configure(...)` Start'tan önce çalışabilsin diye tembel kurulum) dost
+  İHA/SİHA'lara (`SimulationBootstrap`) ve düşman avcılarına (`ScenarioController.SpawnFighter`,
+  daha zayıf: 6 hak / 2.5 sn / %50) takıldı. `IhaController` her kare `GuidedMunition.Active`'i
+  tarayıp `MissileIncoming` + `TimeToImpact` üretiyor, tehdit başına bir kez otomatik flare atıyor
+  (`TimeToImpact < 3s`) ve yön önceliği **RTB > füze kaçışı > kayıtlı tehdit > atanan hedef >
+  devriye** olacak şekilde kaçış manevrası uyguluyor (yakıtsız süzülme/çakılma hepsinin üstünde).
+  `EnemyDroneController` aynı savunmayı basitleştirilmiş hâliyle kullanıyor. `PlayerDroneController`
+  üç yetenek kazandı: **Q** flare, **E** (basılı) art yakıcı (×1.6 hız, ×3 yakıt), **X** ~1.5 sn
+  otomatik kaçış manevrası; `Hud` ekranda kırmızı `⚠ FÜZE! x.xs` uyarısı, pilot panelinde
+  `flare=%NN` + `ART YAKICI`/`KAÇIŞ` göstergeleri ve drone satırlarında `flare=%NN` gösteriyor.

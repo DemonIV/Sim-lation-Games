@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Sim.Core;
 
@@ -40,8 +41,26 @@ namespace Sim.Runtime
         private float _elapsed;
         private bool _launched;
 
+        // The target's flare/chaff dispenser (if any) plus the last salvo number this munition has
+        // already rolled against, so every salvo is rolled exactly ONCE per missile.
+        private CountermeasureDispenser _targetCm;
+        private int _lastSalvoSeen;
+
+        /// <summary>
+        /// Every munition currently in the air. Lets drones see what is shot at them (missile warning
+        /// and evasion) without scanning the scene graph. Entries are added on
+        /// <see cref="Launch(Targetable, Vector3)"/> and removed in <see cref="OnDestroy"/>.
+        /// </summary>
+        public static readonly List<GuidedMunition> Active = new List<GuidedMunition>();
+
         /// <summary>The seeker head state, exposed for HUD/telemetry.</summary>
         public SeekerGimbal Seeker => _seeker;
+
+        /// <summary>The object this munition is homing on, or null once it has lost lock.</summary>
+        public Targetable Target => _target;
+
+        /// <summary>Current velocity vector (m/s), for threat geometry on the receiving end.</summary>
+        public Vector3 Velocity => _velocity;
 
         /// <summary>
         /// Arms and fires the munition toward the given target with an initial velocity, overriding the
@@ -68,7 +87,20 @@ namespace Sim.Runtime
             _elapsed = 0f;
             _launched = true;
 
+            // Countermeasures: remember the target's dispenser and its CURRENT salvo number, so only
+            // salvos released AFTER launch can decoy this munition.
+            _targetCm = target != null ? target.GetComponent<CountermeasureDispenser>() : null;
+            _lastSalvoSeen = _targetCm != null ? _targetCm.SalvoCount : 0;
+
+            if (!Active.Contains(this)) Active.Add(this);
+
             SetupVisuals();
+        }
+
+        /// <summary>Drops this munition from the active-threat registry.</summary>
+        private void OnDestroy()
+        {
+            Active.Remove(this);
         }
 
         /// <summary>
@@ -137,6 +169,33 @@ namespace Sim.Runtime
             Vector3 los = targetPos - self;
             Vector3 boresight = _velocity.sqrMagnitude > 1e-6f ? _velocity.normalized : transform.forward;
             _seeker.Track(boresight, los.sqrMagnitude > 1e-6f ? los.normalized : boresight, dt);
+
+            // Countermeasures: when the target has released a NEW flare/chaff salvo, roll ONCE for it.
+            // An early release against a missile that is off the target's nose works best
+            // (see Sim.Core.MissileThreat).
+            if (_targetCm != null && _targetCm.SalvoCount != _lastSalvoSeen)
+            {
+                _lastSalvoSeen = _targetCm.SalvoCount;
+
+                float range = los.magnitude;
+                // Relative velocity with the target abstracted to zero, as in the guidance below.
+                float closing = ProportionalNavigation.ClosingVelocity(los, -_velocity);
+                float tti = MissileThreat.TimeToImpact(range, closing);
+                Vector3 toMissile = self - targetPos;
+                float aspectDot = toMissile.sqrMagnitude > 1e-6f
+                    ? Vector3.Dot(_target.transform.forward, toMissile.normalized)
+                    : 0f;
+
+                if (Random.value < MissileThreat.DecoyChance(_targetCm.DecoyProbability, tti, aspectDot))
+                {
+                    // Decoyed: the seeker breaks lock. The existing miss path (null target) destroys
+                    // the munition on the next step.
+                    ExplosionEffect.Spawn(self, 1.5f);
+                    _target = null;
+                    _targetCm = null;
+                    return;
+                }
+            }
 
             // Proportional navigation guidance (target velocity abstracted to zero for now).
             Vector3 relPos = targetPos - self;
