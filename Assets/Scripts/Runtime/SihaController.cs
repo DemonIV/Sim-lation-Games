@@ -51,6 +51,18 @@ namespace Sim.Runtime
             return _weapon;
         }
 
+        /// <summary>
+        /// Base servicing for an armed drone: everything the recon İHA gets (fuel, gun belt, flares)
+        /// plus a full missile magazine. Refilling the magazine is what lets a SİHA that shot itself
+        /// dry come home, rearm and go back on the attack instead of loitering in ReturnToBase — see
+        /// <see cref="EngagementPolicy.Decide"/>, which keys off exactly this ammo fraction.
+        /// </summary>
+        public override void Resupply()
+        {
+            base.Resupply();
+            EnsureWeapon().Reload();
+        }
+
         protected override void Update()
         {
             // Run flight, navigation, and sensing/lock exactly like the recon drone.

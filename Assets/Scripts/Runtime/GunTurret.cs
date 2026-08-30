@@ -78,6 +78,12 @@ namespace Sim.Runtime
             EnsureGun().Tick(dt);
         }
 
+        /// <summary>Refills the ammo belt (rearm at base). Mirrors <see cref="CountermeasureDispenser.Reload"/>.</summary>
+        public void Reload()
+        {
+            EnsureGun().Reload();
+        }
+
         /// <summary>
         /// Fires a single round at the given target if it is in range and the gun is ready. Returns true
         /// when a round was actually spent (whether or not it hit).

@@ -65,6 +65,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `CountermeasureSystem` | Flare/chaff atıcı: sınırlı hak, salvo arası soğuma, temel aldatma olasılığı. |
 | `MissileThreat` | Gelen füze geometrisi: çarpışmaya kalan süre ve zamanlama+açıya bağlı aldatma şansı. |
 | `EvasiveManeuver` | İsimli kaçış manevraları (Break/Dalış/Tırmanış/Makara) + irtifa duyarlı manevra seçici. |
+| `ResupplyPoint` | Üste ikmal döngüsü: üs yarıçapı içinde tam süre bekleyince tamamlanır, erken ayrılınca ilerleme sıfırlanır. |
 
 ### Sim.Runtime (ince MonoBehaviour'lar)
 | Bileşen | Görevi |
@@ -135,6 +136,7 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `bu tur (2/2)` | Oynanabilir pilot modu: dost drone'lardan birini elle uçur (C/Tab/W/S/A/D/↑↓/Space/F). |
 | `bu tur (1/2)` | Yakıt artık gerçekten bitiyor: motor durur, drone süzülerek alçalır ve yere çakılır. |
 | `bu tur (2/2)` | Füze kaçınması: flare/chaff karşı tedbirleri, kaçış manevraları ve pilot yetenekleri (Q/E/X). |
+| `bu tur (1/2)` | Üste ikmal: drone'lar üste bekleyince yakıt, mühimmat ve flare ikmali alıp göreve dönüyor. |
 
 ---
 
@@ -286,3 +288,18 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   `RadarSensor`, `SihaController`, `EnemyDroneController`, `AirDefenseSite` ve `RcsComponent` için
   de yapıldı. Unity'nin aşırı yüklenmiş `==` karşılaştırması korunuyor (`is null`/`ReferenceEquals`
   ve UnityEngine.Object üzerinde `?.` kullanılmıyor).
+- **Üste ikmal:** üsse dönen drone belirli bir süre bekleyince yakıt, mühimmat ve flare ikmali alıp
+  göreve döner; mühimmatı biten filo yüzünden dalganın kilitlenmesi sorunu çözüldü. Test-driven
+  `ResupplyPoint` (üs yarıçapında tam süre bekleme; erken ayrılınca ilerleme sıfırlanır, tamamlanınca
+  bir kez `true` döner) Core + EditMode testleri eklendi. `IhaController` her kare `BasePosition`'a
+  olan uzaklığı `baseRadius` ile kıyaslayıp `ResupplyPoint.Tick(atBase, dt)` çeviriyor; döngü
+  tamamlanınca `Resupply()` yakıtı (`FuelTank.Refuel`), top bandını (yeni `GunTurret.Reload`) ve
+  flare haklarını (`CountermeasureDispenser.Reload`) dolduruyor. `SihaController.Resupply()` üstüne
+  füze şarjörünü de (`WeaponSystem.Reload`) dolduruyor. İkmal **yakıta bağlı değil**: depoyu bitirip
+  süzülerek üsse dönebilen drone yere çakılmadan servis alabiliyor (yalnız `Crashed` mandalı
+  engelliyor). Üsse dönen drone servis yarıçapına girince devriye rotasına düşmek yerine **üssün
+  üzerinde yavaş tur atıyor** (`StationKeepThrottle`): rotanın en yakın kenarı bile servis yarıçapının
+  dışında kaldığı için eski davranış her turda drone'u servis alanından çıkarıp ilerlemeyi sıfırlardı.
+  Servis sonrası ayrı bir durum makinesine gerek yok — `EngagementPolicy.Decide` sadece
+  yakıt/mühimmat/hedef okuduğu için dolu depo + dolu şarjör `State`'i aynı karede `ReturnToBase`'den
+  `Patrol`/`Engage`'e çeviriyor. `Hud` drone satırında ve pilot panelinde `[İKMAL %NN]` gösteriyor.

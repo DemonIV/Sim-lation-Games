@@ -137,11 +137,15 @@ namespace Sim.Runtime
                     // Flare/chaff charges, only when this drone carries a dispenser.
                     CountermeasureDispenser cm = c.Countermeasures;
                     string flareText = cm != null ? $"  flare={cm.ChargeFraction * 100f:0}%" : string.Empty;
+                    // Base servicing in progress (dwelling at base to refuel/rearm).
+                    string supplyText = c.IsResupplying
+                        ? $"  [İKMAL %{c.ResupplyProgress * 100f:0}]"
+                        : string.Empty;
 
                     Color prevLine = GUI.color;
                     if (dry) GUI.color = Color.red;
                     GUILayout.Label(
-                        $"  {c.name}: {c.State}  yakıt={c.FuelFraction * 100f:0}%  mühimmat={c.AmmoFraction * 100f:0}%{gunText}{flareText}{fuelText}",
+                        $"  {c.name}: {c.State}  yakıt={c.FuelFraction * 100f:0}%  mühimmat={c.AmmoFraction * 100f:0}%{gunText}{flareText}{fuelText}{supplyText}",
                         _labelStyle);
                     GUI.color = prevLine;
                     shown++;
@@ -232,6 +236,15 @@ namespace Sim.Runtime
 
             CountermeasureDispenser cm = drone.Countermeasures;
             GUILayout.Label(cm != null ? $"flare={cm.ChargeFraction * 100f:0}%" : "flare: yok", _labelStyle);
+
+            if (drone.IsResupplying)
+            {
+                // Sitting on station: hold position until the bar fills to be refuelled and rearmed.
+                Color prevSupply = GUI.color;
+                GUI.color = Color.cyan;
+                GUILayout.Label($"[İKMAL %{drone.ResupplyProgress * 100f:0}]", _labelStyle);
+                GUI.color = prevSupply;
+            }
 
             // Active special abilities (E afterburner / X evasive maneuver).
             if (_pilot.AfterburnerActive || _pilot.EvadeActive)

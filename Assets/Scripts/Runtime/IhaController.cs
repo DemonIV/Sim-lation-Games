@@ -32,6 +32,12 @@ namespace Sim.Runtime
         [SerializeField] private float fuelCapacity = 100f;
         [SerializeField] private float fuelBurnRate = 2f;
 
+        [Header("Resupply")]
+        // How close to BasePosition the drone must be to count as "on station" for servicing.
+        [SerializeField] private float baseRadius = 12f;
+        // How long it must dwell inside that radius to be refuelled and rearmed.
+        [SerializeField] private float serviceSeconds = 4f;
+
         [Header("Altitude")]
         // Hard floor: the flight model has no ground collision, so never let the drone sink below this.
         [SerializeField] private float minAltitude = 5f;
@@ -42,6 +48,11 @@ namespace Sim.Runtime
         // instead of diving into the terrain. Set from BasePosition.y in Start.
         private float _cruiseAltitude;
 
+        // Throttle flown while dwelling at base for servicing. At cruise throttle the turn radius
+        // (speed / turn rate) is far larger than baseRadius, so the drone would sail straight back out
+        // of the service area; crawling lets it orbit the base until Resupply() fires.
+        private const float StationKeepThrottle = 0.15f;
+
         // Pure-logic cores.
         protected FlightModel _flight;
         protected WaypointNavigator _nav;
@@ -50,6 +61,9 @@ namespace Sim.Runtime
         // Tactical cores (endurance + engagement decision).
         protected FuelTank _fuel;
         protected EngagementPolicy _policy;
+
+        // Base servicing cycle: dwell inside baseRadius for serviceSeconds to be refuelled/rearmed.
+        protected ResupplyPoint _resupply;
 
         // Optional defensive gun, if a GunTurret component is attached to this drone. May be null.
         protected GunTurret _gun;
@@ -112,6 +126,12 @@ namespace Sim.Runtime
 
         /// <summary>Remaining ammunition as a 0..1 fraction. Recon İHA has no weapon, so always 1.</summary>
         public virtual float AmmoFraction => 1f;
+
+        /// <summary>Progress of the current base servicing cycle as a 0..1 fraction (0 when not servicing).</summary>
+        public float ResupplyProgress => _resupply != null ? _resupply.Progress : 0f;
+
+        /// <summary>True while this drone is dwelling at base and being serviced.</summary>
+        public bool IsResupplying => _resupply != null && _resupply.IsServicing;
 
         /// <summary>Current high-level engagement state, driven by <see cref="EngagementPolicy"/> each frame.</summary>
         public EngagementState State { get; protected set; } = EngagementState.Patrol;
@@ -242,6 +262,9 @@ namespace Sim.Runtime
             _fuel = new FuelTank(fuelCapacity, fuelBurnRate);
             _policy = new EngagementPolicy();
 
+            // Base servicing cycle (dwell timer). See Resupply().
+            _resupply = new ResupplyPoint(serviceSeconds);
+
             // Optional defensive gun (added by the spawner). Null when this drone carries none.
             _gun = GetComponent<GunTurret>();
 
@@ -281,7 +304,20 @@ namespace Sim.Runtime
             // consuming the same tank twice in one frame.
             if (_fuel != null && !ManualControl) _fuel.Consume(effThrottle, dt);
 
-            // Engagement decision from the current fuel/ammo/target situation.
+            // Base servicing: dwell inside baseRadius of the spawn point for the full cycle to be
+            // refuelled and rearmed. Deliberately NOT gated on fuel — a dead-stick drone that manages
+            // to glide home before hitting the ground still gets serviced. It runs for the human pilot
+            // too, so landing on station rearms the piloted drone as well.
+            if (_resupply != null)
+            {
+                bool atBase = Vector3.Distance(transform.position, BasePosition) <= baseRadius;
+                if (_resupply.Tick(atBase, dt)) Resupply();
+            }
+
+            // Engagement decision from the current fuel/ammo/target situation. Because Decide() reads
+            // ONLY fuel/ammo/target, a completed Resupply() above (full tank + full magazine) makes
+            // this return Patrol/Engage instead of ReturnToBase on the very same frame — that is how a
+            // serviced drone rejoins the fight without any extra state machine.
             if (_policy != null)
                 State = _policy.Decide(HasTarget, AmmoFraction > 0f, FuelFraction);
 
@@ -333,11 +369,27 @@ namespace Sim.Runtime
             // The out-of-fuel behaviour sits ABOVE all of this: it overrides the altitude bias below
             // and can destroy the drone before the flight integration finishes.
             Vector3 dir = patrolDir;
+            // Throttle actually flown this frame. Normally the governed throttle; reduced to a crawl
+            // while dwelling at base so the drone can hold station inside the service radius.
+            float flightThrottle = effThrottle;
             if (State == EngagementState.ReturnToBase)
             {
-                // Head home; within ~10m of base fall back to the patrol loop so it loiters, not stalls.
                 Vector3 toBase = BasePosition - pos;
-                dir = toBase.sqrMagnitude > 100f ? toBase : patrolDir;
+                if (_resupply != null && _resupply.IsServicing)
+                {
+                    // On station: keep circling the base slowly until the service completes. Falling
+                    // back to the patrol route here would be fatal to the whole feature — the route's
+                    // nearest leg lies OUTSIDE baseRadius, so the drone would leave the service area
+                    // on every pass and ResupplyPoint would reset before the cycle ever finished.
+                    dir = toBase;
+                    flightThrottle = Mathf.Min(effThrottle, StationKeepThrottle);
+                }
+                else
+                {
+                    // Head home; within ~10m of base fall back to the patrol loop so it loiters, not
+                    // stalls (defensive: only reachable when there is no ResupplyPoint at all).
+                    dir = toBase.sqrMagnitude > 100f ? toBase : patrolDir;
+                }
             }
             else if (evasive != ManeuverType.None)
             {
@@ -383,7 +435,8 @@ namespace Sim.Runtime
             if (dir.sqrMagnitude <= 1e-6f) dir = _flight.Forward;
 
             // Flight integration on the GOVERNED throttle: an empty tank produces no thrust at all.
-            _flight.Step(dir, effThrottle, dt);
+            // (flightThrottle == effThrottle except while holding station at base for servicing.)
+            _flight.Step(dir, flightThrottle, dt);
 
             Vector3 newPos = _flight.Position;
             if (IsOutOfFuel)
@@ -441,6 +494,26 @@ namespace Sim.Runtime
                 Targetable gunTarget = TargetRegistry.FindById(DetectedId);
                 if (gunTarget != null) _gun.TryFireAt(gunTarget);
             }
+        }
+
+        /// <summary>
+        /// Completes one servicing cycle: refuels the tank and rearms every weapon this drone carries.
+        /// Called by <see cref="Update"/> when <see cref="ResupplyPoint.Tick"/> reports the dwell is
+        /// done. All references are optional, so every step is null-checked.
+        /// <para>
+        /// Overridden by <see cref="SihaController"/> to also reload the missile launcher.
+        /// </para>
+        /// </summary>
+        public virtual void Resupply()
+        {
+            // Fuel: a full tank lifts the drone back above EngagementPolicy's bingo threshold.
+            if (_fuel != null) _fuel.Refuel();
+
+            // Gun belt, when this drone carries a turret (GunTurret.Reload -> GunSystem.Reload).
+            if (_gun != null) _gun.Reload();
+
+            // Flare/chaff charges, when this drone carries a dispenser.
+            if (_cm != null) _cm.Reload();
         }
 
         /// <summary>
