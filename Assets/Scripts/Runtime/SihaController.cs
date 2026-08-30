@@ -16,7 +16,8 @@ namespace Sim.Runtime
         [SerializeField] private float roundsPerSecond = 1.5f;
         [SerializeField] private float projectileSpeed = 120f;
         [SerializeField] private float damagePerHit = 40f;
-        [SerializeField] private float weaponRange = 90f;
+        // Weapon range >= the inherited sensor detection range (120) so any locked SAM is shootable.
+        [SerializeField] private float weaponRange = 120f;
 
         [Header("Guided Munition")]
         // When true, firing launches a proportional-navigation GuidedMunition instead of applying
@@ -112,7 +113,8 @@ namespace Sim.Runtime
             }
 
             var munition = go.AddComponent<GuidedMunition>();
-            munition.Launch(target, transform.forward * munitionSpeed);
+            // Pass the SİHA's own damage explicitly (clean param, no reflection).
+            munition.Launch(target, transform.forward * munitionSpeed, damagePerHit);
         }
     }
 }

@@ -124,13 +124,8 @@ namespace Sim.Runtime
 
             var munition = go.AddComponent<GuidedMunition>();
 
-            // Apply this site's damage to the munition's private serialized field, consistent with the
-            // reflection-based wiring already used in SimulationBootstrap.AssignRoute.
-            var damageField = typeof(GuidedMunition).GetField("damage",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-            if (damageField != null) damageField.SetValue(munition, damage);
-
-            munition.Launch(target, dir * munitionSpeed);
+            // Launch with this site's damage passed explicitly (clean param, no reflection).
+            munition.Launch(target, dir * munitionSpeed, damage);
         }
     }
 }

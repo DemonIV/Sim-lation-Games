@@ -41,6 +41,7 @@ namespace Sim.Runtime
             Health.ApplyDamage(amount);
             if (Health.IsDestroyed)
             {
+                ExplosionEffect.Spawn(transform.position, 6f);
                 Destroy(gameObject);
             }
         }
@@ -71,6 +72,12 @@ namespace Sim.Runtime
         public static void Unregister(Targetable t)
         {
             All.Remove(t);
+        }
+
+        /// <summary>Clears every registered targetable. Used on scene restart to drop stale entries.</summary>
+        public static void Clear()
+        {
+            All.Clear();
         }
 
         /// <summary>

@@ -51,6 +51,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `SeekerGimbal` | Arayıcı başlık açı + açısal hız sınırları. |
 | `ProportionalNavigation` | Oransal seyrüsefer güdüm yasası (önleme). |
 | `MissionState` | Görev hedefleri, kazan/kaybet, skor. |
+| `MissionGrade` | Biten görevi 0..3 yıldıza çevirir (kayıp/süre cezası). |
 | `TargetAllocation` | Atıcı-hedef paylaşımı (aynı hedefe boşa ateşi önler). |
 | `EngagementPolicy` | Angajman durum kararı (Devriye/Angaje/Üsse Dönüş). |
 | `FuelTank` | Yakıt/menzil modeli (gaz kesme oranına göre tüketim). |
@@ -71,6 +72,8 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `SimulationDirector` | Görev takibi ve skorlama. |
 | `Hud` | Ekran üstü (IMGUI) bilgi paneli: görev, skor, radar temasları. |
 | `CameraRig` | Serbest uçan kamera (WASD + fare) ve drone takip modu. |
+| `ExplosionEffect` | Asset'siz patlama işareti: büyüyüp sönen emisyonlu küre (mühimmat isabeti + imha). |
+| `GameControls` | Klavye kontrolleri: R yeniden başlat, P duraklat, +/- zaman ölçeği. |
 
 ### Testler (Sim.Tests.EditMode)
 Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştırma:
@@ -109,7 +112,8 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `e67f472` | Projeyi Unity 6'ya (6000.5.9f1) taşıma. |
 | `ce5c27f` | Unity 6 obsolete API düzeltmeleri (GetInstanceID, FindObjectOfType). |
 | `d228e75` | M1 taktik katman + HUD + serbest kamera. |
-| `bu tur` | Taktik beyni davranışa bağlama + çift taraflı hava savunması muharebesi. |
+| `bu tur (önceki)` | Taktik beyni davranışa bağlama + çift taraflı hava savunması muharebesi. |
+| `bu tur` | Muharebe cilası: patlama efektleri + mühimmat izleri, temiz mühimmat hasarı (reflection kaldırıldı), R/P/+- kontrolleri, yıldız derecelendirmeli bitiş ekranı, denge ayarı. |
 
 ---
 
@@ -151,3 +155,10 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   `SimulationDirector` `TargetAllocation` ile hedef paylaşımını controller'lara uyguluyor ve HUD için `Friendlies`
   listesini sunuyor. Yeni `AirDefenseSite` (SAM) çift taraflı muharebe getiriyor; `EvasionSteering` Core + EditMode
   testi eklendi; HUD drone başına durum/yakıt/mühimmat gösteriyor; Bootstrap SAM sahaları kuruyor.
+- **Muharebe cilası:** `MissionGrade` (0..3 yıldız) Core + EditMode testi eklendi. `GuidedMunition` artık
+  temiz `Launch(target, velocity, damage)` aşırı yüklemesiyle hasar alıyor (reflection kaldırıldı),
+  emisyonlu gövde + `TrailRenderer` izi kazandı ve isabette `ExplosionEffect.Spawn` ile patlıyor. Yeni
+  asset'siz `ExplosionEffect` (mühimmat 3, imha 6 birim). `Targetable.TakeDamage` ölümde patlama üretiyor.
+  Yeni `GameControls`: R yeniden başlat, P duraklat, +/- zaman ölçeği (0.25..4); `TargetRegistry.Clear()`
+  yeniden başlatmada temiz kayıt için. `Hud` kazan/kaybet bitiş ekranı yıldız derecesi ve kontrol ipuçları
+  gösteriyor. Hafif denge ayarı: SİHA silah menzili tespit menzili (120) ile eşitlendi.

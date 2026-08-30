@@ -13,11 +13,13 @@ namespace Sim.Runtime
     {
         private SimulationDirector _director;
         private RadarSensor[] _sensors;
+        private GameControls _controls;
 
         // Cached GUI styles (built lazily on first OnGUI so we're on the GUI thread).
         private GUIStyle _labelStyle;
         private GUIStyle _titleStyle;
         private GUIStyle _bannerStyle;
+        private GUIStyle _centerHintStyle;
 
         // Occasional refresh of the sensor list so newly spawned drones show up.
         private float _refreshTimer;
@@ -26,6 +28,7 @@ namespace Sim.Runtime
         private void Start()
         {
             _director = FindAnyObjectByType<SimulationDirector>();
+            _controls = FindAnyObjectByType<GameControls>();
             RefreshSensors();
         }
 
@@ -37,6 +40,7 @@ namespace Sim.Runtime
                 _refreshTimer = 0f;
                 RefreshSensors();
                 if (_director == null) _director = FindAnyObjectByType<SimulationDirector>();
+                if (_controls == null) _controls = FindAnyObjectByType<GameControls>();
             }
         }
 
@@ -55,6 +59,13 @@ namespace Sim.Runtime
                 _bannerStyle = new GUIStyle(GUI.skin.label)
                 {
                     fontSize = 48,
+                    fontStyle = FontStyle.Bold,
+                    alignment = TextAnchor.MiddleCenter
+                };
+            if (_centerHintStyle == null)
+                _centerHintStyle = new GUIStyle(GUI.skin.label)
+                {
+                    fontSize = 22,
                     fontStyle = FontStyle.Bold,
                     alignment = TextAnchor.MiddleCenter
                 };
@@ -121,16 +132,35 @@ namespace Sim.Runtime
             GUILayout.Space(6);
             GUILayout.Label("WASD+Sağ tık: kamera, Tab: drone takip, F: serbest", _labelStyle);
 
+            float scale = _controls != null ? _controls.CurrentTimeScale : Time.timeScale;
+            bool paused = _controls != null ? _controls.IsPaused : Time.timeScale == 0f;
+            string pauseText = paused ? "DURAKLADI" : "duraklat";
+            GUILayout.Label($"P: {pauseText}  +/-: hız (x{scale:0.00})  R: yeniden", _labelStyle);
+
             GUILayout.EndArea();
 
             // End-of-mission banner.
             if (m.Status == MissionStatus.Won || m.Status == MissionStatus.Lost)
             {
-                string text = m.Status == MissionStatus.Won ? "GÖREV BAŞARILI" : "GÖREV BAŞARISIZ";
+                bool won = m.Status == MissionStatus.Won;
+                string text = won ? "GÖREV BAŞARILI" : "GÖREV BAŞARISIZ";
                 Color prev = GUI.color;
-                GUI.color = m.Status == MissionStatus.Won ? Color.green : Color.red;
-                var rect = new Rect(0, Screen.height * 0.5f - 40f, Screen.width, 80f);
+                GUI.color = won ? Color.green : Color.red;
+                var rect = new Rect(0, Screen.height * 0.5f - 60f, Screen.width, 80f);
                 GUI.Label(rect, text, _bannerStyle);
+
+                if (won)
+                {
+                    int stars = MissionGrade.Stars(m.Status, m.FriendliesLost, m.ElapsedTime);
+                    string starText = new string('★', stars) + new string('☆', 3 - stars);
+                    GUI.color = Color.yellow;
+                    var starRect = new Rect(0, Screen.height * 0.5f + 24f, Screen.width, 60f);
+                    GUI.Label(starRect, starText, _bannerStyle);
+                }
+
+                GUI.color = won ? Color.green : Color.red;
+                var hintRect = new Rect(0, Screen.height * 0.5f + 84f, Screen.width, 40f);
+                GUI.Label(hintRect, "R: yeniden başlat", _centerHintStyle);
                 GUI.color = prev;
             }
         }

@@ -43,6 +43,17 @@ namespace Sim.Runtime
         /// <summary>The seeker head state, exposed for HUD/telemetry.</summary>
         public SeekerGimbal Seeker => _seeker;
 
+        /// <summary>
+        /// Arms and fires the munition toward the given target with an initial velocity, overriding the
+        /// serialized default warhead <paramref name="damage"/>. Preferred over reflection for wiring a
+        /// shooter's damage into the munition.
+        /// </summary>
+        public void Launch(Targetable target, Vector3 initialVelocity, float damage)
+        {
+            this.damage = damage;
+            Launch(target, initialVelocity);
+        }
+
         /// <summary>Arms and fires the munition toward the given target with an initial velocity.</summary>
         public void Launch(Targetable target, Vector3 initialVelocity)
         {
@@ -56,6 +67,53 @@ namespace Sim.Runtime
             };
             _elapsed = 0f;
             _launched = true;
+
+            SetupVisuals();
+        }
+
+        /// <summary>
+        /// Makes the munition read clearly against the scene: a bright emissive body plus a fading
+        /// trail. Fully defensive so it is a no-op if renderers/shaders are unavailable.
+        /// </summary>
+        private void SetupVisuals()
+        {
+            Color glow = new Color(1f, 0.85f, 0.2f);
+
+            // Bright, self-lit body so the munition pops against the ground/sky.
+            var renderer = GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                Shader shader = Shader.Find("Standard");
+                if (shader == null) shader = Shader.Find("Universal Render Pipeline/Lit");
+                if (shader != null)
+                {
+                    var mat = new Material(shader) { color = glow };
+                    if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", glow);
+                    if (mat.HasProperty("_EmissionColor"))
+                    {
+                        mat.EnableKeyword("_EMISSION");
+                        mat.SetColor("_EmissionColor", glow);
+                    }
+                    renderer.material = mat;
+                }
+            }
+
+            // Add a trail if none exists so the flight path is visible.
+            var trail = GetComponent<TrailRenderer>();
+            if (trail == null)
+            {
+                trail = gameObject.AddComponent<TrailRenderer>();
+                trail.time = 0.5f;
+                trail.startWidth = 0.3f;
+                trail.endWidth = 0f;
+                trail.startColor = glow;
+                trail.endColor = new Color(glow.r, glow.g, glow.b, 0f);
+
+                Shader trailShader = Shader.Find("Sprites/Default");
+                if (trailShader == null) trailShader = Shader.Find("Unlit/Color");
+                if (trailShader == null) trailShader = Shader.Find("Standard");
+                if (trailShader != null) trail.material = new Material(trailShader) { color = glow };
+            }
         }
 
         private void FixedUpdate()
@@ -112,6 +170,7 @@ namespace Sim.Runtime
             if (Vector3.Distance(newPos, targetPos) <= proximityFuzeRadius)
             {
                 _target.TakeDamage(damage);
+                ExplosionEffect.Spawn(transform.position, 3f);
                 Destroy(gameObject);
             }
         }

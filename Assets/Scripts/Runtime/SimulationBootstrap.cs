@@ -18,6 +18,9 @@ namespace Sim.Runtime
     {
         private void Awake()
         {
+            // Defensive: drop any stale registry entries left over from a previous scene load/restart.
+            TargetRegistry.Clear();
+
             EnsureCameraAndLight();
             CreateGround();
 
@@ -43,6 +46,9 @@ namespace Sim.Runtime
             // an IMGUI overlay reading that state.
             var director = new GameObject("SimulationDirector").AddComponent<SimulationDirector>();
             director.gameObject.AddComponent<Hud>();
+
+            // Global keyboard controls: R restart, P pause, +/- time scale.
+            director.gameObject.AddComponent<GameControls>();
 
             // Attach a free-fly / drone-follow spectator camera to the main camera (created above in
             // EnsureCameraAndLight), if it doesn't already have one.
