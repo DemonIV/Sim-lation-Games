@@ -48,7 +48,7 @@ namespace Sim.Core
             if (HostilesTotal > 0 && HostilesDestroyed >= HostilesTotal) Status = MissionStatus.Won;
         }
 
-        /// <summary>Kills reward, losses and elapsed time penalise.</summary>
-        public int Score => HostilesDestroyed * 100 - FriendliesLost * 150 - Mathf.FloorToInt(ElapsedTime);
+        /// <summary>Kills reward; friendly losses penalise. Elapsed time is tracked separately (see ElapsedTime), not subtracted.</summary>
+        public int Score => HostilesDestroyed * 100 - FriendliesLost * 150;
     }
 }

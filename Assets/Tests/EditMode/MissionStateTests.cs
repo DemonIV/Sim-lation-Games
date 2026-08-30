@@ -44,7 +44,7 @@ namespace Sim.Tests
         }
 
         [Test]
-        public void Score_RewardsKills_PenalisesLossesAndTime()
+        public void Score_RewardsKills_PenalisesLosses()
         {
             var m = new MissionState(5, 3);
             m.RecordHostileDestroyed();
@@ -54,7 +54,7 @@ namespace Sim.Tests
             m.RecordFriendlyLost();
             Assert.AreEqual(150, m.Score);          // 300 - 150
             m.Tick(5.5f);
-            Assert.AreEqual(145, m.Score);          // - floor(5.5)
+            Assert.AreEqual(150, m.Score);          // elapsed time no longer affects score
         }
 
         [Test]
