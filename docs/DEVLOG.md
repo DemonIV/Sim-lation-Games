@@ -56,20 +56,23 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `EngagementPolicy` | Angajman durum kararı (Devriye/Angaje/Üsse Dönüş). |
 | `FuelTank` | Yakıt/menzil modeli (gaz kesme oranına göre tüketim). |
 | `EvasionSteering` | Tehditten kaçınma yönü (yana kırma + uzaklaşma bileşeni). |
+| `WavePlan` | Dalga başına zorluk ölçekleme: her düşman tipinden kaç tane spawn edileceği (saf). |
+| `ScenarioState` | Çok dalgalı senaryo ilerleyişi + kazan/kaybet (dalga temizlenince sonraki, son dalgada zafer). |
 
 ### Sim.Runtime (ince MonoBehaviour'lar)
 | Bileşen | Görevi |
 |---|---|
 | `IhaController` | Keşif İHA: uçuş + devriye + radar sensörüyle tespit; yakıt, angajman durumu, atanan hedefe gidiş ve tehdit kaçınması. |
 | `SihaController` | Silahlı SİHA (IhaController'dan türer): kilitlenince güdümlü mühimmat fırlatır; mühimmat oranı. |
-| `AirDefenseSite` | Düşman hava savunması (SAM): drone'ları tespit edip güdümlü mühimmat fırlatır, kendisi de imha edilebilir (SEAD). |
+| `AirDefenseSite` | Düşman hava savunması: drone'ları tespit edip güdümlü mühimmat fırlatır, kendisi de imha edilebilir (SEAD). `Configure(...)` ile uzun menzilli SAM veya kısa menzilli hızlı-ateşli AAA varyantı kurulur. |
 | `RadarSensor` | RadarSystem + RCS + EW + TargetTracker ile gerçekçi tespit/izleme. |
 | `RcsComponent` | Hedefin açıya bağlı radar imzası. |
 | `Jammer` | Gemi üstü gürültü karıştırıcı (EW menzil düşürme). |
 | `GuidedMunition` | PN güdümü + arayıcı başlık + balistik ile güdümlü mühimmat, yakınlık tapası. |
 | `TargetRegistry` / `Targetable` | Canlı hedeflerin kaydı; controller'lar her kare sorgular. |
-| `SimulationBootstrap` | Play'de sahneyi primitive'lerden kurar (kamera, ışık, zemin, drone'lar, hedefler). |
-| `SimulationDirector` | Görev takibi ve skorlama. |
+| `SimulationBootstrap` | Play'de sahneyi primitive'lerden kurar (kamera, ışık, zemin, drone'lar, ScenarioController). |
+| `ScenarioController` | Dalga tabanlı senaryo: her dalgada üç düşman tipini (Sabit hedef / SAM / AAA) `WavePlan`'e göre spawn eder ve kazan/kaybet'i yönetir. |
+| `SimulationDirector` | Görev takibi ve skorlama (dalga güvenli kill sayımı; kazan/kaybet artık ScenarioController'da). |
 | `Hud` | Ekran üstü (IMGUI) bilgi paneli: görev, skor, radar temasları. |
 | `CameraRig` | Serbest uçan kamera (WASD + fare) ve drone takip modu. |
 | `ExplosionEffect` | Asset'siz patlama işareti: büyüyüp sönen emisyonlu küre (mühimmat isabeti + imha). |
@@ -114,7 +117,8 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `d228e75` | M1 taktik katman + HUD + serbest kamera. |
 | `bu tur (önceki)` | Taktik beyni davranışa bağlama + çift taraflı hava savunması muharebesi. |
 | `bu tur (önceki)` | Muharebe cilası: patlama efektleri + mühimmat izleri, temiz mühimmat hasarı (reflection kaldırıldı), R/P/+- kontrolleri, yıldız derecelendirmeli bitiş ekranı, denge ayarı. |
-| `bu tur` | Hata düzeltmesi: drone'ların zemin altına dalması engellendi (yalnız SİHA hedef paylaşımı, irtifa koruyan güdüm, minimum irtifa tabanı). |
+| `bu tur (önceki)` | Hata düzeltmesi: drone'ların zemin altına dalması engellendi (yalnız SİHA hedef paylaşımı, irtifa koruyan güdüm, minimum irtifa tabanı). |
+| `bu tur` | Dalga tabanlı senaryo sistemi + düşman çeşitliliği (Sabit hedef / SAM / AAA); ScenarioController dalgaları spawn eder ve kazan/kaybet'i yönetir; HUD dalga göstergesi. |
 
 ---
 
@@ -124,8 +128,14 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   (`AssignedTargetId`, `State`, `FuelFraction`, `AmmoFraction`, `BasePosition`, `SetThreat`). `SimulationDirector`
   her kare `TargetAllocation` ile hostile'ları drone'lara paylaştırıyor (aynı hedefe boşa gidiş yok); `EngagementPolicy`
   bingo yakıt/mühimmat'ta drone'u üsse döndürüyor; tehdit altında `EvasionSteering` ile yana kırıyor.
-- **Muharebe çift taraflı:** `AirDefenseSite` (SAM) drone'ları tespit edip güdümlü mühimmat fırlatıyor ve
-  kendisi de imha edilebilir hedef (SEAD). Bootstrap iki SAM sahası + iki düz hostile kuruyor.
+- **Muharebe çift taraflı:** `AirDefenseSite` drone'ları tespit edip güdümlü mühimmat fırlatıyor ve
+  kendisi de imha edilebilir hedef (SEAD).
+- **Dalga tabanlı senaryo + düşman çeşitliliği:** Bootstrap artık sabit düşman kurmuyor; bunun yerine bir
+  `ScenarioController` üç düşman tipini (Sabit hedef / uzun menzilli SAM / kısa menzilli hızlı-ateşli AAA)
+  `WavePlan`'e göre artan dalgalar hâlinde spawn ediyor. **Kazan/kaybet artık ScenarioController'ın
+  (`ScenarioState`)** sorumluluğunda (son dalga temizlenince zafer, tüm dostlar kaybedilince bozgun);
+  `MissionState` yalnızca **skor** takipçisi olarak kalıyor. `SimulationDirector`'ın kill sayımı dalga
+  güvenli (yeni dalga düşman sayısını artırınca negatif kill kaydedilmez, baz değer koşulsuz güncellenir).
 - **Skor:** `imha×100 − kayıp×150`. (Önceki sürümdeki saniyelik zaman cezası kaldırıldı; geçen süre HUD'da ayrı
   gösterilir.)
 
@@ -169,3 +179,13 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   güdüm irtifayı koruyacak şekilde hedefin üzerindeki seyir irtifasına yatayda yaklaşacak biçimde düzeltildi;
   hafif irtifa-tutma sapması ve sert minimum irtifa (`minAltitude`) tabanı eklendi (`_flight.Position` ve
   `transform.position` senkron kalır).
+- **Dalga tabanlı senaryo + düşman çeşitliliği:** Test-driven `WavePlan` (dalga başına zorluk ölçekleme) ve
+  `ScenarioState` (dalga ilerleyişi + kazan/kaybet) Core + EditMode testleri eklendi. Yeni `ScenarioController`
+  üç düşman arketipini kendi başına spawn ediyor: gri **Sabit hedef** (silahsız amaç, cube), koyu-kırmızı
+  uzun menzilli **SAM** ve turuncu kısa menzilli hızlı-ateşli **AAA** (ikisi de `AirDefenseSite` +
+  `Configure(...)`). Her dalga temizlenince sonraki spawn olur; son dalga zafer, tüm dostlar bozgun.
+  `AirDefenseSite.Configure(...)` Start'tan önce SAM/AAA varyantı için parametreleri set ediyor.
+  `SimulationBootstrap` sabit `SpawnHostile`/`SpawnAirDefense` çağrıları (ve kullanılmayan metotları)
+  kaldırıldı; yerine drone'lardan sonra bir `ScenarioController` kuruluyor. `SimulationDirector` kill sayımı
+  dalga güvenli (yalnız skor). `Hud` dalga/düşman satırı gösteriyor ve bitiş ekranını ScenarioController.Status
+  üzerinden sürüyor (ScenarioController null ise eski MissionState tabanlı ekrana düşüyor).

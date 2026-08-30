@@ -71,7 +71,10 @@ namespace Sim.Runtime
             HostilesAlive = TargetRegistry.GetSnapshot(1).Count;
             FriendliesAlive = TargetRegistry.GetSnapshot(0).Count;
 
-            // Any drop in hostile count is one or more kills.
+            // Any DROP in hostile count is one or more kills. When a new wave spawns the count INCREASES,
+            // so hostilesLost goes negative and the loop simply does not run — no negative kills are
+            // recorded. The baseline (_prevHostilesAlive) is refreshed unconditionally below, so counting
+            // stays correct across waves regardless of whether the count went up or down.
             int hostilesLost = _prevHostilesAlive - HostilesAlive;
             for (int i = 0; i < hostilesLost; i++)
                 Mission.RecordHostileDestroyed();

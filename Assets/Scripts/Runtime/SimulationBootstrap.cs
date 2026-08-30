@@ -31,15 +31,10 @@ namespace Sim.Runtime
             // One armed SİHA drone (red) with its own patrol route.
             SpawnSiha("SIHA_1", new Vector3(0f, 14f, -30f), RectangleRoute(new Vector3(0f, 14f, -30f), 40f, 20f), new Color(1f, 0.35f, 0.2f));
 
-            // Two plain hostile targets (grey cubes) scattered on the field.
-            // Hostile_2 carries a noise jammer to demonstrate EW: it is harder to detect at range.
-            SpawnHostile("Hostile_1", new Vector3(15f, 1f, 10f), false);
-            SpawnHostile("Hostile_2", new Vector3(-25f, 1f, 5f), true);
-
-            // Two hostile SAM sites (dark-red cylinders). These detect friendly drones and launch guided
-            // munitions at them, and are themselves destroyable (SEAD) — making the fight two-sided.
-            SpawnAirDefense("SAM_1", new Vector3(30f, 1f, -25f));
-            SpawnAirDefense("SAM_2", new Vector3(-30f, 1f, 25f));
+            // Wave-based scenario. The ScenarioController (created after the drones) now owns ALL enemy
+            // spawning — escalating waves of three hostile archetypes (plain target / SAM / AAA) — and
+            // decides win/lose. The old fixed enemy spawns were removed in favour of this system.
+            new GameObject("ScenarioController").AddComponent<ScenarioController>();
 
             // Tactical layer (M1). Created LAST so the director's Start() counts every hostile that
             // was just spawned. The SimulationDirector tracks mission progress/score; the Hud draws
@@ -120,50 +115,6 @@ namespace Sim.Runtime
 
             // Realistic radar sensor (hostileFaction defaults to 1).
             go.AddComponent<RadarSensor>();
-        }
-
-        /// <summary>Spawns a hostile target (grey cube, Faction = 1). Optionally fits a noise jammer.</summary>
-        private void SpawnHostile(string name, Vector3 position, bool withJammer)
-        {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = name;
-            go.transform.position = position;
-            go.transform.localScale = new Vector3(2f, 2f, 2f);
-            ApplyColor(go, new Color(0.5f, 0.5f, 0.5f));
-
-            var targetable = go.AddComponent<Targetable>();
-            targetable.Faction = 1;
-            targetable.MaxHealth = 100f;
-
-            // Aspect-dependent radar signature so hostile RadarSensors see angle-varying RCS.
-            go.AddComponent<RcsComponent>();
-
-            // One hostile carries onboard noise jamming to demonstrate EW range degradation.
-            if (withJammer) go.AddComponent<Jammer>();
-        }
-
-        /// <summary>
-        /// Spawns a hostile air-defense (SAM) site: a dark-red cylinder with a hostile Targetable,
-        /// an aspect-dependent RCS signature, and an <see cref="AirDefenseSite"/> that fires guided
-        /// munitions at friendly drones.
-        /// </summary>
-        private void SpawnAirDefense(string name, Vector3 pos)
-        {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            go.name = name;
-            go.transform.position = pos;
-            go.transform.localScale = new Vector3(3f, 2f, 3f);
-            ApplyColor(go, new Color(0.5f, 0.05f, 0.05f));
-
-            var targetable = go.AddComponent<Targetable>();
-            targetable.Faction = 1;
-            targetable.MaxHealth = 120f;
-
-            // Aspect-dependent radar signature so friendly RadarSensors see angle-varying RCS.
-            go.AddComponent<RcsComponent>();
-
-            // The SAM brain: detect friendlies, lock, and launch guided munitions.
-            go.AddComponent<AirDefenseSite>();
         }
 
         /// <summary>Marks a drone GameObject as a friendly Targetable (Faction = 0).</summary>

@@ -35,6 +35,23 @@ namespace Sim.Runtime
         /// <summary>Id of the friendly drone currently being engaged, or -1 when none.</summary>
         public int CurrentTargetId { get; private set; } = -1;
 
+        /// <summary>
+        /// Sets tunable parameters before <see cref="Start"/> builds the targeting/weapon systems.
+        /// The scenario calls this immediately after AddComponent (same frame, before Start), so it
+        /// safely overrides the serialized defaults used to build SAM vs AAA variants.
+        /// </summary>
+        public void Configure(float detectionRange, float fireRange, float lockTimeSeconds,
+                              int magazineSize, float roundsPerSecond, float munitionSpeed, float damage)
+        {
+            this.detectionRange = detectionRange;
+            this.fireRange = fireRange;
+            this.lockTimeSeconds = lockTimeSeconds;
+            this.magazineSize = magazineSize;
+            this.roundsPerSecond = roundsPerSecond;
+            this.munitionSpeed = munitionSpeed;
+            this.damage = damage;
+        }
+
         private void Start()
         {
             _targeting = new TargetingSystem

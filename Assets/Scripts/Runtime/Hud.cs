@@ -12,6 +12,7 @@ namespace Sim.Runtime
     public class Hud : MonoBehaviour
     {
         private SimulationDirector _director;
+        private ScenarioController _scenario;
         private RadarSensor[] _sensors;
         private GameControls _controls;
 
@@ -28,6 +29,7 @@ namespace Sim.Runtime
         private void Start()
         {
             _director = FindAnyObjectByType<SimulationDirector>();
+            _scenario = FindAnyObjectByType<ScenarioController>();
             _controls = FindAnyObjectByType<GameControls>();
             RefreshSensors();
         }
@@ -40,6 +42,7 @@ namespace Sim.Runtime
                 _refreshTimer = 0f;
                 RefreshSensors();
                 if (_director == null) _director = FindAnyObjectByType<SimulationDirector>();
+                if (_scenario == null) _scenario = FindAnyObjectByType<ScenarioController>();
                 if (_controls == null) _controls = FindAnyObjectByType<GameControls>();
             }
         }
@@ -91,6 +94,8 @@ namespace Sim.Runtime
             GUILayout.Label($"Düşman: {m.HostilesDestroyed} / {m.HostilesTotal} imha   (sahada: {_director.HostilesAlive})", _labelStyle);
             GUILayout.Label($"Dost kayıp: {m.FriendliesLost} / {m.MaxFriendlyLosses}   (sahada: {_director.FriendliesAlive})", _labelStyle);
             GUILayout.Label($"Skor: {m.Score}", _labelStyle);
+            if (_scenario != null)
+                GUILayout.Label($"Dalga: {_scenario.CurrentWaveNumber}/{_scenario.TotalWaves}   Düşman: {_scenario.LiveEnemies}", _labelStyle);
 
             GUILayout.Space(6);
             GUILayout.Label("Radar temasları:", _labelStyle);
@@ -139,10 +144,13 @@ namespace Sim.Runtime
 
             GUILayout.EndArea();
 
-            // End-of-mission banner.
-            if (m.Status == MissionStatus.Won || m.Status == MissionStatus.Lost)
+            // End-of-mission banner. Win/lose is owned by the ScenarioController (waves); if it is
+            // missing for any reason we fall back to the MissionState-based result so nothing breaks.
+            MissionStatus endStatus = _scenario != null ? MapScenario(_scenario.Status) : m.Status;
+
+            if (endStatus == MissionStatus.Won || endStatus == MissionStatus.Lost)
             {
-                bool won = m.Status == MissionStatus.Won;
+                bool won = endStatus == MissionStatus.Won;
                 string text = won ? "GÖREV BAŞARILI" : "GÖREV BAŞARISIZ";
                 Color prev = GUI.color;
                 GUI.color = won ? Color.green : Color.red;
@@ -151,7 +159,7 @@ namespace Sim.Runtime
 
                 if (won)
                 {
-                    int stars = MissionGrade.Stars(m.Status, m.FriendliesLost, m.ElapsedTime);
+                    int stars = MissionGrade.Stars(endStatus, m.FriendliesLost, m.ElapsedTime);
                     string starText = new string('★', stars) + new string('☆', 3 - stars);
                     GUI.color = Color.yellow;
                     var starRect = new Rect(0, Screen.height * 0.5f + 24f, Screen.width, 60f);
@@ -172,6 +180,17 @@ namespace Sim.Runtime
                 case MissionStatus.Won: return "Won";
                 case MissionStatus.Lost: return "Lost";
                 default: return "InProgress";
+            }
+        }
+
+        /// <summary>Maps the scenario's win/lose outcome onto the mission-status enum used by the banner/stars.</summary>
+        private static MissionStatus MapScenario(ScenarioStatus s)
+        {
+            switch (s)
+            {
+                case ScenarioStatus.Won: return MissionStatus.Won;
+                case ScenarioStatus.Lost: return MissionStatus.Lost;
+                default: return MissionStatus.InProgress;
             }
         }
     }
