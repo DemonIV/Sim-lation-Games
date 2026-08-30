@@ -1,0 +1,147 @@
+using System.Collections.Generic;
+using UnityEngine;
+using Sim.Core;
+
+namespace Sim.Runtime
+{
+    /// <summary>
+    /// A HOSTILE fighter drone: it flies, hunts friendly drones with a <see cref="TargetingSystem"/>
+    /// and strafes them with a <see cref="GunTurret"/>. With no contact it orbits the field centre so
+    /// it never wanders off or stalls.
+    ///
+    /// Deliberately self-contained (it does NOT derive from <see cref="IhaController"/>, which owns
+    /// friendly patrol/fuel/engagement logic), but it mirrors that controller's proven flight pattern:
+    /// a pure-logic <see cref="FlightModel"/>, an altitude-hold bias, a hard minimum-altitude floor
+    /// written back into both the model and the transform, and a Slerped orientation.
+    ///
+    /// This is a GAME / EDUCATIONAL model with abstract, gamified parameters.
+    /// </summary>
+    public class EnemyDroneController : MonoBehaviour
+    {
+        [Header("Flight")]
+        [SerializeField] private float maxSpeed = 34f;
+        [SerializeField] private float maxAccel = 9f;
+        [SerializeField] private float maxTurnRateDeg = 85f;
+        [Range(0f, 1f)]
+        [SerializeField] private float throttle = 1f;
+
+        [Header("Sensors")]
+        [SerializeField] private float detectionRange = 130f;
+        [SerializeField] private float fovDeg = 100f;
+        // Faction this fighter hunts. 0 = friendly drones.
+        [SerializeField] private int targetFaction = 0;
+
+        [Header("Altitude")]
+        [SerializeField] private float cruiseAltitude = 14f;
+        [SerializeField] private float minAltitude = 5f;
+
+        [Header("Engagement")]
+        // Radius of the loiter orbit flown around the field centre while searching.
+        [SerializeField] private float standoff = 25f;
+
+        // Pure-logic cores.
+        private FlightModel _flight;
+        private TargetingSystem _targeting;
+
+        // Optional gun (added by the spawner). May be null.
+        private GunTurret _gun;
+
+        // Slowly advancing bearing used for the search orbit, in radians.
+        private float _wanderAngle;
+
+        /// <summary>True when a friendly drone is currently detected in range and FOV.</summary>
+        public bool HasTarget { get; private set; }
+
+        /// <summary>Stable id of the detected friendly, or -1 when none.</summary>
+        public int DetectedId { get; private set; } = -1;
+
+        private void Start()
+        {
+            _flight = new FlightModel(transform.position, transform.forward)
+            {
+                MaxSpeed = maxSpeed,
+                MaxAcceleration = maxAccel,
+                MaxTurnRateDeg = maxTurnRateDeg
+            };
+
+            _targeting = new TargetingSystem
+            {
+                DetectionRange = detectionRange,
+                FieldOfViewDeg = fovDeg
+            };
+
+            _gun = GetComponent<GunTurret>();
+
+            // Seed the search orbit from the spawn bearing so fighters spread out instead of stacking.
+            Vector3 pos = transform.position;
+            _wanderAngle = Mathf.Atan2(pos.z, pos.x);
+        }
+
+        private void Update()
+        {
+            if (_flight == null || _targeting == null) return;
+
+            float dt = Time.deltaTime;
+            Vector3 pos = transform.position;
+
+            if (_gun != null) _gun.Tick(dt);
+
+            // Sensing: nearest friendly drone within range and FOV.
+            List<DetectableTarget> snapshot = TargetRegistry.GetSnapshot(targetFaction);
+            bool found = _targeting.TryDetect(pos, _flight.Forward, snapshot, out DetectableTarget best);
+            HasTarget = found;
+            DetectedId = found ? best.Id : -1;
+            _targeting.UpdateLock(found, DetectedId, dt);
+
+            Vector3 dir;
+            if (found)
+            {
+                // Chase a point above the contact at our own cruise altitude, so the fighter closes
+                // horizontally rather than diving through the ground (same trick as IhaController).
+                Vector3 aim = new Vector3(best.Position.x, cruiseAltitude, best.Position.z);
+                Vector3 toTarget = aim - pos;
+                dir = toTarget.sqrMagnitude > 1e-6f ? toTarget : _flight.Forward;
+            }
+            else
+            {
+                // Search: orbit the field centre on a slowly advancing bearing.
+                _wanderAngle += 0.35f * dt;
+                float radius = Mathf.Max(1f, standoff);
+                var loiter = new Vector3(Mathf.Cos(_wanderAngle) * radius, cruiseAltitude,
+                                         Mathf.Sin(_wanderAngle) * radius);
+                Vector3 toLoiter = loiter - pos;
+                dir = toLoiter.sqrMagnitude > 1e-6f ? toLoiter : _flight.Forward;
+            }
+
+            // Gentle altitude-hold bias toward the cruise altitude.
+            dir.y += (cruiseAltitude - pos.y) * 0.5f;
+            if (dir.sqrMagnitude <= 1e-6f) dir = _flight.Forward;
+
+            // Flight integration.
+            _flight.Step(dir, throttle, dt);
+
+            // Hard floor: the flight model has no ground collision, so clamp up to the minimum altitude
+            // and write it back so _flight.Position and transform.position stay in sync.
+            Vector3 newPos = _flight.Position;
+            if (newPos.y < minAltitude)
+            {
+                newPos.y = minAltitude;
+                _flight.Position = newPos;
+            }
+            transform.position = newPos;
+
+            if (_flight.Forward.sqrMagnitude > 1e-6f)
+            {
+                Quaternion targetRot = Quaternion.LookRotation(_flight.Forward, Vector3.up);
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, 10f * dt);
+            }
+
+            // Gunnery: GunTurret checks range/ammo/cooldown itself, so this is a best-effort call.
+            if (found && _gun != null)
+            {
+                Targetable victim = TargetRegistry.FindById(DetectedId);
+                if (victim != null) _gun.TryFireAt(victim);
+            }
+        }
+    }
+}

@@ -49,6 +49,9 @@ namespace Sim.Runtime
         protected FuelTank _fuel;
         protected EngagementPolicy _policy;
 
+        // Optional defensive gun, if a GunTurret component is attached to this drone. May be null.
+        protected GunTurret _gun;
+
         // Threat memory for evasion: a recorded threat position and the time it expires.
         private Vector3 _threatPos;
         private float _threatExpiry;
@@ -76,6 +79,16 @@ namespace Sim.Runtime
 
         /// <summary>Home/base position (spawn point) used when the drone returns to base.</summary>
         public Vector3 BasePosition { get; set; }
+
+        /// <summary>
+        /// True while a human pilot (see <see cref="PlayerDroneController"/>) is flying this drone.
+        /// The AI steering and AI gunnery are suspended; fuel, engagement state, gun cooldown and
+        /// sensing keep running so the HUD and weapons stay live.
+        /// </summary>
+        public bool ManualControl { get; set; }
+
+        /// <summary>Optional defensive gun attached to this drone, or null when unarmed.</summary>
+        public GunTurret Gun => _gun;
 
         /// <summary>True while a recorded threat is still active (not yet expired).</summary>
         private bool IsThreatened => Time.time <= _threatExpiry;
@@ -119,6 +132,9 @@ namespace Sim.Runtime
             _fuel = new FuelTank(fuelCapacity, fuelBurnRate);
             _policy = new EngagementPolicy();
 
+            // Optional defensive gun (added by the spawner). Null when this drone carries none.
+            _gun = GetComponent<GunTurret>();
+
             // Remember the spawn point so ReturnToBase can steer home.
             BasePosition = transform.position;
             // Hold the spawn altitude as the cruise altitude.
@@ -136,6 +152,17 @@ namespace Sim.Runtime
             // Engagement decision from the current fuel/ammo/target situation.
             if (_policy != null)
                 State = _policy.Decide(HasTarget, AmmoFraction > 0f, FuelFraction);
+
+            // Gun cooldown always advances, no matter who is flying.
+            if (_gun != null) _gun.Tick(dt);
+
+            // Manual control: the player flies and shoots this drone, so skip ALL AI steering and AI
+            // gunnery. Timers above already ticked; sensing still runs so the lock/HUD stay live.
+            if (ManualControl)
+            {
+                RunSensing(dt);
+                return;
+            }
 
             // Navigation: advance waypoints and compute the DEFAULT patrol steering direction.
             _nav.Update(pos);
@@ -204,6 +231,14 @@ namespace Sim.Runtime
 
             // Sensing: detect nearest hostile and advance the lock.
             RunSensing(dt);
+
+            // AI gunnery: strafe the detected hostile with the defensive gun. GunTurret itself checks
+            // range/ammo/cooldown, so this is a cheap best-effort call. Suppressed while heading home.
+            if (_gun != null && HasTarget && State != EngagementState.ReturnToBase)
+            {
+                Targetable gunTarget = TargetRegistry.FindById(DetectedId);
+                if (gunTarget != null) _gun.TryFireAt(gunTarget);
+            }
         }
 
         /// <summary>Runs detection against hostile targets and advances the lock timer.</summary>

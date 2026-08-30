@@ -58,6 +58,8 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `EvasionSteering` | Tehditten kaçınma yönü (yana kırma + uzaklaşma bileşeni). |
 | `WavePlan` | Dalga başına zorluk ölçekleme: her düşman tipinden kaç tane spawn edileceği (saf). |
 | `ScenarioState` | Çok dalgalı senaryo ilerleyişi + kazan/kaybet (dalga temizlenince sonraki, son dalgada zafer). |
+| `GunSystem` | Seri atışlı top/makineli: fişek bandı, atış hızı, etkili menzil, dağılma (saf). |
+| `HitProbability` | Bir top mermisinin isabet olasılığı: menzildeki dağılma konisi yarıçapı ↔ hedef boyutu. |
 
 ### Sim.Runtime (ince MonoBehaviour'lar)
 | Bileşen | Görevi |
@@ -77,6 +79,9 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `CameraRig` | Serbest uçan kamera (WASD + fare) ve drone takip modu. |
 | `ExplosionEffect` | Asset'siz patlama işareti: büyüyüp sönen emisyonlu küre (mühimmat isabeti + imha). |
 | `GameControls` | Klavye kontrolleri: R yeniden başlat, P duraklat, +/- zaman ölçeği. |
+| `GunTurret` | `GunSystem` + `HitProbability` sarmalayıcısı: hedefe veya serbest nişan noktasına top atışı, izli mermi. |
+| `TracerEffect` | Asset'siz izli mermi görseli: `LineRenderer` ile kısa ömürlü parlak çizgi. |
+| `EnemyDroneController` | Düşman avcı drone'u: uçar, dost drone'ları tespit eder ve topla taramaya alır (hava muharebesi). |
 
 ### Testler (Sim.Tests.EditMode)
 Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştırma:
@@ -118,7 +123,8 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `bu tur (önceki)` | Taktik beyni davranışa bağlama + çift taraflı hava savunması muharebesi. |
 | `bu tur (önceki)` | Muharebe cilası: patlama efektleri + mühimmat izleri, temiz mühimmat hasarı (reflection kaldırıldı), R/P/+- kontrolleri, yıldız derecelendirmeli bitiş ekranı, denge ayarı. |
 | `bu tur (önceki)` | Hata düzeltmesi: drone'ların zemin altına dalması engellendi (yalnız SİHA hedef paylaşımı, irtifa koruyan güdüm, minimum irtifa tabanı). |
-| `bu tur` | Dalga tabanlı senaryo sistemi + düşman çeşitliliği (Sabit hedef / SAM / AAA); ScenarioController dalgaları spawn eder ve kazan/kaybet'i yönetir; HUD dalga göstergesi. |
+| `bu tur (önceki)` | Dalga tabanlı senaryo sistemi + düşman çeşitliliği (Sabit hedef / SAM / AAA); ScenarioController dalgaları spawn eder ve kazan/kaybet'i yönetir; HUD dalga göstergesi. |
+| `bu tur (1/2)` | Top/makineli sistemi + izli mermi + düşman avcı drone'ları (hava muharebesi). |
 
 ---
 
@@ -189,3 +195,13 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   kaldırıldı; yerine drone'lardan sonra bir `ScenarioController` kuruluyor. `SimulationDirector` kill sayımı
   dalga güvenli (yalnız skor). `Hud` dalga/düşman satırı gösteriyor ve bitiş ekranını ScenarioController.Status
   üzerinden sürüyor (ScenarioController null ise eski MissionState tabanlı ekrana düşüyor).
+- **Top/makineli + hava muharebesi:** Top/makineli sistemi (isabet olasılığı menzil+dağılma+hedef
+  boyutuna göre), izli mermi görseli, düşman avcı drone'ları (hava muharebesi), dalga planına avcı
+  tipi eklendi. Test-driven `GunSystem` (fişek bandı/atış hızı/menzil/dağılma) ve `HitProbability`
+  (dağılma konisi ↔ hedef yarıçapı) Core + EditMode testleri; `WavePlan.FightersForWave` ile dalga
+  planına avcı tipi girdi (dalga-2 toplamı 7 → 8). Runtime tarafında `GunTurret` (+ asset'siz
+  `TracerEffect`) İHA (`Configure(200, 8, 45, 3, 3)`) ve SİHA'ya (`Configure(300, 10, 60, 2.5, 4.5)`)
+  takıldı; yeni `EnemyDroneController` dost drone'ları avlayan düşman avcı drone'unu getiriyor
+  (`ScenarioController.SpawnFighter` onları ~14 birim irtifada, havada spawn ediyor).
+  `IhaController` topla taciz bloğu + ileride oyuncu kontrolü için `ManualControl` bayrağı kazandı;
+  `Hud` drone başına top mühimmatını da gösteriyor.

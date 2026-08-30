@@ -9,7 +9,11 @@ namespace Sim.Core
         public static int SamsForWave(int waveIndex) => 1 + Mathf.Max(0, waveIndex) / 2;
         public static int AaaForWave(int waveIndex) => Mathf.Max(0, waveIndex);
 
+        /// <summary>Hostile fighter drones (air-to-air). None in the first wave, then one per two waves.</summary>
+        public static int FightersForWave(int waveIndex) => Mathf.Max(0, waveIndex + 1) / 2;
+
         public static int TotalEnemiesForWave(int waveIndex)
-            => PlainHostilesForWave(waveIndex) + SamsForWave(waveIndex) + AaaForWave(waveIndex);
+            => PlainHostilesForWave(waveIndex) + SamsForWave(waveIndex) + AaaForWave(waveIndex)
+               + FightersForWave(waveIndex);
     }
 }

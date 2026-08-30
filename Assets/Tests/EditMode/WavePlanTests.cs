@@ -28,10 +28,19 @@ namespace Sim.Tests
         }
 
         [Test]
+        public void Fighters_AppearFromSecondWave()
+        {
+            Assert.AreEqual(0, WavePlan.FightersForWave(0));
+            Assert.AreEqual(1, WavePlan.FightersForWave(1));
+            Assert.AreEqual(1, WavePlan.FightersForWave(2));
+            Assert.AreEqual(2, WavePlan.FightersForWave(3));
+        }
+
+        [Test]
         public void Total_SumsAllTypes()
         {
             Assert.AreEqual(2, WavePlan.TotalEnemiesForWave(0));   // 1+1+0
-            Assert.AreEqual(7, WavePlan.TotalEnemiesForWave(2));   // 3+2+2
+            Assert.AreEqual(8, WavePlan.TotalEnemiesForWave(2));   // 3+2+2+1
         }
 
         [Test]

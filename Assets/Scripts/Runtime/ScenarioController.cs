@@ -24,6 +24,7 @@ namespace Sim.Runtime
         [SerializeField] private float fieldHalfExtent = 40f;
         [SerializeField] private float groundY = 1f;
         [SerializeField] private float spawnMinRadius = 15f;   // keep enemies away from the very centre
+        [SerializeField] private float fighterAltitude = 14f;  // hostile fighters spawn airborne, at cruise
 
         private ScenarioState _state;
 
@@ -71,11 +72,21 @@ namespace Sim.Runtime
             int plain = WavePlan.PlainHostilesForWave(waveIndex);
             int sams = WavePlan.SamsForWave(waveIndex);
             int aaa = WavePlan.AaaForWave(waveIndex);
+            int fighters = WavePlan.FightersForWave(waveIndex);
 
             int wave = waveIndex + 1;
             for (int i = 0; i < plain; i++) SpawnPlainHostile(RandomScatterPosition(), $"Hostile_W{wave}_{i}");
             for (int i = 0; i < sams; i++) SpawnSam(RandomScatterPosition(), $"SAM_W{wave}_{i}");
             for (int i = 0; i < aaa; i++) SpawnAaa(RandomScatterPosition(), $"AAA_W{wave}_{i}");
+            for (int i = 0; i < fighters; i++) SpawnFighter(RandomAirbornePosition(), $"Fighter_W{wave}_{i}");
+        }
+
+        /// <summary>Scatter position lifted to the fighters' cruise altitude, so they spawn airborne.</summary>
+        private Vector3 RandomAirbornePosition()
+        {
+            Vector3 p = RandomScatterPosition();
+            p.y = fighterAltitude;
+            return p;
         }
 
         /// <summary>
@@ -168,6 +179,34 @@ namespace Sim.Runtime
             var site = go.AddComponent<AirDefenseSite>();
             // detectionRange, fireRange, lockTimeSeconds, magazineSize, roundsPerSecond, munitionSpeed, damage
             site.Configure(80f, 60f, 0.8f, 20, 1.5f, 130f, 20f);
+        }
+
+        /// <summary>
+        /// Spawns a hostile fighter drone: a dark-magenta capsule that flies, hunts friendly drones and
+        /// strafes them with a gun (<see cref="EnemyDroneController"/> + <see cref="GunTurret"/>). Unlike
+        /// the ground archetypes it is spawned AIRBORNE at its cruise altitude.
+        /// </summary>
+        private void SpawnFighter(Vector3 pos, string name)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            go.name = name;
+            go.transform.position = pos;
+            go.transform.localScale = new Vector3(1f, 1f, 1f);
+            ApplyColor(go, new Color(0.55f, 0.1f, 0.6f));
+
+            var targetable = go.AddComponent<Targetable>();
+            targetable.Faction = 1;
+            targetable.MaxHealth = 70f;
+
+            go.AddComponent<RcsComponent>();
+
+            // Gun BEFORE the controller so EnemyDroneController.Start finds it via GetComponent.
+            var gun = go.AddComponent<GunTurret>();
+            // magazineSize, roundsPerSecond, effectiveRange, dispersionDeg, damagePerRound
+            gun.Configure(200, 8f, 55f, 3f, 3.5f);
+            gun.SetTracerColor(new Color(1f, 0.35f, 0.35f));
+
+            go.AddComponent<EnemyDroneController>();
         }
 
         /// <summary>

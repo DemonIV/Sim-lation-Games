@@ -93,6 +93,10 @@ namespace Sim.Runtime
             ApplyColor(go, color);
             MarkFriendly(go);
 
+            // Light defensive gun, added before the controller so its Start() picks it up.
+            // magazineSize, roundsPerSecond, effectiveRange, dispersionDeg, damagePerRound
+            go.AddComponent<GunTurret>().Configure(200, 8f, 45f, 3f, 3f);
+
             var ctrl = go.AddComponent<IhaController>();
             AssignRoute(ctrl, route);
 
@@ -109,6 +113,10 @@ namespace Sim.Runtime
             go.transform.position = position;
             ApplyColor(go, color);
             MarkFriendly(go);
+
+            // Stronger gun than the recon İHA, added before the controller so its Start() picks it up.
+            // magazineSize, roundsPerSecond, effectiveRange, dispersionDeg, damagePerRound
+            go.AddComponent<GunTurret>().Configure(300, 10f, 60f, 2.5f, 4.5f);
 
             var ctrl = go.AddComponent<SihaController>();
             AssignRoute(ctrl, route);

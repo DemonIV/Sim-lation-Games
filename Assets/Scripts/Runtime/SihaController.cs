@@ -48,6 +48,10 @@ namespace Sim.Runtime
             float dt = Time.deltaTime;
             _weapon.Tick(dt);
 
+            // Under manual control the pilot decides when to shoot (see TryManualLaunch); the weapon
+            // cooldown above still advances so the AI resumes cleanly when control is released.
+            if (ManualControl) return;
+
             // Engagement: only fire on a confirmed lock against an in-range hostile.
             if (!Targeting.IsLocked) return;
 

@@ -125,8 +125,11 @@ namespace Sim.Runtime
                 {
                     IhaController c = friendlies[i];
                     if (c == null) continue;
+                    // Gun ammo only when this drone actually carries a GunTurret.
+                    GunTurret gun = c.Gun;
+                    string gunText = gun != null ? $"  top={gun.AmmoFraction * 100f:0}%" : string.Empty;
                     GUILayout.Label(
-                        $"  {c.name}: {c.State}  yakıt={c.FuelFraction * 100f:0}%  mühimmat={c.AmmoFraction * 100f:0}%",
+                        $"  {c.name}: {c.State}  yakıt={c.FuelFraction * 100f:0}%  mühimmat={c.AmmoFraction * 100f:0}%{gunText}",
                         _labelStyle);
                     shown++;
                 }
