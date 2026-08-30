@@ -37,3 +37,9 @@ with abstract, gamified, educational mechanics.
   `GuidedMunition`.
 - **Rule:** all guidance, sensor, and ballistics logic lives in `Sim.Core` with EditMode tests;
   the MonoBehaviours stay thin, only wiring Core logic into the scene.
+
+## Tactical layer (M1)
+
+- New Core systems (all in `Sim.Core`, all EditMode-tested): `MissionState`, `TargetAllocation`,
+  `EngagementPolicy`, `FuelTank`. Runtime glue (thin MonoBehaviours): `SimulationDirector`
+  (mission tracking/scoring), `Hud` (IMGUI overlay), `CameraRig` (free-fly + drone-follow camera).

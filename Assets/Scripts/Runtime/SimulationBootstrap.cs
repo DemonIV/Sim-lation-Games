@@ -33,6 +33,17 @@ namespace Sim.Runtime
             SpawnHostile("Hostile_1", new Vector3(15f, 1f, 10f), false);
             SpawnHostile("Hostile_2", new Vector3(-25f, 1f, 5f), true);
             SpawnHostile("Hostile_3", new Vector3(5f, 1f, -15f), false);
+
+            // Tactical layer (M1). Created LAST so the director's Start() counts every hostile that
+            // was just spawned. The SimulationDirector tracks mission progress/score; the Hud draws
+            // an IMGUI overlay reading that state.
+            var director = new GameObject("SimulationDirector").AddComponent<SimulationDirector>();
+            director.gameObject.AddComponent<Hud>();
+
+            // Attach a free-fly / drone-follow spectator camera to the main camera (created above in
+            // EnsureCameraAndLight), if it doesn't already have one.
+            if (Camera.main != null && Camera.main.GetComponent<CameraRig>() == null)
+                Camera.main.gameObject.AddComponent<CameraRig>();
         }
 
         /// <summary>Creates a main camera looking down over the field plus a directional light, if none exist.</summary>

@@ -75,6 +75,29 @@ Bu sistemlerin tamamı **EditMode birim testleri** ile kapsanmıştır (`Assets/
 
 ---
 
+## Taktik Katman (M1)
+
+Senaryoyu izlenebilir ve puanlanabilir kılan taktik katman.
+
+**Yeni Core sistemleri** (hepsi `Sim.Core`, hepsi EditMode testli):
+
+- **`MissionState`** — görev hedefleri ve skoru: izin verilen dost kaybını aşmadan tüm düşmanları imha et. Kazanma/kaybetme durumu, geçen süre ve skor (imha ödül, kayıp ve süre ceza) hesaplar.
+- **`TargetAllocation`** — atıcıları hedeflere dağıtır: gereksiz örtüşmeyi önleyen açgözlü en-yakın-çift ataması; fazla atıcı en yakın hedefte ikiye katlanır.
+- **`EngagementPolicy`** — dronun taktik durumunu (Patrol / Engage / ReturnToBase) yakıt, mühimmat ve hedef varlığından belirler; bingo yakıt eşiği ayarlanabilir.
+- **`FuelTank`** — gaz koluyla orantılı yakıt tüketen dayanıklılık modeli.
+
+**Yeni Runtime parçaları** (ince MonoBehaviour'lar):
+
+- **`SimulationDirector`** — `TargetRegistry`'yi her karede izler, imha/kayıpları `MissionState`'e işler ve skorlar.
+- **`Hud`** — Canvas gerektirmeyen IMGUI ekran arayüzü: görev durumu, skor, radar temasları ve kazanma/kaybetme afişi.
+- **`CameraRig`** — serbest uçuş + drone takip kamerası, oyuncunun simülasyonu izlemesi için.
+
+### Nasıl izlenir
+
+Play'e basın; kamerayı uçurmak için **WASD + sağ fare** (bakış), **Tab** ile bir dronu takip edin, **F** ile serbest kameraya dönün. HUD görev ilerlemesini ve skoru gösterir.
+
+---
+
 ## English Summary
 
 **İHA / SİHA Simulation** is a 3D Unity desktop simulation of an unmanned aerial vehicle (İHA) and an armed unmanned aerial vehicle (SİHA), built with abstract, gamified mechanics as an educational/game project — not a real military system.
