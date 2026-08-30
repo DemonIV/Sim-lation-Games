@@ -20,12 +20,26 @@ namespace Sim.Runtime
 
         private void Awake()
         {
-            _rcs = new RadarCrossSection
+            EnsureRcs();
+        }
+
+        /// <summary>
+        /// Builds the pure-logic signature on first use. It is a plain C# object that Unity does not
+        /// serialize, so it is null whenever <see cref="Awake"/> has not run for this component while
+        /// callers (<see cref="RadarSensor"/>) are already querying it.
+        /// </summary>
+        private RadarCrossSection EnsureRcs()
+        {
+            if (_rcs == null)
             {
-                BaseRcs = baseRcs,
-                FrontalRcs = frontalRcs,
-                BroadsideRcs = broadsideRcs
-            };
+                _rcs = new RadarCrossSection
+                {
+                    BaseRcs = baseRcs,
+                    FrontalRcs = frontalRcs,
+                    BroadsideRcs = broadsideRcs
+                };
+            }
+            return _rcs;
         }
 
         /// <summary>
@@ -34,7 +48,7 @@ namespace Sim.Runtime
         /// </summary>
         public float RcsFrom(Vector3 radarPos)
         {
-            return _rcs.ValueForAspect(transform.forward, transform.position - radarPos);
+            return EnsureRcs().ValueForAspect(transform.forward, transform.position - radarPos);
         }
     }
 }

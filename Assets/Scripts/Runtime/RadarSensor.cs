@@ -39,17 +39,36 @@ namespace Sim.Runtime
 
         private void Start()
         {
-            _radar = new RadarSystem
+            EnsureInitialized();
+        }
+
+        /// <summary>
+        /// Builds the pure-logic radar and tracker on first use. These are plain C# objects that Unity
+        /// does NOT serialize, so they are null whenever <see cref="Start"/> has not run for this
+        /// component (or its managed state was dropped, e.g. by a play-mode domain reload) while
+        /// <see cref="Update"/> keeps ticking. Building them lazily — the same pattern
+        /// <see cref="GunTurret"/> and <see cref="CountermeasureDispenser"/> already use — makes the
+        /// sensor immune to that ordering instead of dereferencing null every frame.
+        /// </summary>
+        private void EnsureInitialized()
+        {
+            if (_radar == null)
             {
-                ReferenceRange = referenceRange,
-                ReferenceRcs = referenceRcs,
-                BeamWidthDeg = beamWidthDeg
-            };
-            _tracker = new TargetTracker();
+                _radar = new RadarSystem
+                {
+                    ReferenceRange = referenceRange,
+                    ReferenceRcs = referenceRcs,
+                    BeamWidthDeg = beamWidthDeg
+                };
+            }
+
+            if (_tracker == null) _tracker = new TargetTracker();
         }
 
         private void Update()
         {
+            EnsureInitialized();
+
             float dt = Time.deltaTime;
             Vector3 self = transform.position;
             Vector3 forward = transform.forward;
@@ -65,27 +84,25 @@ namespace Sim.Runtime
             {
                 DetectableTarget candidate = snapshot[i];
 
-                // Resolve the live Targetable so we can read aspect RCS and jamming state.
+                // Resolve the live Targetable so we can read aspect RCS and jamming state. The target
+                // can be DESTROYED between the snapshot and this lookup (Unity's == reports that as
+                // null), in which case there is nothing left to paint — skip the candidate entirely
+                // rather than touching any of its members.
                 Targetable t = TargetRegistry.FindById(candidate.Id);
+                if (t == null) continue;
 
                 // Aspect-dependent RCS if the target carries an RcsComponent, else the nominal value.
                 float rcs = referenceRcs;
-                if (t != null)
-                {
-                    RcsComponent rcsComp = t.GetComponent<RcsComponent>();
-                    if (rcsComp != null) rcs = rcsComp.RcsFrom(self);
-                }
+                RcsComponent rcsComp = t.GetComponent<RcsComponent>();
+                if (rcsComp != null) rcs = rcsComp.RcsFrom(self);
 
                 // Baseline detection range from the radar range equation.
                 float range = _radar.DetectionRange(rcs);
 
                 // Noise jamming shortens the burn-through range.
-                if (t != null)
-                {
-                    Jammer jammer = t.GetComponent<Jammer>();
-                    if (jammer != null)
-                        range = ElectronicWarfare.EffectiveRange(range, jammer.Strength);
-                }
+                Jammer jammer = t.GetComponent<Jammer>();
+                if (jammer != null)
+                    range = ElectronicWarfare.EffectiveRange(range, jammer.Strength);
 
                 // Detectable if inside the (jamming-reduced) range and within the beam.
                 Vector3 to = candidate.Position - self;

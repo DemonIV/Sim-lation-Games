@@ -70,6 +70,17 @@ namespace Sim.Runtime
         private Vector3 _threatPos;
         private float _threatExpiry;
 
+        // True once the pure-logic cores below have been built. Guards against Update running before
+        // (or without) Start — see EnsureInitialized.
+        private bool _initialized;
+
+        /// <summary>
+        /// True once this drone has been written off (out-of-fuel ground impact). The GameObject is
+        /// destroyed through <see cref="Targetable.TakeDamage"/>, but Unity defers the actual teardown,
+        /// so Update can still be entered afterwards; everything downstream of the crash is skipped.
+        /// </summary>
+        protected bool Crashed { get; private set; }
+
         /// <summary>True when a hostile target is currently detected within range and FOV.</summary>
         public bool HasTarget { get; private set; }
 
@@ -185,6 +196,25 @@ namespace Sim.Runtime
 
         protected virtual void Start()
         {
+            EnsureInitialized();
+        }
+
+        /// <summary>
+        /// Builds every pure-logic core and resolves the optional sibling components, exactly once.
+        /// <para>
+        /// All of these are plain C# objects / non-serialized references, so they are null whenever
+        /// <see cref="Start"/> has not run for this component while <see cref="Update"/> is already
+        /// ticking (Unity keeps calling Update on a behaviour whose managed state was dropped, e.g. by
+        /// a play-mode domain reload). Every other controller in the project already guards this;
+        /// building lazily here — like <see cref="GunTurret"/> and <see cref="CountermeasureDispenser"/>
+        /// do — is what stops <c>_nav</c>/<c>_flight</c> from being dereferenced while null.
+        /// </para>
+        /// </summary>
+        protected void EnsureInitialized()
+        {
+            if (_initialized) return;
+            _initialized = true;
+
             _flight = new FlightModel(transform.position, transform.forward)
             {
                 MaxSpeed = maxSpeed,
@@ -229,6 +259,16 @@ namespace Sim.Runtime
 
         protected virtual void Update()
         {
+            // The drone already hit the ground out of fuel: it is on its way out (Destroy is deferred
+            // to the end of the frame), so touching its transform or steering it again is meaningless
+            // and unsafe.
+            if (Crashed) return;
+
+            // Build the pure-logic cores if Start has not done it. Without this, _nav/_flight can be
+            // null here and every dereference below throws once per frame.
+            EnsureInitialized();
+            if (_flight == null || _nav == null || _targeting == null) return;
+
             float dt = Time.deltaTime;
             Vector3 pos = transform.position;
 
@@ -358,6 +398,10 @@ namespace Sim.Runtime
                 {
                     if (_self != null)
                     {
+                        // Latch BEFORE the damage call: TakeDamage destroys the GameObject, and Unity
+                        // keeps this Update alive until the end of the frame. The latch makes every
+                        // later entry a no-op instead of a null dereference.
+                        Crashed = true;
                         _self.TakeDamage(99999f);
                         return;
                     }
@@ -420,10 +464,14 @@ namespace Sim.Runtime
             GuidedMunition nearest = null;
             float bestRangeSq = float.MaxValue;
 
+            // Drop munitions that have already detonated/expired before reading anything off them.
+            GuidedMunition.Prune();
+
             List<GuidedMunition> active = GuidedMunition.Active;
             for (int i = 0; i < active.Count; i++)
             {
                 GuidedMunition m = active[i];
+                // A destroyed munition compares equal to null but member access still throws.
                 if (m == null) continue;
                 if (m.Target != _self) continue;
 
@@ -455,6 +503,11 @@ namespace Sim.Runtime
         /// <summary>Runs detection against hostile targets and advances the lock timer.</summary>
         protected void RunSensing(float dt)
         {
+            // Sensing needs the pure-logic cores; bail out rather than dereference null if this is
+            // reached before they exist.
+            EnsureInitialized();
+            if (_targeting == null || _flight == null) return;
+
             List<DetectableTarget> snapshot = TargetRegistry.GetSnapshot(hostileFaction);
             bool found = _targeting.TryDetect(transform.position, _flight.Forward, snapshot, out DetectableTarget best);
 

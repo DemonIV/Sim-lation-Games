@@ -81,11 +81,30 @@ namespace Sim.Runtime
         }
 
         /// <summary>
+        /// Drops every DESTROYED entry from <see cref="All"/>. A Unity object that has been destroyed
+        /// compares equal to null but still occupies its slot in the list (OnDestroy is not guaranteed
+        /// to have run yet, and a scene reload can leave stale wrappers behind); touching any member of
+        /// such an entry throws. Called at the top of every scan so no consumer ever sees a dead entry.
+        /// Iterates BACKWARDS so removal does not skip elements.
+        /// </summary>
+        public static void Prune()
+        {
+            for (int i = All.Count - 1; i >= 0; i--)
+            {
+                // Unity's overloaded == is what detects a destroyed object here; do NOT use
+                // ReferenceEquals/is null, they would keep dead wrappers in the list.
+                if (All[i] == null) All.RemoveAt(i);
+            }
+        }
+
+        /// <summary>
         /// Builds a lightweight snapshot of every live targetable in the given faction,
         /// suitable for feeding into <see cref="Sim.Core.TargetingSystem"/>.
         /// </summary>
         public static List<DetectableTarget> GetSnapshot(int factionFilter)
         {
+            Prune();
+
             var result = new List<DetectableTarget>();
             for (int i = 0; i < All.Count; i++)
             {
@@ -98,9 +117,14 @@ namespace Sim.Runtime
             return result;
         }
 
-        /// <summary>Finds a registered targetable by its stable simulation id, or null.</summary>
+        /// <summary>
+        /// Finds a LIVE registered targetable by its stable simulation id, or null. Destroyed entries
+        /// are pruned rather than returned, so callers never get a dead reference back.
+        /// </summary>
         public static Targetable FindById(int id)
         {
+            Prune();
+
             for (int i = 0; i < All.Count; i++)
             {
                 Targetable t = All[i];

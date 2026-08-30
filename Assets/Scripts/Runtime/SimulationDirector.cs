@@ -114,8 +114,11 @@ namespace Sim.Runtime
             var shooters = new List<SihaController>(_friendlies.Count);
             for (int i = 0; i < _friendlies.Count; i++)
             {
-                if (_friendlies[i] is SihaController siha && siha != null)
-                    shooters.Add(siha);
+                // Unity's == first: the cached list can hold drones destroyed since the last refresh,
+                // and 'is' alone would happily match such a dead wrapper.
+                IhaController c = _friendlies[i];
+                if (c == null) continue;
+                if (c is SihaController siha) shooters.Add(siha);
             }
 
             var shooterPositions = new List<Vector3>(shooters.Count);

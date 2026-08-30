@@ -50,7 +50,11 @@ namespace Sim.Runtime
             {
                 _following = false;
                 _followTarget = null;
-                Chase(_pilot.Controlled.transform);
+
+                // PilotActive() already proved the piloted drone is live; re-read it into a local and
+                // check again so a drone destroyed in this very frame cannot be dereferenced.
+                IhaController piloted = _pilot.Controlled;
+                if (piloted != null) Chase(piloted.transform);
                 return;
             }
 
@@ -161,12 +165,17 @@ namespace Sim.Runtime
         /// <summary>Advances to the next friendly drone (Faction == 0) in the registry.</summary>
         private void CycleFollowTarget()
         {
+            // Drop dead entries first, then still null-check each one: a destroyed Targetable compares
+            // equal to null but reading .Faction off it throws.
+            TargetRegistry.Prune();
+
             var friendlies = new List<Targetable>();
             var all = TargetRegistry.All;
             for (int i = 0; i < all.Count; i++)
             {
                 Targetable t = all[i];
-                if (t != null && t.Faction == 0) friendlies.Add(t);
+                if (t == null) continue;
+                if (t.Faction == 0) friendlies.Add(t);
             }
 
             if (friendlies.Count == 0)

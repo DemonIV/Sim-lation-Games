@@ -63,8 +63,25 @@ namespace Sim.Runtime
         /// <summary>Stable id of the detected friendly, or -1 when none.</summary>
         public int DetectedId { get; private set; } = -1;
 
+        // True once the pure-logic cores below have been built (see EnsureInitialized).
+        private bool _initialized;
+
         private void Start()
         {
+            EnsureInitialized();
+        }
+
+        /// <summary>
+        /// Builds the pure-logic cores and resolves the optional sibling components, exactly once.
+        /// They are plain C# objects / non-serialized references, so they are null whenever Start has
+        /// not run for this component while Update is already ticking; building them lazily keeps the
+        /// fighter flying instead of dereferencing null (or freezing forever behind a guard).
+        /// </summary>
+        private void EnsureInitialized()
+        {
+            if (_initialized) return;
+            _initialized = true;
+
             _flight = new FlightModel(transform.position, transform.forward)
             {
                 MaxSpeed = maxSpeed,
@@ -89,6 +106,7 @@ namespace Sim.Runtime
 
         private void Update()
         {
+            EnsureInitialized();
             if (_flight == null || _targeting == null) return;
 
             float dt = Time.deltaTime;
@@ -185,10 +203,14 @@ namespace Sim.Runtime
             GuidedMunition nearest = null;
             float bestRangeSq = float.MaxValue;
 
+            // Drop munitions that have already detonated/expired before reading anything off them.
+            GuidedMunition.Prune();
+
             List<GuidedMunition> active = GuidedMunition.Active;
             for (int i = 0; i < active.Count; i++)
             {
                 GuidedMunition m = active[i];
+                // A destroyed munition compares equal to null but member access still throws.
                 if (m == null) continue;
                 if (m.Target != _self) continue;
 

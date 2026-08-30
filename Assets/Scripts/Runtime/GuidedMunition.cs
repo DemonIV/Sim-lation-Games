@@ -104,6 +104,21 @@ namespace Sim.Runtime
         }
 
         /// <summary>
+        /// Drops every DESTROYED munition from <see cref="Active"/>. A destroyed Unity object compares
+        /// equal to null but still holds its slot (OnDestroy may not have run yet, e.g. when the whole
+        /// GameObject is torn down), and reading <c>.Target</c>/<c>.transform</c> on it throws. Every
+        /// missile-warning scan calls this first. Iterates BACKWARDS so removal does not skip entries.
+        /// </summary>
+        public static void Prune()
+        {
+            for (int i = Active.Count - 1; i >= 0; i--)
+            {
+                // Unity's overloaded == detects the destroyed state; never use ReferenceEquals here.
+                if (Active[i] == null) Active.RemoveAt(i);
+            }
+        }
+
+        /// <summary>
         /// Makes the munition read clearly against the scene: a bright emissive body plus a fading
         /// trail. Fully defensive so it is a no-op if renderers/shaders are unavailable.
         /// </summary>
@@ -155,8 +170,17 @@ namespace Sim.Runtime
             float dt = Time.fixedDeltaTime;
             _elapsed += dt;
 
-            // Miss: target gone/destroyed or the motor/seeker has timed out.
+            // Miss: target gone/destroyed or the motor/seeker has timed out. _target == null uses
+            // Unity's overloaded comparison, so a DESTROYED Targetable counts as gone here.
             if (_target == null || _elapsed > maxLifetime)
+            {
+                Destroy(gameObject);
+                return;
+            }
+
+            // Defensive: the seeker is built in Launch. If it is somehow missing (state lost before the
+            // first step) the munition cannot guide, so scrub it instead of dereferencing null below.
+            if (_seeker == null)
             {
                 Destroy(gameObject);
                 return;

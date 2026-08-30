@@ -274,3 +274,15 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   üç yetenek kazandı: **Q** flare, **E** (basılı) art yakıcı (×1.6 hız, ×3 yakıt), **X** ~1.5 sn
   otomatik kaçış manevrası; `Hud` ekranda kırmızı `⚠ FÜZE! x.xs` uyarısı, pilot panelinde
   `flare=%NN` + `ART YAKICI`/`KAÇIŞ` göstergeleri ve drone satırlarında `flare=%NN` gösteriyor.
+- **Hata düzeltmesi:** yok edilmiş nesnelere erişimden kaynaklanan NullReferenceException'lar
+  giderildi (statik kayıtlarda kalan ölü referanslar, `FindById` sonuçları ve yakıt bitince çakılan
+  drone). Tüm kayıt taramalarına null koruması ve ölü kayıt temizliği eklendi.
+  `TargetRegistry.Prune()` ve `GuidedMunition.Prune()` ölü girdileri listeden (sondan başa doğru)
+  siliyor; `GetSnapshot`/`FindById` her çağrıda önce temizlik yapıyor, `RadarSensor` çözemediği
+  hedefi tamamen atlıyor. `IhaController` artık `Crashed` mandalıyla çakılma sonrası Update'i
+  tamamen atlıyor (`Destroy` kare sonuna ertelendiği için Update bir kez daha girilebiliyordu) ve
+  saf-mantık çekirdekleri (`FlightModel`/`WaypointNavigator`/`TargetingSystem`/`FuelTank`) `Start`
+  çalışmamış olsa bile `EnsureInitialized()` ile tembel kuruluyor — aynı tembel kurulum
+  `RadarSensor`, `SihaController`, `EnemyDroneController`, `AirDefenseSite` ve `RcsComponent` için
+  de yapıldı. Unity'nin aşırı yüklenmiş `==` karşılaştırması korunuyor (`is null`/`ReferenceEquals`
+  ve UnityEngine.Object üzerinde `?.` kullanılmıyor).

@@ -50,21 +50,40 @@ namespace Sim.Runtime
             this.roundsPerSecond = roundsPerSecond;
             this.munitionSpeed = munitionSpeed;
             this.damage = damage;
+
+            // Drop anything already built from the previous values so it is rebuilt on next use.
+            _targeting = null;
+            _weapon = null;
         }
 
         private void Start()
         {
-            _targeting = new TargetingSystem
+            EnsureInitialized();
+        }
+
+        /// <summary>
+        /// Builds the pure-logic cores on first use. They are plain C# objects Unity does not
+        /// serialize, so they are null whenever Start has not run for this component while Update is
+        /// already ticking; building them lazily keeps the site live instead of silently dead.
+        /// </summary>
+        private void EnsureInitialized()
+        {
+            if (_targeting == null)
             {
-                DetectionRange = detectionRange,
-                FieldOfViewDeg = 360f,          // omnidirectional scan: any bearing passes the FOV test
-                LockTimeSeconds = lockTimeSeconds
-            };
-            _weapon = new WeaponSystem(magazineSize, roundsPerSecond);
+                _targeting = new TargetingSystem
+                {
+                    DetectionRange = detectionRange,
+                    FieldOfViewDeg = 360f,      // omnidirectional scan: any bearing passes the FOV test
+                    LockTimeSeconds = lockTimeSeconds
+                };
+            }
+
+            if (_weapon == null) _weapon = new WeaponSystem(magazineSize, roundsPerSecond);
         }
 
         private void Update()
         {
+            EnsureInitialized();
             if (_targeting == null || _weapon == null) return;
 
             float dt = Time.deltaTime;

@@ -37,7 +37,18 @@ namespace Sim.Runtime
         protected override void Start()
         {
             base.Start();
-            _weapon = new WeaponSystem(magazineSize, roundsPerSecond);
+            EnsureWeapon();
+        }
+
+        /// <summary>
+        /// Builds the pure-logic fire control on first use. Like the cores in
+        /// <see cref="IhaController.EnsureInitialized"/> it is a plain C# object Unity does not
+        /// serialize, so it can be null while Update is already running.
+        /// </summary>
+        private WeaponSystem EnsureWeapon()
+        {
+            if (_weapon == null) _weapon = new WeaponSystem(magazineSize, roundsPerSecond);
+            return _weapon;
         }
 
         protected override void Update()
@@ -45,16 +56,22 @@ namespace Sim.Runtime
             // Run flight, navigation, and sensing/lock exactly like the recon drone.
             base.Update();
 
+            // base.Update() can write this drone off (out-of-fuel ground impact), which destroys the
+            // GameObject; stop before touching its transform or firing from a wreck.
+            if (Crashed) return;
+
             float dt = Time.deltaTime;
-            _weapon.Tick(dt);
+            EnsureWeapon().Tick(dt);
 
             // Under manual control the pilot decides when to shoot (see TryManualLaunch); the weapon
             // cooldown above still advances so the AI resumes cleanly when control is released.
             if (ManualControl) return;
 
             // Engagement: only fire on a confirmed lock against an in-range hostile.
-            if (!Targeting.IsLocked) return;
+            if (Targeting == null || !Targeting.IsLocked) return;
 
+            // FindById can only hand back a LIVE Targetable, but re-check with Unity's == anyway: the
+            // object may be destroyed between the lookup and the shot.
             Targetable target = TargetRegistry.FindById(DetectedId);
             if (target == null) return;
 
@@ -92,8 +109,9 @@ namespace Sim.Runtime
         /// </summary>
         public bool TryManualLaunch()
         {
-            if (_weapon == null) return false;
+            if (Crashed) return false;
             if (!HasTarget) return false;
+            EnsureWeapon();
 
             Targetable target = TargetRegistry.FindById(DetectedId);
             if (target == null) return false;
