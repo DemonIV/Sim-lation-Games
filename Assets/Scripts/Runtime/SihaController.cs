@@ -85,6 +85,40 @@ namespace Sim.Runtime
         }
 
         /// <summary>
+        /// Player-commanded launch against the currently detected hostile. Reuses the exact AI firing
+        /// path (range + ammo/cooldown checks, then <see cref="LaunchMunition"/>) but is driven by the
+        /// pilot instead of a confirmed lock, so the player is never left waiting on the lock timer.
+        /// Returns true when a munition was actually launched. The AI firing path is unchanged.
+        /// </summary>
+        public bool TryManualLaunch()
+        {
+            if (_weapon == null) return false;
+            if (!HasTarget) return false;
+
+            Targetable target = TargetRegistry.FindById(DetectedId);
+            if (target == null) return false;
+
+            Vector3 self = transform.position;
+            Vector3 targetPos = target.transform.position;
+            if (Vector3.Distance(self, targetPos) > weaponRange) return false;
+
+            // hasLock: the pilot IS the lock. Ammo and cooldown are still enforced by WeaponSystem.
+            if (!_weapon.TryFire(true)) return false;
+
+            if (useGuidedMunition)
+            {
+                LaunchMunition(self, target);
+            }
+            else
+            {
+                target.TakeDamage(damagePerHit);
+                Vector3 intercept = Ballistics.ComputeInterceptPoint(self, targetPos, Vector3.zero, projectileSpeed);
+                Debug.DrawLine(self, intercept, Color.red);
+            }
+            return true;
+        }
+
+        /// <summary>
         /// Spawns a placeholder sphere munition at the launcher, attaches a <see cref="GuidedMunition"/>,
         /// and fires it at the given target along the current heading. The target is the one already
         /// resolved from the lock via <see cref="TargetRegistry.FindById"/> (DetectedId).

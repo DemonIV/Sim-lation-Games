@@ -82,6 +82,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `GunTurret` | `GunSystem` + `HitProbability` sarmalayıcısı: hedefe veya serbest nişan noktasına top atışı, izli mermi. |
 | `TracerEffect` | Asset'siz izli mermi görseli: `LineRenderer` ile kısa ömürlü parlak çizgi. |
 | `EnemyDroneController` | Düşman avcı drone'u: uçar, dost drone'ları tespit eder ve topla taramaya alır (hava muharebesi). |
+| `PlayerDroneController` | Pilot modu: oyuncu dost bir drone'u devralıp elle uçurur (C/Tab/W/S/A/D/↑↓/Space/F). |
 
 ### Testler (Sim.Tests.EditMode)
 Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştırma:
@@ -125,6 +126,7 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `bu tur (önceki)` | Hata düzeltmesi: drone'ların zemin altına dalması engellendi (yalnız SİHA hedef paylaşımı, irtifa koruyan güdüm, minimum irtifa tabanı). |
 | `bu tur (önceki)` | Dalga tabanlı senaryo sistemi + düşman çeşitliliği (Sabit hedef / SAM / AAA); ScenarioController dalgaları spawn eder ve kazan/kaybet'i yönetir; HUD dalga göstergesi. |
 | `bu tur (1/2)` | Top/makineli sistemi + izli mermi + düşman avcı drone'ları (hava muharebesi). |
+| `bu tur (2/2)` | Oynanabilir pilot modu: dost drone'lardan birini elle uçur (C/Tab/W/S/A/D/↑↓/Space/F). |
 
 ---
 
@@ -142,6 +144,12 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   (`ScenarioState`)** sorumluluğunda (son dalga temizlenince zafer, tüm dostlar kaybedilince bozgun);
   `MissionState` yalnızca **skor** takipçisi olarak kalıyor. `SimulationDirector`'ın kill sayımı dalga
   güvenli (yeni dalga düşman sayısını artırınca negatif kill kaydedilmez, baz değer koşulsuz güncellenir).
+- **Oynanabilir:** Artık sadece izlenen değil, **oynanan** bir simülasyon. `PlayerDroneController` ile
+  dost drone'lardan biri devralınıp elle uçurulabiliyor (pilot modu: C/Tab/W/S/A/D/↑↓/Space/F);
+  kamera piloted drone'u takip ediyor, HUD "PİLOT MODU" paneli + nişangâh gösteriyor. Kontrol
+  bırakılınca drone'un YZ'si `SyncFlightTo` sayesinde bırakıldığı konum/yön/hızdan devam ediyor.
+- **Hava muharebesi:** Dost İHA/SİHA'lar ve düşman avcı drone'ları `GunTurret` ile birbirine top
+  atıyor; isabet `HitProbability` ile menzil, dağılma ve hedef boyutundan olasılıksal hesaplanıyor.
 - **Skor:** `imha×100 − kayıp×150`. (Önceki sürümdeki saniyelik zaman cezası kaldırıldı; geçen süre HUD'da ayrı
   gösterilir.)
 
@@ -205,3 +213,16 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   (`ScenarioController.SpawnFighter` onları ~14 birim irtifada, havada spawn ediyor).
   `IhaController` topla taciz bloğu + ileride oyuncu kontrolü için `ManualControl` bayrağı kazandı;
   `Hud` drone başına top mühimmatını da gösteriyor.
+- **Oynanabilir pilot modu:** Yeni `PlayerDroneController` (yönetici GameObject'inde, drone'un üstünde
+  değil) oyuncunun dost drone'lardan birini devralıp elle uçurmasını sağlıyor: **C** pilot modunu
+  aç/kapat, **Tab** drone seç, **W/S** gaz, **A/D** dönüş, **↑/↓** (veya Sol Alt + fare) yunuslama
+  (±60° sınırlı), **Space** top, **F** güdümlü füze (yalnız SİHA). Kontrol açıkken `ManualControl`
+  ilgili drone'un yapay zekâ güdümünü ve otomatik top atışını durduruyor; yakıt, angajman durumu,
+  top/füze soğuması ve sensör/kilit çalışmaya devam ediyor. `IhaController.SyncFlightTo(...)` her kare
+  transform + `FlightModel`'i (konum/yön/hız) birlikte yazıyor, böylece kontrol bırakılınca YZ tam
+  bırakıldığı yerden devam ediyor; `SihaController.TryManualLaunch()` mevcut fırlatma yolunu (menzil +
+  mühimmat/soğuma kontrolleri + `LaunchMunition`) pilot komutuyla yeniden kullanıyor (YZ atışı
+  değişmedi). `CameraRig` pilot modunda kontrol edilen drone'u takip ediyor ve kendi girdilerini
+  yok sayıyor; `Hud` "PİLOT MODU" paneli (drone, hız, irtifa, top %, füze %) ve ekran ortasında
+  nişangâh çiziyor, kontrol ipuçları satırı güncellendi. `SimulationBootstrap` pilot bileşenini
+  SimulationDirector nesnesine ekliyor.

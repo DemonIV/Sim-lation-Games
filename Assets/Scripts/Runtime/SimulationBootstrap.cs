@@ -45,6 +45,10 @@ namespace Sim.Runtime
             // Global keyboard controls: R restart, P pause, +/- time scale.
             director.gameObject.AddComponent<GameControls>();
 
+            // Pilot mode: lets the player take over one friendly drone (C) and fly it by hand.
+            // Lives on the manager object, never on a drone.
+            director.gameObject.AddComponent<PlayerDroneController>();
+
             // Attach a free-fly / drone-follow spectator camera to the main camera (created above in
             // EnsureCameraAndLight), if it doesn't already have one.
             if (Camera.main != null && Camera.main.GetComponent<CameraRig>() == null)

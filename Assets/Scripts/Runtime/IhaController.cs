@@ -90,6 +90,37 @@ namespace Sim.Runtime
         /// <summary>Optional defensive gun attached to this drone, or null when unarmed.</summary>
         public GunTurret Gun => _gun;
 
+        /// <summary>Current airspeed from the flight model (m/s), for HUD/telemetry.</summary>
+        public float Speed => _flight != null ? _flight.Speed : 0f;
+
+        /// <summary>
+        /// Rewrites the drone's flight state from an external driver (the player pilot). Keeps the
+        /// pure-logic <see cref="FlightModel"/> and the scene transform from diverging, so when manual
+        /// control is released the AI resumes from exactly where the pilot left the drone.
+        /// </summary>
+        public void SyncFlightTo(Vector3 position, Vector3 forward)
+        {
+            SyncFlightTo(position, forward, _flight != null ? _flight.Speed : 0f);
+        }
+
+        /// <summary>
+        /// <see cref="SyncFlightTo(Vector3, Vector3)"/> with an explicit airspeed, so the AI does not
+        /// have to re-accelerate from the model's stale speed after the pilot hands the drone back.
+        /// </summary>
+        public void SyncFlightTo(Vector3 position, Vector3 forward, float speed)
+        {
+            bool hasForward = forward.sqrMagnitude > 1e-6f;
+            Vector3 fwd = hasForward ? forward.normalized : transform.forward;
+
+            transform.position = position;
+            if (hasForward) transform.rotation = Quaternion.LookRotation(fwd, Vector3.up);
+
+            if (_flight == null) return;
+            _flight.Position = position;
+            _flight.Forward = fwd;
+            _flight.Speed = Mathf.Clamp(speed, 0f, _flight.MaxSpeed);
+        }
+
         /// <summary>True while a recorded threat is still active (not yet expired).</summary>
         private bool IsThreatened => Time.time <= _threatExpiry;
 

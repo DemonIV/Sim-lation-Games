@@ -15,6 +15,7 @@ namespace Sim.Runtime
         private ScenarioController _scenario;
         private RadarSensor[] _sensors;
         private GameControls _controls;
+        private PlayerDroneController _pilot;
 
         // Cached GUI styles (built lazily on first OnGUI so we're on the GUI thread).
         private GUIStyle _labelStyle;
@@ -31,6 +32,7 @@ namespace Sim.Runtime
             _director = FindAnyObjectByType<SimulationDirector>();
             _scenario = FindAnyObjectByType<ScenarioController>();
             _controls = FindAnyObjectByType<GameControls>();
+            _pilot = FindAnyObjectByType<PlayerDroneController>();
             RefreshSensors();
         }
 
@@ -44,6 +46,7 @@ namespace Sim.Runtime
                 if (_director == null) _director = FindAnyObjectByType<SimulationDirector>();
                 if (_scenario == null) _scenario = FindAnyObjectByType<ScenarioController>();
                 if (_controls == null) _controls = FindAnyObjectByType<GameControls>();
+                if (_pilot == null) _pilot = FindAnyObjectByType<PlayerDroneController>();
             }
         }
 
@@ -139,6 +142,8 @@ namespace Sim.Runtime
 
             GUILayout.Space(6);
             GUILayout.Label("WASD+Sağ tık: kamera, Tab: drone takip, F: serbest", _labelStyle);
+            GUILayout.Label("C: pilot modu  Tab: drone seç  W/S: gaz  A/D: dönüş", _labelStyle);
+            GUILayout.Label("↑/↓: yunuslama  Space: top  F: füze", _labelStyle);
 
             float scale = _controls != null ? _controls.CurrentTimeScale : Time.timeScale;
             bool paused = _controls != null ? _controls.IsPaused : Time.timeScale == 0f;
@@ -146,6 +151,8 @@ namespace Sim.Runtime
             GUILayout.Label($"P: {pauseText}  +/-: hız (x{scale:0.00})  R: yeniden", _labelStyle);
 
             GUILayout.EndArea();
+
+            DrawPilotPanel();
 
             // End-of-mission banner. Win/lose is owned by the ScenarioController (waves); if it is
             // missing for any reason we fall back to the MissionState-based result so nothing breaks.
@@ -174,6 +181,41 @@ namespace Sim.Runtime
                 GUI.Label(hintRect, "R: yeniden başlat", _centerHintStyle);
                 GUI.color = prev;
             }
+        }
+
+        /// <summary>
+        /// Draws the "PİLOT MODU" block plus a centred crosshair while the player is flying a drone
+        /// (see <see cref="PlayerDroneController"/>). A no-op when nobody is piloting.
+        /// </summary>
+        private void DrawPilotPanel()
+        {
+            if (_pilot == null || !_pilot.IsActive) return;
+
+            IhaController drone = _pilot.Controlled;
+            if (drone == null) return;
+
+            GUILayout.BeginArea(new Rect(Screen.width - 270f, 10f, 260f, 170f), GUI.skin.box);
+            GUILayout.Label("PİLOT MODU", _titleStyle);
+            GUILayout.Label($"Drone: {drone.name}", _labelStyle);
+            GUILayout.Label($"Hız: {_pilot.Speed:0} m/s", _labelStyle);
+            GUILayout.Label($"İrtifa: {drone.transform.position.y:0} m", _labelStyle);
+
+            GunTurret gun = drone.Gun;
+            float gunAmmo = gun != null ? gun.AmmoFraction * 100f : 0f;
+            GUILayout.Label(gun != null ? $"Top: {gunAmmo:0}%" : "Top: yok", _labelStyle);
+
+            var siha = drone as SihaController;
+            if (siha != null)
+                GUILayout.Label($"Füze: {siha.AmmoFraction * 100f:0}%", _labelStyle);
+
+            GUILayout.EndArea();
+
+            // Simple centred crosshair.
+            var crossRect = new Rect(Screen.width * 0.5f - 15f, Screen.height * 0.5f - 15f, 30f, 30f);
+            Color prev = GUI.color;
+            GUI.color = Color.green;
+            GUI.Label(crossRect, "+", _centerHintStyle);
+            GUI.color = prev;
         }
 
         private static string StatusText(MissionStatus s)

@@ -29,6 +29,11 @@ namespace Sim.Runtime
         private Targetable _followTarget;
         private int _followIndex = -1;
 
+        // Pilot mode: while the player flies a drone the camera chases it and ignores its own input.
+        private PlayerDroneController _pilot;
+        private float _pilotSearchTimer;
+        private const float PilotSearchInterval = 2f;
+
         private void Start()
         {
             // Seed yaw/pitch from the camera's current rotation so there is no snap on first look.
@@ -39,6 +44,16 @@ namespace Sim.Runtime
 
         private void Update()
         {
+            // Pilot mode wins: chase the drone the player is flying and swallow ALL camera input
+            // (Tab/F/WASD belong to the pilot then). Normal behaviour returns on release.
+            if (PilotActive())
+            {
+                _following = false;
+                _followTarget = null;
+                Chase(_pilot.Controlled.transform);
+                return;
+            }
+
             // Cycle followed drone with Tab.
             if (Input.GetKeyDown(KeyCode.Tab)) CycleFollowTarget();
 
@@ -105,15 +120,42 @@ namespace Sim.Runtime
                 return;
             }
 
-            Transform t = _followTarget.transform;
+            Chase(_followTarget.transform);
+        }
+
+        /// <summary>
+        /// Shared trailing behaviour: smoothly settle behind and above <paramref name="t"/> and look at
+        /// it, keeping yaw/pitch in sync so returning to free-fly doesn't snap the view.
+        /// </summary>
+        private void Chase(Transform t)
+        {
+            if (t == null) return;
+
             Vector3 desired = t.position - t.forward * 15f + Vector3.up * 6f;
             transform.position = Vector3.Lerp(transform.position, desired, 5f * Time.unscaledDeltaTime);
             transform.LookAt(t.position);
 
-            // Keep yaw/pitch in sync so returning to free-fly doesn't snap the view.
             Vector3 euler = transform.rotation.eulerAngles;
             _pitch = NormalizePitch(euler.x);
             _yaw = euler.y;
+        }
+
+        /// <summary>
+        /// True when a <see cref="PlayerDroneController"/> is currently flying a drone. The lookup is
+        /// cached and only retried every couple of seconds, so a scene without one costs nothing.
+        /// </summary>
+        private bool PilotActive()
+        {
+            if (_pilot == null)
+            {
+                _pilotSearchTimer -= Time.unscaledDeltaTime;
+                if (_pilotSearchTimer <= 0f)
+                {
+                    _pilotSearchTimer = PilotSearchInterval;
+                    _pilot = FindAnyObjectByType<PlayerDroneController>();
+                }
+            }
+            return _pilot != null && _pilot.IsActive && _pilot.Controlled != null;
         }
 
         /// <summary>Advances to the next friendly drone (Faction == 0) in the registry.</summary>
