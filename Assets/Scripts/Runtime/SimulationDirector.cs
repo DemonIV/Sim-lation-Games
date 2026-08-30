@@ -97,19 +97,27 @@ namespace Sim.Runtime
         }
 
         /// <summary>
-        /// Assigns each friendly drone a hostile to head toward via <see cref="TargetAllocation"/>,
-        /// pushing the result into every controller's <see cref="IhaController.AssignedTargetId"/>.
+        /// Assigns each armed drone (SİHA) a hostile to head toward via <see cref="TargetAllocation"/>,
+        /// pushing the result into that controller's <see cref="IhaController.AssignedTargetId"/>.
+        /// Recon İHAs are intentionally excluded from allocation so they keep patrolling (their
+        /// <see cref="IhaController.AssignedTargetId"/> stays -1) rather than diving at ground targets.
         /// </summary>
         private void UpdateAllocation()
         {
             List<DetectableTarget> hostiles = TargetRegistry.GetSnapshot(1);
 
-            var shooterPositions = new List<Vector3>(_friendlies.Count);
+            // Only armed drones (SİHA) receive attack assignments. Recon İHAs are left with
+            // AssignedTargetId == -1 so they continue their patrol.
+            var shooters = new List<SihaController>(_friendlies.Count);
             for (int i = 0; i < _friendlies.Count; i++)
             {
-                IhaController c = _friendlies[i];
-                shooterPositions.Add(c != null ? c.transform.position : Vector3.zero);
+                if (_friendlies[i] is SihaController siha && siha != null)
+                    shooters.Add(siha);
             }
+
+            var shooterPositions = new List<Vector3>(shooters.Count);
+            for (int i = 0; i < shooters.Count; i++)
+                shooterPositions.Add(shooters[i].transform.position);
 
             var targetPositions = new List<Vector3>(hostiles.Count);
             for (int i = 0; i < hostiles.Count; i++)
@@ -117,9 +125,9 @@ namespace Sim.Runtime
 
             int[] assignment = TargetAllocation.Assign(shooterPositions, targetPositions);
 
-            for (int i = 0; i < _friendlies.Count; i++)
+            for (int i = 0; i < shooters.Count; i++)
             {
-                IhaController c = _friendlies[i];
+                SihaController c = shooters[i];
                 if (c == null) continue;
                 int a = assignment[i];
                 c.AssignedTargetId = (a >= 0 && a < hostiles.Count) ? hostiles[a].Id : -1;

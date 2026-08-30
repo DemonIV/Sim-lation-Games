@@ -32,6 +32,14 @@ namespace Sim.Runtime
         [SerializeField] private float fuelCapacity = 100f;
         [SerializeField] private float fuelBurnRate = 2f;
 
+        [Header("Altitude")]
+        // Hard floor: the flight model has no ground collision, so never let the drone sink below this.
+        [SerializeField] private float minAltitude = 5f;
+
+        // Cruise altitude the drone tries to hold (spawn altitude); keeps it approaching horizontally
+        // instead of diving into the terrain. Set from BasePosition.y in Start.
+        private float _cruiseAltitude;
+
         // Pure-logic cores.
         protected FlightModel _flight;
         protected WaypointNavigator _nav;
@@ -113,6 +121,8 @@ namespace Sim.Runtime
 
             // Remember the spawn point so ReturnToBase can steer home.
             BasePosition = transform.position;
+            // Hold the spawn altitude as the cruise altitude.
+            _cruiseAltitude = BasePosition.y;
         }
 
         protected virtual void Update()
@@ -157,16 +167,35 @@ namespace Sim.Runtime
                 Targetable assigned = TargetRegistry.FindById(AssignedTargetId);
                 if (assigned != null)
                 {
-                    Vector3 toTarget = assigned.transform.position - pos;
+                    // Aim at a point directly above the target at our cruise altitude rather than at
+                    // the target's ground position, so we approach horizontally instead of diving.
+                    // The weapon range still reaches the ground target from above.
+                    Vector3 targetPos = assigned.transform.position;
+                    Vector3 aim = new Vector3(targetPos.x, _cruiseAltitude, targetPos.z);
+                    Vector3 toTarget = aim - pos;
                     if (toTarget.sqrMagnitude > 1e-6f) dir = toTarget;
                 }
             }
+
+            // Gentle altitude-hold bias: seek the cruise altitude so drones neither climb away nor
+            // sink toward the ground while steering.
+            dir.y += (_cruiseAltitude - pos.y) * 0.5f;
 
             if (dir.sqrMagnitude <= 1e-6f) dir = _flight.Forward;
 
             // Flight integration.
             _flight.Step(dir, throttle, dt);
-            transform.position = _flight.Position;
+
+            // Hard floor: the flight model has no ground collision, so clamp the integrated position
+            // up to the minimum altitude and write it back so _flight.Position and transform.position
+            // stay in sync (no divergence between the model and the scene).
+            Vector3 newPos = _flight.Position;
+            if (newPos.y < minAltitude)
+            {
+                newPos.y = minAltitude;
+                _flight.Position = newPos;
+            }
+            transform.position = newPos;
             if (_flight.Forward.sqrMagnitude > 1e-6f)
             {
                 Quaternion targetRot = Quaternion.LookRotation(_flight.Forward, Vector3.up);

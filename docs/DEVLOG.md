@@ -113,7 +113,8 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `ce5c27f` | Unity 6 obsolete API düzeltmeleri (GetInstanceID, FindObjectOfType). |
 | `d228e75` | M1 taktik katman + HUD + serbest kamera. |
 | `bu tur (önceki)` | Taktik beyni davranışa bağlama + çift taraflı hava savunması muharebesi. |
-| `bu tur` | Muharebe cilası: patlama efektleri + mühimmat izleri, temiz mühimmat hasarı (reflection kaldırıldı), R/P/+- kontrolleri, yıldız derecelendirmeli bitiş ekranı, denge ayarı. |
+| `bu tur (önceki)` | Muharebe cilası: patlama efektleri + mühimmat izleri, temiz mühimmat hasarı (reflection kaldırıldı), R/P/+- kontrolleri, yıldız derecelendirmeli bitiş ekranı, denge ayarı. |
+| `bu tur` | Hata düzeltmesi: drone'ların zemin altına dalması engellendi (yalnız SİHA hedef paylaşımı, irtifa koruyan güdüm, minimum irtifa tabanı). |
 
 ---
 
@@ -162,3 +163,9 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   Yeni `GameControls`: R yeniden başlat, P duraklat, +/- zaman ölçeği (0.25..4); `TargetRegistry.Clear()`
   yeniden başlatmada temiz kayıt için. `Hud` kazan/kaybet bitiş ekranı yıldız derecesi ve kontrol ipuçları
   gösteriyor. Hafif denge ayarı: SİHA silah menzili tespit menzili (120) ile eşitlendi.
+- **Hata düzeltmesi (drone'lar zeminin altına dalıyordu):** Keşif İHA'ları ve SİHA'lar yerdeki hedefe
+  burun aşağı dalıp (uçuş modelinde zemin çarpışması yok) sahanın altına geçip muharebeden çıkıyordu.
+  Hedef paylaşımı yalnızca SİHA'lara yapıldı (keşif İHA'ları `AssignedTargetId == -1` ile devriyede kalır);
+  güdüm irtifayı koruyacak şekilde hedefin üzerindeki seyir irtifasına yatayda yaklaşacak biçimde düzeltildi;
+  hafif irtifa-tutma sapması ve sert minimum irtifa (`minAltitude`) tabanı eklendi (`_flight.Position` ve
+  `transform.position` senkron kalır).
