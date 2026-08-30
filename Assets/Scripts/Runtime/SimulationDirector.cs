@@ -28,6 +28,15 @@ namespace Sim.Runtime
         private int _prevHostilesAlive;
         private int _prevFriendliesAlive;
 
+        // Cached friendly controllers (recon + armed via inheritance), refreshed periodically so newly
+        // spawned drones are picked up without a per-frame scene scan.
+        private readonly List<IhaController> _friendlies = new List<IhaController>();
+        private float _friendlyRefreshTimer;
+        private const float FriendlyRefreshInterval = 2f;
+
+        /// <summary>All friendly drone controllers (İHA + SİHA), for HUD per-drone state.</summary>
+        public IReadOnlyList<IhaController> Friendlies => _friendlies;
+
         private void Start()
         {
             // Count starting populations. GetSnapshot already filters out destroyed targets.
@@ -38,6 +47,17 @@ namespace Sim.Runtime
             FriendliesAlive = TargetRegistry.GetSnapshot(0).Count;
             _prevHostilesAlive = HostilesAlive;
             _prevFriendliesAlive = FriendliesAlive;
+
+            RefreshFriendlies();
+        }
+
+        /// <summary>Rebuilds the cached list of friendly drone controllers from the scene.</summary>
+        private void RefreshFriendlies()
+        {
+            _friendlies.Clear();
+            IhaController[] found = FindObjectsByType<IhaController>(FindObjectsSortMode.None);
+            for (int i = 0; i < found.Length; i++)
+                if (found[i] != null) _friendlies.Add(found[i]);
         }
 
         private void Update()
@@ -64,12 +84,46 @@ namespace Sim.Runtime
             _prevHostilesAlive = HostilesAlive;
             _prevFriendliesAlive = FriendliesAlive;
 
-            // NOTE: Optional per-drone tactical wiring (pushing TargetAllocation results and
-            // EngagementPolicy states into the controllers) is intentionally NOT done here. The
-            // existing IhaController/SihaController drive firing internally from their own
-            // lock state and expose no public hook to inject an assignment or engagement state, so
-            // injecting one would require risky edits to their private engagement flow. Mission
-            // scoring and the HUD work fully without it. See the M1 notes in README.
+            // Tactical coordination: allocate hostiles to friendly drones so they spread out over the
+            // threats instead of all chasing the same one. Runs each frame off the cached friendly list.
+            _friendlyRefreshTimer += dt;
+            if (_friendlyRefreshTimer >= FriendlyRefreshInterval)
+            {
+                _friendlyRefreshTimer = 0f;
+                RefreshFriendlies();
+            }
+
+            UpdateAllocation();
+        }
+
+        /// <summary>
+        /// Assigns each friendly drone a hostile to head toward via <see cref="TargetAllocation"/>,
+        /// pushing the result into every controller's <see cref="IhaController.AssignedTargetId"/>.
+        /// </summary>
+        private void UpdateAllocation()
+        {
+            List<DetectableTarget> hostiles = TargetRegistry.GetSnapshot(1);
+
+            var shooterPositions = new List<Vector3>(_friendlies.Count);
+            for (int i = 0; i < _friendlies.Count; i++)
+            {
+                IhaController c = _friendlies[i];
+                shooterPositions.Add(c != null ? c.transform.position : Vector3.zero);
+            }
+
+            var targetPositions = new List<Vector3>(hostiles.Count);
+            for (int i = 0; i < hostiles.Count; i++)
+                targetPositions.Add(hostiles[i].Position);
+
+            int[] assignment = TargetAllocation.Assign(shooterPositions, targetPositions);
+
+            for (int i = 0; i < _friendlies.Count; i++)
+            {
+                IhaController c = _friendlies[i];
+                if (c == null) continue;
+                int a = assignment[i];
+                c.AssignedTargetId = (a >= 0 && a < hostiles.Count) ? hostiles[a].Id : -1;
+            }
         }
     }
 }

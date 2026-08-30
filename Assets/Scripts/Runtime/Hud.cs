@@ -64,7 +64,7 @@ namespace Sim.Runtime
         {
             EnsureStyles();
 
-            GUILayout.BeginArea(new Rect(10, 10, 340, 420), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(10, 10, 340, 540), GUI.skin.box);
             GUILayout.Label("İHA/SİHA Taktik Simülasyonu", _titleStyle);
 
             if (_director == null || _director.Mission == null)
@@ -98,6 +98,25 @@ namespace Sim.Runtime
             }
             if (contacts == 0)
                 GUILayout.Label("  (temas yok)", _labelStyle);
+
+            GUILayout.Space(6);
+            GUILayout.Label("Drone durumu:", _labelStyle);
+            var friendlies = _director.Friendlies;
+            int shown = 0;
+            if (friendlies != null)
+            {
+                for (int i = 0; i < friendlies.Count; i++)
+                {
+                    IhaController c = friendlies[i];
+                    if (c == null) continue;
+                    GUILayout.Label(
+                        $"  {c.name}: {c.State}  yakıt={c.FuelFraction * 100f:0}%  mühimmat={c.AmmoFraction * 100f:0}%",
+                        _labelStyle);
+                    shown++;
+                }
+            }
+            if (shown == 0)
+                GUILayout.Label("  (drone yok)", _labelStyle);
 
             GUILayout.Space(6);
             GUILayout.Label("WASD+Sağ tık: kamera, Tab: drone takip, F: serbest", _labelStyle);

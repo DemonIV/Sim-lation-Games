@@ -54,12 +54,14 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `TargetAllocation` | Atıcı-hedef paylaşımı (aynı hedefe boşa ateşi önler). |
 | `EngagementPolicy` | Angajman durum kararı (Devriye/Angaje/Üsse Dönüş). |
 | `FuelTank` | Yakıt/menzil modeli (gaz kesme oranına göre tüketim). |
+| `EvasionSteering` | Tehditten kaçınma yönü (yana kırma + uzaklaşma bileşeni). |
 
 ### Sim.Runtime (ince MonoBehaviour'lar)
 | Bileşen | Görevi |
 |---|---|
-| `IhaController` | Keşif İHA: uçuş + devriye + radar sensörüyle tespit. |
-| `SihaController` | Silahlı SİHA (IhaController'dan türer): kilitlenince güdümlü mühimmat fırlatır. |
+| `IhaController` | Keşif İHA: uçuş + devriye + radar sensörüyle tespit; yakıt, angajman durumu, atanan hedefe gidiş ve tehdit kaçınması. |
+| `SihaController` | Silahlı SİHA (IhaController'dan türer): kilitlenince güdümlü mühimmat fırlatır; mühimmat oranı. |
+| `AirDefenseSite` | Düşman hava savunması (SAM): drone'ları tespit edip güdümlü mühimmat fırlatır, kendisi de imha edilebilir (SEAD). |
 | `RadarSensor` | RadarSystem + RCS + EW + TargetTracker ile gerçekçi tespit/izleme. |
 | `RcsComponent` | Hedefin açıya bağlı radar imzası. |
 | `Jammer` | Gemi üstü gürültü karıştırıcı (EW menzil düşürme). |
@@ -90,8 +92,9 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 - **M0** — Test-driven Core iskeleti + ince Runtime + Unity projesi. ✅
 - **Fizik/EW katmanı** — Atmosphere, BallisticProjectile, Radar, RCS, EW, Tracker, SeekerGimbal, PN. ✅
 - **Unity 6'ya geçiş** — 6000.5.9f1, obsolete API düzeltmeleri. ✅
-- **M1 — Taktik katman** — MissionState, TargetAllocation, EngagementPolicy, FuelTank + HUD + serbest kamera. ✅ (taktik beynin davranışa bağlanması sıradaki iş)
-- **M2** — Çift taraflı tehdit: radar+füzeli hava savunması, drone kaçınma, SEAD. ⏳
+- **M1 — Taktik katman** — MissionState, TargetAllocation, EngagementPolicy, FuelTank + HUD + serbest kamera. ✅
+  Taktik beyin artık davranışa bağlı: SimulationDirector hedef paylaşımını controller'lara uyguluyor, bingo yakıt/mühimmat'ta RTB, drone durumları HUD'da. ✅
+- **M2 — Çift taraflı tehdit** — `AirDefenseSite` (radar+füzeli hava savunması), `EvasionSteering` ile drone kaçınması, SEAD (hava savunması da imha edilebilir). ✅
 - **M3** — ScriptableObject veri-güdümlü ayarlar + araç/silah çeşitliliği. ⏳
 - **M4** — Oyuncu komuta katmanı (drone seç, waypoint/angaje/RTB) + taktik harita. ⏳
 - **M5** — Sunum: 3D modeller, iz/patlama efektleri, ses, cilalı UI, mini harita. ⏳
@@ -106,16 +109,18 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `e67f472` | Projeyi Unity 6'ya (6000.5.9f1) taşıma. |
 | `ce5c27f` | Unity 6 obsolete API düzeltmeleri (GetInstanceID, FindObjectOfType). |
 | `d228e75` | M1 taktik katman + HUD + serbest kamera. |
+| `bu tur` | Taktik beyni davranışa bağlama + çift taraflı hava savunması muharebesi. |
 
 ---
 
 ## 7. Mevcut durum & bilinen sınırlar
 - **Görseller bilerek primitive** (kapsül/küp). Gerçek 3D modeller/materyaller en sona bırakıldı (M5).
-- **Taktik beyin henüz davranışa bağlı değil:** `TargetAllocation`, `EngagementPolicy`, `FuelTank` yazıldı ve
-  test edildi, ancak controller'lar dışarıdan hedef/durum enjekte edecek public kanca sunmadığı için drone'ların
-  davranışını **henüz yönetmiyor**. Drone'lar şu an kendi tespitleriyle uçup ateş ediyor. Bunu gerçek davranışa
-  bağlamak sıradaki iştir (controller'lara `AssignedTargetId`, `EngagementState`, `FuelFraction`, `AmmoFraction`
-  kancaları eklenecek).
+- **Taktik beyin artık davranışa bağlı:** `IhaController`/`SihaController` public kancalar sunuyor
+  (`AssignedTargetId`, `State`, `FuelFraction`, `AmmoFraction`, `BasePosition`, `SetThreat`). `SimulationDirector`
+  her kare `TargetAllocation` ile hostile'ları drone'lara paylaştırıyor (aynı hedefe boşa gidiş yok); `EngagementPolicy`
+  bingo yakıt/mühimmat'ta drone'u üsse döndürüyor; tehdit altında `EvasionSteering` ile yana kırıyor.
+- **Muharebe çift taraflı:** `AirDefenseSite` (SAM) drone'ları tespit edip güdümlü mühimmat fırlatıyor ve
+  kendisi de imha edilebilir hedef (SEAD). Bootstrap iki SAM sahası + iki düz hostile kuruyor.
 - **Skor:** `imha×100 − kayıp×150`. (Önceki sürümdeki saniyelik zaman cezası kaldırıldı; geçen süre HUD'da ayrı
   gösterilir.)
 
@@ -140,3 +145,9 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 - **M1:** MissionState, TargetAllocation, EngagementPolicy, FuelTank + testleri; SimulationDirector (skor/görev),
   Hud (IMGUI), CameraRig (serbest/takip kamera); SimulationBootstrap'a bağlandı.
 - **Skor düzeltmesi:** Skordan saniyelik zaman cezası kaldırıldı; süre ayrı gösteriliyor. DEVLOG eklendi.
+- **Taktik beyin + çift taraflı muharebe:** `IhaController`/`SihaController`'a `FuelTank`+`FuelFraction`,
+  `AmmoFraction`, `EngagementPolicy` üzerinden `State`, `AssignedTargetId`, `BasePosition` ve `SetThreat`
+  tehdit-kaçınma kancaları eklendi; yön seçimi RTB (bingo yakıt/mühimmat), atanan hedef ve kaçınmayı gözetiyor.
+  `SimulationDirector` `TargetAllocation` ile hedef paylaşımını controller'lara uyguluyor ve HUD için `Friendlies`
+  listesini sunuyor. Yeni `AirDefenseSite` (SAM) çift taraflı muharebe getiriyor; `EvasionSteering` Core + EditMode
+  testi eklendi; HUD drone başına durum/yakıt/mühimmat gösteriyor; Bootstrap SAM sahaları kuruyor.

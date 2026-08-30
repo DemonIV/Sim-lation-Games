@@ -29,6 +29,10 @@ namespace Sim.Runtime
         /// <summary>Read-only access to the fire-control state (ammo, cooldown) for HUD/telemetry.</summary>
         public WeaponSystem Weapon => _weapon;
 
+        /// <summary>Remaining ammunition as a 0..1 fraction, from the weapon's magazine.</summary>
+        public override float AmmoFraction =>
+            Weapon != null && Weapon.MagazineSize > 0 ? (float)Weapon.Ammo / Weapon.MagazineSize : 0f;
+
         protected override void Start()
         {
             base.Start();
