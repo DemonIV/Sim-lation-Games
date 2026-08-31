@@ -157,6 +157,7 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `bu tur (2/2a)` | Görsel yenileme (2/2a): katmanlı patlama efekti, namlu ateşi/kıvılcımlar, füze egzoz izi, hasar dumanı ve yanık izleri. |
 | `bu tur (2/2b)` | Görsel yenileme (2/2b): dönen pervaneler, gövde yatışı, taret takibi, kamera hissi ve çubuk göstergeli HUD. |
 | `bu tur` | HUD tasarım mockup'ı: dört artboard'lı tasarım tuvali (`docs/design/hud/`), askerî gösterge estetiği. |
+| `bu tur (1/2)` | Düzeltme: taret namluları/füze tüpleri artık ölçeksiz taret pivotunun çocuğu, taretle birlikte dönüyor. |
 
 ---
 
@@ -376,3 +377,7 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   Menüsü, Görev Sonu Ekranı). Görüntülemek için `docs/design/hud/iha-siha-hud.html` dosyasını bir
   tarayıcıda aç; kaydırıp yakınlaştırabilir, PNG/PDF olarak dışa aktarabilirsin. Detaylar ve palet
   için `docs/design/hud/README.md`. **Henüz Unity'ye uygulanmadı** — bu yalnızca görsel hedef.
+- **Düzeltme:** SAM/AAA taretlerinde namlular ve füze tüpleri artık ölçeksiz bir taret pivotunun
+  çocuğu; taret hedefe döndüğünde namlular da dönüyor. (`"Turret"` artık boş bir pivot,
+  görünen silindir `"TurretBody"` olarak onun altında; pivotun ölçeği `(1,1,1)` olduğu için
+  silindirin `(0.9, 0.5, 0.9)` / `(0.8, 0.4, 0.8)` ölçeği namluları ezmiyor. Kozmetik.)

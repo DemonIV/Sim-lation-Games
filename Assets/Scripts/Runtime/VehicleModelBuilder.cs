@@ -97,14 +97,19 @@ namespace Sim.Runtime
             Material dark = DarkMetal();
 
             Part(model, PrimitiveType.Cube, "Base", new Vector3(0f, 0.45f, 0f), new Vector3(3.2f, 0.9f, 3.2f), Vector3.zero, body);
-            // "Turret" and "Radar" are animated by the animation pass (part 2).
-            Part(model, PrimitiveType.Cylinder, "Turret", new Vector3(0f, 1.2f, 0f), new Vector3(0.9f, 0.5f, 0.9f), Vector3.zero, trim);
 
-            Part(model, PrimitiveType.Cube, "TubeLF", new Vector3(-0.35f, 1.9f, 0.25f), new Vector3(0.22f, 1.6f, 0.22f), new Vector3(-25f, 0f, 0f), dark);
-            Part(model, PrimitiveType.Cube, "TubeRF", new Vector3(0.35f, 1.9f, 0.25f), new Vector3(0.22f, 1.6f, 0.22f), new Vector3(-25f, 0f, 0f), dark);
-            Part(model, PrimitiveType.Cube, "TubeLB", new Vector3(-0.35f, 1.9f, -0.25f), new Vector3(0.22f, 1.6f, 0.22f), new Vector3(-25f, 0f, 0f), dark);
-            Part(model, PrimitiveType.Cube, "TubeRB", new Vector3(0.35f, 1.9f, -0.25f), new Vector3(0.22f, 1.6f, 0.22f), new Vector3(-25f, 0f, 0f), dark);
+            // "Turret" is an EMPTY, unscaled pivot animated by TurretVisual; the visible cylinder
+            // ("TurretBody") and the missile tubes hang off it so they slew together. The pivot has to
+            // stay scale-free — the body's non-uniform (0.9, 0.5, 0.9) would otherwise squash the tubes.
+            Transform turret = Pivot(model, "Turret", new Vector3(0f, 1.2f, 0f));
+            Part(turret, PrimitiveType.Cylinder, "TurretBody", Vector3.zero, new Vector3(0.9f, 0.5f, 0.9f), Vector3.zero, trim);
 
+            Part(turret, PrimitiveType.Cube, "TubeLF", new Vector3(-0.35f, 0.7f, 0.25f), new Vector3(0.22f, 1.6f, 0.22f), new Vector3(-25f, 0f, 0f), dark);
+            Part(turret, PrimitiveType.Cube, "TubeRF", new Vector3(0.35f, 0.7f, 0.25f), new Vector3(0.22f, 1.6f, 0.22f), new Vector3(-25f, 0f, 0f), dark);
+            Part(turret, PrimitiveType.Cube, "TubeLB", new Vector3(-0.35f, 0.7f, -0.25f), new Vector3(0.22f, 1.6f, 0.22f), new Vector3(-25f, 0f, 0f), dark);
+            Part(turret, PrimitiveType.Cube, "TubeRB", new Vector3(0.35f, 0.7f, -0.25f), new Vector3(0.22f, 1.6f, 0.22f), new Vector3(-25f, 0f, 0f), dark);
+
+            // "Radar" stays on the model root — it sweeps independently of the turret.
             Part(model, PrimitiveType.Cylinder, "Radar", new Vector3(0f, 2.1f, -1.0f), new Vector3(1.1f, 0.06f, 1.1f), new Vector3(60f, 0f, 0f), trim);
 
             return model;
@@ -121,9 +126,12 @@ namespace Sim.Runtime
             Material dark = DarkMetal();
 
             Part(model, PrimitiveType.Cube, "Base", new Vector3(0f, 0.35f, 0f), new Vector3(2.4f, 0.7f, 2.4f), Vector3.zero, body);
-            Part(model, PrimitiveType.Cylinder, "Turret", new Vector3(0f, 0.9f, 0f), new Vector3(0.8f, 0.4f, 0.8f), Vector3.zero, trim);
-            Part(model, PrimitiveType.Cylinder, "BarrelL", new Vector3(-0.18f, 1.25f, 0.6f), new Vector3(0.1f, 0.9f, 0.1f), new Vector3(75f, 0f, 0f), dark);
-            Part(model, PrimitiveType.Cylinder, "BarrelR", new Vector3(0.18f, 1.25f, 0.6f), new Vector3(0.1f, 0.9f, 0.1f), new Vector3(75f, 0f, 0f), dark);
+
+            // Same unscaled-pivot pattern as the SAM site: the barrels must slew with the turret.
+            Transform turret = Pivot(model, "Turret", new Vector3(0f, 0.9f, 0f));
+            Part(turret, PrimitiveType.Cylinder, "TurretBody", Vector3.zero, new Vector3(0.8f, 0.4f, 0.8f), Vector3.zero, trim);
+            Part(turret, PrimitiveType.Cylinder, "BarrelL", new Vector3(-0.18f, 0.35f, 0.6f), new Vector3(0.1f, 0.9f, 0.1f), new Vector3(75f, 0f, 0f), dark);
+            Part(turret, PrimitiveType.Cylinder, "BarrelR", new Vector3(0.18f, 0.35f, 0.6f), new Vector3(0.1f, 0.9f, 0.1f), new Vector3(75f, 0f, 0f), dark);
 
             return model;
         }
@@ -186,6 +194,21 @@ namespace Sim.Runtime
                 Mathf.Abs(v.x) < 1e-4f ? 1f : 1f / v.x,
                 Mathf.Abs(v.y) < 1e-4f ? 1f : 1f / v.y,
                 Mathf.Abs(v.z) < 1e-4f ? 1f : 1f / v.z);
+        }
+
+        /// <summary>
+        /// Creates an empty, unscaled pivot (no renderer, no collider) under <paramref name="parent"/>.
+        /// Used for rotating assemblies whose visible parts carry a non-uniform scale, which would
+        /// otherwise shear their children.
+        /// </summary>
+        private static Transform Pivot(Transform parent, string name, Vector3 localPosition)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = localPosition;
+            go.transform.localRotation = Quaternion.identity;
+            go.transform.localScale = Vector3.one;
+            return go.transform;
         }
 
         /// <summary>Spawns one collider-less primitive part under the model root.</summary>
