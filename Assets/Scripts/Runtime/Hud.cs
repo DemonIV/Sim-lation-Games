@@ -6,8 +6,24 @@ namespace Sim.Runtime
 {
     /// <summary>
     /// On-screen HUD drawn with IMGUI (<see cref="OnGUI"/>), so it needs zero Canvas/scene setup.
-    /// Reads mission/score state from <see cref="SimulationDirector"/> and radar contacts from every
-    /// <see cref="RadarSensor"/> in the scene, and shows a win/lose banner when the mission ends.
+    /// Reads mission/score state from <see cref="SimulationDirector"/>, wave state from
+    /// <see cref="ScenarioController"/> and radar contacts from every <see cref="RadarSensor"/> in
+    /// the scene, and shows a mission-report screen when the mission ends.
+    ///
+    /// <para>
+    /// The look follows the design mockup in <c>docs/design/hud/</c> (Main / PilotHud / MissionEnd):
+    /// dark bordered panels, an amber accent, colour-coded bars and uppercase section labels. All
+    /// palette and drawing primitives live in <see cref="HudTheme"/>.
+    /// </para>
+    ///
+    /// <para>
+    /// KNOWN CONSTRAINT: IMGUI here has no custom fonts (no font assets may be added to the project)
+    /// and no letter-spacing, so the mockup's Barlow Condensed / JetBrains Mono typography can only
+    /// be APPROXIMATED (uppercase labels, size hierarchy, built-in font). Colours, panels, borders,
+    /// bars, layout and information hierarchy do match the design.
+    /// </para>
+    ///
+    /// Presentation only — the HUD never writes gameplay state and no value it reads was changed.
     /// </summary>
     public class Hud : MonoBehaviour
     {
@@ -18,29 +34,23 @@ namespace Sim.Runtime
         private PlayerDroneController _pilot;
         private ScenarioMenu _menu;
 
-        // Cached GUI styles (built lazily on first OnGUI so we're on the GUI thread).
-        private GUIStyle _labelStyle;
-        private GUIStyle _titleStyle;
-        private GUIStyle _smallStyle;
-        private GUIStyle _warningStyle;
-        private GUIStyle _bannerStyle;
-        private GUIStyle _centerHintStyle;
-        private GUIStyle _panelStyle;
-
-        // 1x1 textures built once: a plain white one (tinted via GUI.color when drawing bars) and the
-        // dark translucent panel background.
-        private Texture2D _white;
-        private Texture2D _panelTex;
-
-        // Bar palette: green above 50%, amber between 20% and 50%, red below 20%.
-        private static readonly Color BarGreen = new Color(0.30f, 0.80f, 0.35f, 0.95f);
-        private static readonly Color BarAmber = new Color(0.95f, 0.70f, 0.20f, 0.95f);
-        private static readonly Color BarRed = new Color(0.90f, 0.25f, 0.20f, 0.95f);
-        private static readonly Color BarBack = new Color(0.08f, 0.09f, 0.10f, 0.90f);
-
         // Occasional refresh of the sensor list so newly spawned drones show up.
         private float _refreshTimer;
         private const float RefreshInterval = 2f;
+
+        // ---- layout constants (design proportions, in screen pixels) ----
+        private const float Margin = 16f;
+        private const float ColWidth = 320f;
+        private const float HeaderH = 22f;
+        private const float RowH = 20f;
+        private const float BarH = 11f;
+        private const float StripH = 54f;
+
+        // Radar contact rows, rebuilt each frame into reused lists so OnGUI allocates nothing extra.
+        private readonly List<string> _contactId = new List<string>();
+        private readonly List<string> _contactType = new List<string>();
+        private readonly List<Color> _contactAccent = new List<Color>();
+        private readonly List<string> _contactRange = new List<string>();
 
         private void Start()
         {
@@ -72,155 +82,213 @@ namespace Sim.Runtime
             _sensors = FindObjectsByType<RadarSensor>(FindObjectsSortMode.None);
         }
 
-        /// <summary>Builds a 1x1 texture of the given colour, kept out of the scene/asset database.</summary>
-        private static Texture2D SolidTexture(Color color)
-        {
-            var tex = new Texture2D(1, 1);
-            tex.SetPixel(0, 0, color);
-            tex.Apply();
-            tex.hideFlags = HideFlags.HideAndDontSave;
-            return tex;
-        }
-
-        private void EnsureStyles()
-        {
-            if (_white == null) _white = SolidTexture(Color.white);
-            if (_panelTex == null) _panelTex = SolidTexture(new Color(0.05f, 0.06f, 0.07f, 0.85f));
-
-            if (_panelStyle == null)
-            {
-                _panelStyle = new GUIStyle(GUI.skin.box);
-                _panelStyle.normal.background = _panelTex;
-                _panelStyle.padding = new RectOffset(10, 10, 8, 8);
-            }
-
-            if (_labelStyle == null)
-            {
-                _labelStyle = new GUIStyle(GUI.skin.label) { fontSize = 14 };
-                _labelStyle.normal.textColor = new Color(0.88f, 0.90f, 0.92f);
-            }
-            if (_titleStyle == null)
-            {
-                _titleStyle = new GUIStyle(GUI.skin.label) { fontSize = 18, fontStyle = FontStyle.Bold };
-                _titleStyle.normal.textColor = new Color(1f, 0.97f, 0.85f);
-            }
-            if (_smallStyle == null)
-            {
-                _smallStyle = new GUIStyle(GUI.skin.label) { fontSize = 11 };
-                _smallStyle.normal.textColor = new Color(0.95f, 0.96f, 0.98f);
-                _smallStyle.padding = new RectOffset(0, 0, 0, 0);
-            }
-            if (_warningStyle == null)
-            {
-                _warningStyle = new GUIStyle(GUI.skin.label) { fontSize = 14, fontStyle = FontStyle.Bold };
-                _warningStyle.normal.textColor = new Color(1f, 0.45f, 0.35f);
-            }
-            if (_bannerStyle == null)
-                _bannerStyle = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = 48,
-                    fontStyle = FontStyle.Bold,
-                    alignment = TextAnchor.MiddleCenter
-                };
-            if (_centerHintStyle == null)
-                _centerHintStyle = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = 22,
-                    fontStyle = FontStyle.Bold,
-                    alignment = TextAnchor.MiddleCenter
-                };
-        }
-
-        /// <summary>Colour code for a 0..1 gauge: green above 50%, amber down to 20%, then red.</summary>
-        private static Color BarColor(float fraction01)
-        {
-            if (fraction01 > 0.5f) return BarGreen;
-            if (fraction01 >= 0.2f) return BarAmber;
-            return BarRed;
-        }
-
-        /// <summary>
-        /// Draws a horizontal gauge: a dark background box, a colour-coded filled foreground box and
-        /// the label drawn on top. Purely a presentation of a value the HUD already read.
-        /// </summary>
-        private void DrawBar(Rect r, float fraction01, Color fill, string label)
-        {
-            if (_white == null) return;
-
-            float f = Mathf.Clamp01(fraction01);
-            Color prev = GUI.color;
-
-            GUI.color = BarBack;
-            GUI.DrawTexture(r, _white);
-
-            if (f > 0f)
-            {
-                GUI.color = fill;
-                GUI.DrawTexture(new Rect(r.x, r.y, r.width * f, r.height), _white);
-            }
-
-            GUI.color = prev;
-            GUI.Label(new Rect(r.x + 4f, r.y - 1f, r.width - 6f, r.height + 2f), label, _smallStyle);
-        }
-
-        /// <summary>Reserves a layout rect and draws a labelled, colour-coded gauge in it.</summary>
-        private void LayoutBar(string label, float fraction01, float width)
-        {
-            Rect r = GUILayoutUtility.GetRect(width, 15f, GUILayout.Width(width));
-            float f = Mathf.Clamp01(fraction01);
-            DrawBar(r, f, BarColor(f), $"{label} {f * 100f:0}%");
-        }
-
         private void OnGUI()
         {
             // The mission-select briefing owns the screen while it is up; drawing the HUD over it
-            // would only make it hard to read. Checked before any BeginArea so nothing is left open.
+            // would only make it hard to read.
             if (_menu != null && _menu.IsOpen) return;
 
-            EnsureStyles();
+            HudTheme.Ensure();
 
-            GUILayout.BeginArea(new Rect(10, 10, 350, 620), _panelStyle);
-            GUILayout.Label("İHA/SİHA Taktik Simülasyonu", _titleStyle);
-            // Active mission, as picked in the ScenarioMenu.
-            GUILayout.Label($"Görev: {ScenarioLibrary.Title(ScenarioController.SelectedKind)}", _labelStyle);
+            bool piloting = _pilot != null && _pilot.IsActive && _pilot.Controlled != null;
 
-            if (_director == null || _director.Mission == null)
+            float leftBottom = DrawMissionPanel(Margin, Margin);
+            DrawRadarPanel(Margin, leftBottom + 12f);
+
+            float rightX = Screen.width - Margin - ColWidth;
+            float rightY = Margin;
+            if (piloting) rightY = DrawPilotIdentity(rightX, rightY) + 12f;
+            DrawFleetPanel(rightX, rightY);
+
+            if (piloting) DrawPilotOverlay();
+
+            DrawMissileWarning();
+            DrawControlStrip(piloting);
+            DrawEndScreen();
+        }
+
+        // ------------------------------------------------------------------ mission panel
+
+        /// <summary>Top-left mission panel. Returns the panel's bottom edge.</summary>
+        private float DrawMissionPanel(float x, float y)
+        {
+            MissionState m = _director != null ? _director.Mission : null;
+            float h = m == null ? 94f : 206f;
+
+            HudTheme.Panel(new Rect(x, y, ColWidth, h));
+            HudTheme.Header(new Rect(x, y, ColWidth, HeaderH), "GÖREV",
+                            $"M-{MissionIndex(ScenarioController.SelectedKind):00}");
+
+            float cx = x + 10f;
+            float cw = ColWidth - 20f;
+            float cy = y + HeaderH + 8f;
+
+            HudTheme.Draw(new Rect(cx, cy, cw, 36f),
+                          Upper(ScenarioLibrary.Title(ScenarioController.SelectedKind)),
+                          HudTheme.Title, HudTheme.Text);
+            cy += 40f;
+
+            if (m == null)
             {
-                GUILayout.Label("Başlatılıyor...", _labelStyle);
-                GUILayout.EndArea();
+                HudTheme.Draw(new Rect(cx, cy, cw, 16f), "BAŞLATILIYOR...",
+                              HudTheme.Label, HudTheme.TextDim);
+                return y + h;
+            }
+
+            // DURUM + SÜRE
+            MissionStatus shown = _scenario != null ? MapScenario(_scenario.Status) : m.Status;
+            StatBox(new Rect(cx, cy, cw - 114f, 36f), "DURUM", StatusText(shown), StatusColor(shown));
+            StatBox(new Rect(cx + cw - 110f, cy, 110f, 36f), "SÜRE", Clock(m.ElapsedTime), HudTheme.Text);
+            cy += 44f;
+
+            // DALGA + DÜŞMAN (live count on the field)
+            int wave = _scenario != null ? _scenario.CurrentWaveNumber : 1;
+            int waves = _scenario != null ? _scenario.TotalWaves : 1;
+            int live = _scenario != null ? _scenario.LiveEnemies : _director.HostilesAlive;
+            KeyValueRow(new Rect(cx, cy, cw * 0.5f - 6f, 18f), "DALGA", $"{wave}/{waves}", HudTheme.Amber);
+            KeyValueRow(new Rect(cx + cw * 0.5f + 6f, cy, cw * 0.5f - 6f, 18f), "DÜŞMAN",
+                        live.ToString(), HudTheme.Critical);
+            cy += 26f;
+
+            // İMHA / KAYIP / SKOR
+            float cell = (cw - 8f) / 3f;
+            StatCell(new Rect(cx, cy, cell, 38f), "İMHA",
+                     $"{m.HostilesDestroyed}/{m.HostilesTotal}", HudTheme.Text);
+            StatCell(new Rect(cx + cell + 4f, cy, cell, 38f), "KAYIP",
+                     $"{m.FriendliesLost}/{m.MaxFriendlyLosses}",
+                     m.FriendliesLost > 0 ? HudTheme.Critical : HudTheme.Ok);
+            StatCell(new Rect(cx + (cell + 4f) * 2f, cy, cell, 38f), "SKOR",
+                     m.Score.ToString(), HudTheme.Amber);
+            cy += 42f;
+
+            // Live head-count, kept from the previous HUD ("sahada" figures).
+            HudTheme.Draw(new Rect(cx, cy, cw, 14f),
+                          $"SAHADA · DÜŞMAN {_director.HostilesAlive} · DOST {_director.FriendliesAlive}",
+                          HudTheme.Small, HudTheme.TextFaint);
+
+            return y + h;
+        }
+
+        // ------------------------------------------------------------------ radar contacts
+
+        /// <summary>
+        /// Left column, below the mission panel: one row per <see cref="RadarSensor"/> that currently
+        /// holds a contact, showing the track number, a type token and the slant range in metres.
+        /// </summary>
+        private void DrawRadarPanel(float x, float y)
+        {
+            CollectContacts();
+
+            int rows = Mathf.Max(1, _contactId.Count);
+            float h = HeaderH + rows * RowH + 6f;
+
+            HudTheme.Panel(new Rect(x, y, ColWidth, h));
+            HudTheme.Header(new Rect(x, y, ColWidth, HeaderH), "RADAR TEMASLARI",
+                            $"{_contactId.Count} AKTİF");
+
+            float ry = y + HeaderH + 3f;
+
+            if (_contactId.Count == 0)
+            {
+                HudTheme.Draw(new Rect(x + 12f, ry, ColWidth - 24f, RowH), "(TEMAS YOK)",
+                              HudTheme.Small, HudTheme.TextFaint);
                 return;
             }
 
-            MissionState m = _director.Mission;
-
-            GUILayout.Label($"Durum: {StatusText(m.Status)}   Süre: {m.ElapsedTime:0.0}s", _labelStyle);
-            GUILayout.Label($"Düşman: {m.HostilesDestroyed} / {m.HostilesTotal} imha   (sahada: {_director.HostilesAlive})", _labelStyle);
-            GUILayout.Label($"Dost kayıp: {m.FriendliesLost} / {m.MaxFriendlyLosses}   (sahada: {_director.FriendliesAlive})", _labelStyle);
-            GUILayout.Label($"Skor: {m.Score}", _labelStyle);
-            if (_scenario != null)
-                GUILayout.Label($"Dalga: {_scenario.CurrentWaveNumber}/{_scenario.TotalWaves}   Düşman: {_scenario.LiveEnemies}", _labelStyle);
-
-            GUILayout.Space(6);
-            GUILayout.Label("Radar temasları:", _labelStyle);
-            int contacts = 0;
-            if (_sensors != null)
+            for (int i = 0; i < _contactId.Count; i++)
             {
-                for (int i = 0; i < _sensors.Length; i++)
-                {
-                    RadarSensor s = _sensors[i];
-                    if (s != null && s.HasContact)
-                    {
-                        GUILayout.Label($"  Radar contact: id={s.ContactId}", _labelStyle);
-                        contacts++;
-                    }
-                }
-            }
-            if (contacts == 0)
-                GUILayout.Label("  (temas yok)", _labelStyle);
+                Color accent = _contactAccent[i];
 
-            GUILayout.Space(6);
-            GUILayout.Label("Drone durumu:", _labelStyle);
-            var friendlies = _director.Friendlies;
+                HudTheme.Fill(new Rect(x + 10f, ry + 4f, 3f, RowH - 8f), accent);
+                HudTheme.Draw(new Rect(x + 20f, ry, 46f, RowH), _contactId[i],
+                              HudTheme.Label, HudTheme.Text);
+                HudTheme.Tag(new Rect(x + 70f, ry + 3f, 48f, RowH - 6f), _contactType[i], accent);
+                DrawRight(new Rect(x + ColWidth - 80f, ry, 68f, RowH), _contactRange[i],
+                          HudTheme.Label, HudTheme.Text);
+
+                if (i < _contactId.Count - 1)
+                    HudTheme.Fill(new Rect(x + 1f, ry + RowH, ColWidth - 2f, 1f), HudTheme.Line);
+
+                ry += RowH;
+            }
+        }
+
+        /// <summary>
+        /// Rebuilds the contact rows. Rows whose target id cannot be resolved in the
+        /// <see cref="TargetRegistry"/> are skipped, so a stale id never draws a half-empty row.
+        /// </summary>
+        private void CollectContacts()
+        {
+            _contactId.Clear();
+            _contactType.Clear();
+            _contactAccent.Clear();
+            _contactRange.Clear();
+
+            if (_sensors == null) return;
+
+            for (int i = 0; i < _sensors.Length; i++)
+            {
+                RadarSensor s = _sensors[i];
+                if (s == null || !s.HasContact) continue;
+
+                Targetable t = TargetRegistry.FindById(s.ContactId);
+                if (t == null) continue;
+
+                Color accent;
+                string type = ContactType(t, out accent);
+
+                float range = Vector3.Distance(s.transform.position, s.EstimatedPosition);
+
+                _contactId.Add($"T-{Mathf.Max(0, s.ContactId):00}");
+                _contactType.Add(type);
+                _contactAccent.Add(accent);
+                _contactRange.Add($"{range:0} m");
+            }
+        }
+
+        /// <summary>
+        /// Classifies a radar contact from the components on the resolved <see cref="Targetable"/>:
+        /// an <see cref="EnemyDroneController"/> is an interceptor (AVCI), an
+        /// <see cref="AirDefenseSite"/> is a SAM or AAA battery — told apart by the name prefix
+        /// <see cref="ScenarioController"/> spawns them with ("SAM_W1_0" / "AAA_W1_0"), since the
+        /// site's ranges are private — and anything else is a plain objective (HEDEF).
+        /// </summary>
+        private static string ContactType(Targetable t, out Color accent)
+        {
+            accent = HudTheme.TextDim;
+            if (t == null) return "HEDEF";
+
+            if (t.GetComponent<EnemyDroneController>() != null)
+            {
+                accent = HudTheme.TextDim;
+                return "AVCI";
+            }
+
+            if (t.GetComponent<AirDefenseSite>() != null)
+            {
+                string n = t.name;
+                if (n != null && n.StartsWith("AAA"))
+                {
+                    accent = HudTheme.Amber;
+                    return "AAA";
+                }
+                accent = HudTheme.Critical;
+                return "SAM";
+            }
+
+            accent = HudTheme.TextFaint;
+            return "HEDEF";
+        }
+
+        // ------------------------------------------------------------------ fleet status
+
+        /// <summary>Right-hand column: one block per friendly drone with state tag and gauges.</summary>
+        private void DrawFleetPanel(float x, float y)
+        {
+            IReadOnlyList<IhaController> friendlies = _director != null ? _director.Friendlies : null;
+
+            // Measure first so the panel frame wraps exactly around its blocks.
+            float bodyH = 0f;
             int shown = 0;
             if (friendlies != null)
             {
@@ -228,153 +296,205 @@ namespace Sim.Runtime
                 {
                     IhaController c = friendlies[i];
                     if (c == null) continue;
-                    // Gun ammo only when this drone actually carries a GunTurret.
-                    GunTurret gun = c.Gun;
-                    // A dry tank is a death sentence (dead-stick descent), so flag it loudly.
-                    bool dry = c.IsOutOfFuel;
-                    string fuelText = dry ? "  [YAKIT BİTTİ]" : string.Empty;
-                    // Flare/chaff charges, only when this drone carries a dispenser.
-                    CountermeasureDispenser cm = c.Countermeasures;
-                    // Base servicing in progress (dwelling at base to refuel/rearm).
-                    string supplyText = c.IsResupplying
-                        ? $"  [İKMAL %{c.ResupplyProgress * 100f:0}]"
-                        : string.Empty;
-
-                    GUILayout.Label($"  {c.name}: {c.State}{fuelText}{supplyText}",
-                                    dry ? _warningStyle : _labelStyle);
-
-                    // Same numbers as before, now as colour-coded gauges.
-                    GUILayout.BeginHorizontal();
-                    LayoutBar("Yakıt", c.FuelFraction, 78f);
-                    LayoutBar("Müh.", c.AmmoFraction, 78f);
-                    if (gun != null) LayoutBar("Top", gun.AmmoFraction, 78f);
-                    if (cm != null) LayoutBar("Flare", cm.ChargeFraction, 78f);
-                    GUILayout.FlexibleSpace();
-                    GUILayout.EndHorizontal();
+                    bodyH += BlockHeight(c);
                     shown++;
                 }
             }
+            if (shown == 0) bodyH = 26f;
+
+            float h = HeaderH + bodyH + 4f;
+            HudTheme.Panel(new Rect(x, y, ColWidth, h));
+
+            int alive = _director != null ? _director.FriendliesAlive : shown;
+            HudTheme.Header(new Rect(x, y, ColWidth, HeaderH), "FİLO DURUMU", $"{alive} HAVADA");
+
+            float by = y + HeaderH + 2f;
+
             if (shown == 0)
-                GUILayout.Label("  (drone yok)", _labelStyle);
-
-            GUILayout.Space(6);
-            GUILayout.Label("WASD+Sağ tık: kamera, Tab: drone takip, F: serbest", _labelStyle);
-            GUILayout.Label("C: pilot modu  Tab: drone seç  W/S: gaz  A/D: dönüş", _labelStyle);
-            GUILayout.Label("↑/↓: yunuslama  Space: top  F: füze", _labelStyle);
-            GUILayout.Label("Q: flare  E: art yakıcı  X: kaçış manevrası", _labelStyle);
-
-            float scale = _controls != null ? _controls.CurrentTimeScale : Time.timeScale;
-            bool paused = _controls != null ? _controls.IsPaused : Time.timeScale == 0f;
-            string pauseText = paused ? "DURAKLADI" : "duraklat";
-            GUILayout.Label($"P: {pauseText}  +/-: hız (x{scale:0.00})  R: yeniden", _labelStyle);
-            GUILayout.Label("M: görev menüsü", _labelStyle);
-
-            GUILayout.EndArea();
-
-            DrawPilotPanel();
-            DrawMissileWarning();
-
-            // End-of-mission banner. Win/lose is owned by the ScenarioController (waves); if it is
-            // missing for any reason we fall back to the MissionState-based result so nothing breaks.
-            MissionStatus endStatus = _scenario != null ? MapScenario(_scenario.Status) : m.Status;
-
-            if (endStatus == MissionStatus.Won || endStatus == MissionStatus.Lost)
             {
-                bool won = endStatus == MissionStatus.Won;
-                string text = won ? "GÖREV BAŞARILI" : "GÖREV BAŞARISIZ";
-                Color prev = GUI.color;
-                GUI.color = won ? Color.green : Color.red;
-                var rect = new Rect(0, Screen.height * 0.5f - 60f, Screen.width, 80f);
-                GUI.Label(rect, text, _bannerStyle);
+                HudTheme.Draw(new Rect(x + 12f, by, ColWidth - 24f, 22f), "(DRONE YOK)",
+                              HudTheme.Small, HudTheme.TextFaint);
+                return;
+            }
 
-                if (won)
-                {
-                    int stars = MissionGrade.Stars(endStatus, m.FriendliesLost, m.ElapsedTime);
-                    string starText = new string('★', stars) + new string('☆', 3 - stars);
-                    GUI.color = Color.yellow;
-                    var starRect = new Rect(0, Screen.height * 0.5f + 24f, Screen.width, 60f);
-                    GUI.Label(starRect, starText, _bannerStyle);
-                }
+            int drawn = 0;
+            for (int i = 0; i < friendlies.Count; i++)
+            {
+                IhaController c = friendlies[i];
+                if (c == null) continue;
 
-                GUI.color = won ? Color.green : Color.red;
-                var hintRect = new Rect(0, Screen.height * 0.5f + 84f, Screen.width, 40f);
-                GUI.Label(hintRect, "R: yeniden başlat", _centerHintStyle);
-                GUI.color = prev;
+                float blockH = BlockHeight(c);
+                DrawDroneBlock(new Rect(x, by, ColWidth, blockH), c);
+                drawn++;
+                by += blockH;
+
+                if (drawn < shown)
+                    HudTheme.Fill(new Rect(x + 1f, by, ColWidth - 2f, 1f), HudTheme.Line);
             }
         }
 
-        /// <summary>
-        /// Draws the "PİLOT MODU" block plus a centred crosshair while the player is flying a drone
-        /// (see <see cref="PlayerDroneController"/>). A no-op when nobody is piloting.
-        /// </summary>
-        private void DrawPilotPanel()
+        /// <summary>Height of one drone block: header row plus one row per gauge actually carried.</summary>
+        private static float BlockHeight(IhaController c)
         {
-            if (_pilot == null || !_pilot.IsActive) return;
+            int bars = 1;                                   // fuel is always present
+            if (c.Gun != null) bars++;                      // gun ammo
+            if (c as SihaController != null) bars++;        // missiles (armed SİHA only)
+            if (c.Countermeasures != null) bars++;          // flare/chaff
+            return 22f + bars * (BarH + 4f) + 8f;
+        }
 
-            IhaController drone = _pilot.Controlled;
-            if (drone == null) return;
+        private void DrawDroneBlock(Rect r, IhaController c)
+        {
+            float x = r.x + 10f;
+            float w = r.width - 20f;
+            float y = r.y + 4f;
 
-            GUILayout.BeginArea(new Rect(Screen.width - 270f, 10f, 260f, 240f), _panelStyle);
-            GUILayout.Label("PİLOT MODU", _titleStyle);
-            GUILayout.Label($"Drone: {drone.name}", _labelStyle);
-            GUILayout.Label($"Hız: {_pilot.Speed:0} m/s", _labelStyle);
-            GUILayout.Label($"İrtifa: {drone.transform.position.y:0} m", _labelStyle);
-            LayoutBar("Yakıt", drone.FuelFraction, 236f);
+            HudTheme.Draw(new Rect(x, y, 96f, 18f), Upper(c.name), HudTheme.Value, HudTheme.Text);
 
-            if (drone.IsOutOfFuel)
+            EngagementState st = c.State;
+            HudTheme.Tag(new Rect(x + 98f, y + 2f, 58f, 14f), StateText(st), StateColor(st));
+
+            // Base servicing in progress (dwelling at base to refuel/rearm).
+            if (c.IsResupplying)
+                HudTheme.Tag(new Rect(x + 160f, y + 2f, 74f, 14f),
+                             $"İKMAL %{c.ResupplyProgress * 100f:0}", HudTheme.Ok);
+
+            // A dry tank is a death sentence (dead-stick descent), so flag it loudly.
+            if (c.IsOutOfFuel)
+                DrawRight(new Rect(x + w - 76f, y, 76f, 18f), "[YAKIT BİTTİ]",
+                          HudTheme.Small, HudTheme.Critical);
+
+            float by = y + 22f;
+            HudTheme.Bar(new Rect(x, by, w, BarH), c.FuelFraction, "YAKIT", Pct(c.FuelFraction));
+            by += BarH + 4f;
+
+            GunTurret gun = c.Gun;
+            if (gun != null)
             {
-                // Dead stick: no power left, the drone is gliding down toward a crash.
-                Color prevFuel = GUI.color;
-                GUI.color = Color.red;
-                GUILayout.Label("YAKIT BİTTİ - SÜZÜLÜYOR", _titleStyle);
-                GUI.color = prevFuel;
+                HudTheme.Bar(new Rect(x, by, w, BarH), gun.AmmoFraction, "TOP", Pct(gun.AmmoFraction));
+                by += BarH + 4f;
             }
 
-            GunTurret gun = drone.Gun;
-            if (gun != null) LayoutBar("Top", gun.AmmoFraction, 236f);
-            else GUILayout.Label("Top: yok", _labelStyle);
+            var siha = c as SihaController;
+            if (siha != null)
+            {
+                HudTheme.Bar(new Rect(x, by, w, BarH), siha.AmmoFraction, "FÜZE", Pct(siha.AmmoFraction));
+                by += BarH + 4f;
+            }
 
-            var siha = drone as SihaController;
-            if (siha != null) LayoutBar("Füze", siha.AmmoFraction, 236f);
+            CountermeasureDispenser cm = c.Countermeasures;
+            if (cm != null)
+                HudTheme.Bar(new Rect(x, by, w, BarH), cm.ChargeFraction, "FLARE", Pct(cm.ChargeFraction));
+        }
 
-            CountermeasureDispenser cm = drone.Countermeasures;
-            if (cm != null) LayoutBar("Flare", cm.ChargeFraction, 236f);
-            else GUILayout.Label("flare: yok", _labelStyle);
+        // ------------------------------------------------------------------ pilot mode
+
+        /// <summary>Top-right identity block while the player flies a drone. Returns its bottom edge.</summary>
+        private float DrawPilotIdentity(float x, float y)
+        {
+            IhaController drone = _pilot.Controlled;
+            float h = drone.IsOutOfFuel ? 74f : 56f;
+
+            HudTheme.Panel(new Rect(x, y, ColWidth, h));
+            HudTheme.Draw(new Rect(x + 10f, y + 6f, ColWidth - 20f, 20f), Upper(drone.name),
+                          HudTheme.Value, HudTheme.Text);
+            HudTheme.Tag(new Rect(x + 10f, y + 30f, 88f, 16f), "PİLOT MODU", HudTheme.Amber);
 
             if (drone.IsResupplying)
-            {
-                // Sitting on station: hold position until the bar fills to be refuelled and rearmed.
-                Color prevSupply = GUI.color;
-                GUI.color = Color.cyan;
-                GUILayout.Label($"[İKMAL %{drone.ResupplyProgress * 100f:0}]", _labelStyle);
-                GUI.color = prevSupply;
-            }
+                HudTheme.Tag(new Rect(x + 104f, y + 30f, 84f, 16f),
+                             $"İKMAL %{drone.ResupplyProgress * 100f:0}", HudTheme.Ok);
 
-            // Active special abilities (E afterburner / X evasive maneuver).
-            if (_pilot.AfterburnerActive || _pilot.EvadeActive)
-            {
-                Color prevAbility = GUI.color;
-                GUI.color = Color.yellow;
-                string abilities = _pilot.AfterburnerActive ? "ART YAKICI" : string.Empty;
-                if (_pilot.EvadeActive)
-                    abilities = abilities.Length > 0 ? abilities + "  KAÇIŞ" : "KAÇIŞ";
-                GUILayout.Label(abilities, _labelStyle);
-                GUI.color = prevAbility;
-            }
+            if (drone.IsOutOfFuel)
+                HudTheme.Draw(new Rect(x + 10f, y + 52f, ColWidth - 20f, 18f),
+                              "YAKIT BİTTİ - SÜZÜLÜYOR", HudTheme.Warning, HudTheme.Critical);
 
-            GUILayout.EndArea();
-
-            // Simple centred crosshair.
-            var crossRect = new Rect(Screen.width * 0.5f - 15f, Screen.height * 0.5f - 15f, 30f, 30f);
-            Color prev = GUI.color;
-            GUI.color = Color.green;
-            GUI.Label(crossRect, "+", _centerHintStyle);
-            GUI.color = prev;
+            return y + h;
         }
 
         /// <summary>
-        /// Big red centred missile warning. Follows the PILOTED drone when the player is flying, and
-        /// otherwise warns about any friendly drone that has a munition homing on it.
+        /// The flying instruments: centre crosshair, speed and altitude boxes flanking it, the
+        /// weapon-status block at the bottom centre and the afterburner/evade indicators.
+        /// </summary>
+        private void DrawPilotOverlay()
+        {
+            IhaController drone = _pilot.Controlled;
+            float cx = Screen.width * 0.5f;
+            float cy = Screen.height * 0.5f;
+
+            HudTheme.Crosshair(new Vector2(cx, cy), 64f, HudTheme.Amber);
+
+            // HIZ (left of the crosshair) + the fuel gauge under it.
+            var speedBox = new Rect(cx - 250f, cy - 24f, 130f, 46f);
+            ReadoutBox(speedBox, "HIZ", $"{_pilot.Speed:0}", "m/s");
+            HudTheme.Bar(new Rect(speedBox.x, speedBox.yMax + 8f, speedBox.width, BarH),
+                         drone.FuelFraction, "YAKIT", Pct(drone.FuelFraction));
+
+            // İRTİFA (right of the crosshair).
+            var altBox = new Rect(cx + 120f, cy - 24f, 130f, 46f);
+            ReadoutBox(altBox, "İRTİFA", $"{drone.transform.position.y:0}", "m");
+
+            // Weapon block, bottom centre above the control strip.
+            GunTurret gun = drone.Gun;
+            var siha = drone as SihaController;
+            CountermeasureDispenser cm = drone.Countermeasures;
+
+            const float wpnW = 380f;
+            float wpnH = HeaderH + 3f * (BarH + 5f) + 8f;
+            float wpnY = Screen.height - StripH - 12f - wpnH;
+            var wpn = new Rect(cx - wpnW * 0.5f, wpnY, wpnW, wpnH);
+
+            HudTheme.Panel(wpn);
+            HudTheme.Header(new Rect(wpn.x, wpn.y, wpn.width, HeaderH), "SİLAH DURUMU", string.Empty);
+
+            float bx = wpn.x + 12f;
+            float bw = wpn.width - 24f;
+            float by = wpn.y + HeaderH + 5f;
+
+            if (gun != null)
+                HudTheme.Bar(new Rect(bx, by, bw, BarH), gun.AmmoFraction, "TOP", Pct(gun.AmmoFraction));
+            else
+                HudTheme.Draw(new Rect(bx, by, bw, BarH), "TOP: YOK", HudTheme.Small, HudTheme.TextFaint);
+            by += BarH + 5f;
+
+            if (siha != null)
+                HudTheme.Bar(new Rect(bx, by, bw, BarH), siha.AmmoFraction, "FÜZE", Pct(siha.AmmoFraction));
+            else
+                HudTheme.Draw(new Rect(bx, by, bw, BarH), "FÜZE: YOK", HudTheme.Small, HudTheme.TextFaint);
+            by += BarH + 5f;
+
+            if (cm != null)
+                HudTheme.Bar(new Rect(bx, by, bw, BarH), cm.ChargeFraction, "FLARE", Pct(cm.ChargeFraction));
+            else
+                HudTheme.Draw(new Rect(bx, by, bw, BarH), "FLARE: YOK", HudTheme.Small, HudTheme.TextFaint);
+
+            // Active special abilities (E afterburner / X evasive manoeuvre): lit when on, dim when off.
+            float ax = Screen.width - Margin - 150f;
+            HudTheme.Tag(new Rect(ax, wpnY, 150f, 22f), "ART YAKICI",
+                         _pilot.AfterburnerActive ? HudTheme.Amber : HudTheme.TextFaint);
+            HudTheme.Tag(new Rect(ax, wpnY + 28f, 150f, 22f), "KAÇIŞ",
+                         _pilot.EvadeActive ? HudTheme.Amber : HudTheme.TextFaint);
+            HudTheme.Draw(new Rect(ax, wpnY + 54f, 150f, 14f), "YANIK = ETKİN · SÖNÜK = PASİF",
+                          HudTheme.Small, HudTheme.TextFaint);
+        }
+
+        /// <summary>A bordered instrument readout: dim caption, big value and a unit suffix.</summary>
+        private static void ReadoutBox(Rect r, string caption, string value, string unit)
+        {
+            HudTheme.Fill(r, HudTheme.PanelBg);
+            HudTheme.Border(r, HudTheme.Amber);
+            HudTheme.Draw(new Rect(r.x + 8f, r.y + 4f, r.width - 16f, 12f), caption,
+                          HudTheme.Small, HudTheme.Amber);
+            HudTheme.Draw(new Rect(r.x + 8f, r.y + 18f, r.width - 16f, 24f), value,
+                          HudTheme.Verdict24(), HudTheme.Text);
+            DrawRight(new Rect(r.x + 8f, r.y + 22f, r.width - 16f, 18f), unit,
+                      HudTheme.Small, HudTheme.TextDim);
+        }
+
+        // ------------------------------------------------------------------ missile warning
+
+        /// <summary>
+        /// Pulsing centred missile warning band. Follows the PILOTED drone when the player is flying,
+        /// and otherwise warns about any friendly drone that has a munition homing on it.
         /// </summary>
         private void DrawMissileWarning()
         {
@@ -400,27 +520,269 @@ namespace Sim.Runtime
 
             if (!incoming) return;
 
-            string text = float.IsPositiveInfinity(tti) ? "⚠ FÜZE!" : $"⚠ FÜZE! {tti:0.0}s";
-            Color prev = GUI.color;
-            // Pulse the warning so it cannot be missed. Unscaled time keeps it alive while paused.
+            // Pulse so it cannot be missed. Unscaled time keeps it alive while paused.
             float pulse = 0.55f + 0.45f * Mathf.Abs(Mathf.Sin(Time.unscaledTime * 6f));
-            GUI.color = new Color(1f, 0.25f, 0.2f, pulse);
-            var rect = new Rect(0f, Screen.height * 0.2f, Screen.width, 40f);
-            GUI.Label(rect, text, _centerHintStyle);
-            GUI.color = prev;
+            Color red = HudTheme.Critical;
+            var band = new Rect(Screen.width * 0.5f - 190f, Screen.height * 0.18f, 380f, 54f);
+
+            HudTheme.Fill(band, new Color(0.10f, 0.05f, 0.047f, 0.94f));
+            HudTheme.Border(band, new Color(red.r, red.g, red.b, pulse));
+
+            HudTheme.WarningTriangle(new Rect(band.x + 14f, band.y + 13f, 30f, 28f),
+                                     new Color(red.r, red.g, red.b, pulse));
+
+            string time = float.IsPositiveInfinity(tti) ? string.Empty : $"{tti:0.0} s";
+            HudTheme.Draw(new Rect(band.x + 56f, band.y, 120f, band.height), "FÜZE!",
+                          HudTheme.Verdict28(), new Color(red.r, red.g, red.b, pulse));
+            HudTheme.Fill(new Rect(band.x + 176f, band.y + 12f, 1f, band.height - 24f), HudTheme.Line);
+            HudTheme.Draw(new Rect(band.x + 190f, band.y, 110f, band.height), time,
+                          HudTheme.Verdict28(), HudTheme.Text);
+            DrawRight(new Rect(band.x + 190f, band.y + 16f, band.width - 204f, 24f), "Q: FLARE",
+                      HudTheme.Small, HudTheme.TextDim);
+        }
+
+        // ------------------------------------------------------------------ bottom strip
+
+        /// <summary>
+        /// Bottom control strip: every control hint the HUD used to list (camera, pilot, weapons,
+        /// pause / time scale / restart / mission menu) plus the design's bar colour-code legend.
+        /// </summary>
+        private void DrawControlStrip(bool piloting)
+        {
+            var strip = new Rect(0f, Screen.height - StripH, Screen.width, StripH);
+            HudTheme.Fill(strip, new Color(HudTheme.Bg.r, HudTheme.Bg.g, HudTheme.Bg.b, 0.94f));
+            HudTheme.Fill(new Rect(0f, strip.y, Screen.width, 1f), HudTheme.Line);
+
+            float scale = _controls != null ? _controls.CurrentTimeScale : Time.timeScale;
+            bool paused = _controls != null ? _controls.IsPaused : Time.timeScale == 0f;
+            string pauseText = paused ? "DURAKLADI" : "DURAKLAT";
+
+            float hintsW = Screen.width - 250f;
+            var l1 = new Rect(Margin, strip.y + 4f, hintsW, 15f);
+            var l2 = new Rect(Margin, strip.y + 19f, hintsW, 15f);
+            var l3 = new Rect(Margin, strip.y + 34f, hintsW, 15f);
+
+            HudTheme.Draw(l1, "WASD + SAĞ TIK: KAMERA · TAB: DRONE TAKİP · F: SERBEST · C: PİLOT MODU"
+                              + (piloting ? " (ÇIKIŞ)" : string.Empty),
+                          HudTheme.Centered, HudTheme.TextFaint);
+            HudTheme.Draw(l2, "W/S: GAZ · A/D: DÖNÜŞ · ↑/↓: YUNUSLAMA · SPACE: TOP · F: FÜZE · "
+                              + "Q: FLARE · E: ART YAKICI · X: KAÇIŞ",
+                          HudTheme.Centered, HudTheme.TextFaint);
+            HudTheme.Draw(l3, $"P: {pauseText} · +/−: HIZ (x{scale:0.00}) · R: YENİDEN · M: GÖREV MENÜSÜ",
+                          HudTheme.Centered, HudTheme.TextFaint);
+
+            // Bar colour-code legend (design: green >50, amber 20–50, red <20).
+            float lx = Screen.width - 234f;
+            float ly = strip.y + 20f;
+            HudTheme.Draw(new Rect(lx, strip.y + 4f, 220f, 14f), "BAR RENK KODU",
+                          HudTheme.Small, HudTheme.TextFaint);
+            LegendChip(lx, ly, HudTheme.Ok, ">50");
+            LegendChip(lx + 74f, ly, HudTheme.Amber, "20-50");
+            LegendChip(lx + 152f, ly, HudTheme.Critical, "<20");
+        }
+
+        private static void LegendChip(float x, float y, Color c, string text)
+        {
+            HudTheme.Fill(new Rect(x, y + 4f, 12f, 8f), c);
+            HudTheme.Draw(new Rect(x + 17f, y, 56f, 16f), text, HudTheme.Small, HudTheme.TextDim);
+        }
+
+        // ------------------------------------------------------------------ end screen
+
+        /// <summary>
+        /// Mission-report screen. Win/lose is owned by the <see cref="ScenarioController"/> (waves);
+        /// if it is missing for any reason we fall back to the <see cref="MissionState"/> result so
+        /// nothing breaks.
+        /// </summary>
+        private void DrawEndScreen()
+        {
+            MissionState m = _director != null ? _director.Mission : null;
+            if (m == null) return;
+
+            MissionStatus endStatus = _scenario != null ? MapScenario(_scenario.Status) : m.Status;
+            if (endStatus != MissionStatus.Won && endStatus != MissionStatus.Lost) return;
+
+            bool won = endStatus == MissionStatus.Won;
+            Color accent = won ? HudTheme.Ok : HudTheme.Critical;
+
+            // Dim the field behind the report.
+            HudTheme.Fill(new Rect(0f, 0f, Screen.width, Screen.height),
+                          new Color(HudTheme.Bg.r, HudTheme.Bg.g, HudTheme.Bg.b, 0.80f));
+
+            const float w = 640f;
+            const float h = 300f;
+            var panel = new Rect((Screen.width - w) * 0.5f, (Screen.height - h) * 0.5f, w, h);
+
+            HudTheme.Fill(panel, HudTheme.PanelBg);
+            HudTheme.Border(panel, accent);
+            HudTheme.Header(new Rect(panel.x, panel.y, w, HeaderH), "GÖREV RAPORU",
+                            Upper(ScenarioLibrary.Title(ScenarioController.SelectedKind)));
+
+            float x = panel.x + 20f;
+            float cw = w - 40f;
+            float y = panel.y + HeaderH + 16f;
+
+            HudTheme.Draw(new Rect(x, y, cw, 52f), won ? "GÖREV BAŞARILI" : "GÖREV BAŞARISIZ",
+                          HudTheme.Verdict, accent);
+            y += 58f;
+
+            // Star rating (filled/empty), from the same MissionGrade call as before.
+            int stars = MissionGrade.Stars(endStatus, m.FriendliesLost, m.ElapsedTime);
+            stars = Mathf.Clamp(stars, 0, 3);
+            string starText = new string('★', stars) + new string('☆', 3 - stars);
+            HudTheme.Draw(new Rect(x, y, cw, 34f), starText, HudTheme.Verdict28C(), HudTheme.Amber);
+            DrawCenter(new Rect(x, y + 34f, cw, 14f), $"DERECE {stars} / 3",
+                       HudTheme.Small, HudTheme.TextDim);
+            y += 56f;
+
+            // Stats row.
+            float cell = (cw - 12f) / 4f;
+            StatCell(new Rect(x, y, cell, 44f), "SÜRE", Clock(m.ElapsedTime), HudTheme.Text);
+            StatCell(new Rect(x + cell + 4f, y, cell, 44f), "İMHA",
+                     $"{m.HostilesDestroyed}/{m.HostilesTotal}", won ? HudTheme.Ok : HudTheme.Text);
+            StatCell(new Rect(x + (cell + 4f) * 2f, y, cell, 44f), "KAYIP",
+                     m.FriendliesLost.ToString(),
+                     m.FriendliesLost > 0 ? HudTheme.Critical : HudTheme.Ok);
+            StatCell(new Rect(x + (cell + 4f) * 3f, y, cell, 44f), "SKOR",
+                     m.Score.ToString(), HudTheme.Amber);
+            y += 52f;
+
+            // Actions.
+            ActionBox(new Rect(x, y, cw * 0.5f - 6f, 34f), "R", "YENİDEN BAŞLAT", HudTheme.Amber);
+            ActionBox(new Rect(x + cw * 0.5f + 6f, y, cw * 0.5f - 6f, 34f), "M", "GÖREV MENÜSÜ",
+                      HudTheme.TextDim);
+        }
+
+        private static void ActionBox(Rect r, string key, string label, Color accent)
+        {
+            HudTheme.Fill(r, new Color(accent.r * 0.14f, accent.g * 0.14f, accent.b * 0.14f, 0.92f));
+            HudTheme.Border(r, accent);
+            HudTheme.Fill(new Rect(r.x + 10f, r.y + 8f, 22f, 18f), accent);
+            DrawCenter(new Rect(r.x + 10f, r.y + 8f, 22f, 18f), key, HudTheme.Small, HudTheme.Bg);
+            HudTheme.Draw(new Rect(r.x + 42f, r.y, r.width - 52f, r.height), label,
+                          HudTheme.Label, accent);
+        }
+
+        // ------------------------------------------------------------------ small helpers
+
+        /// <summary>A bordered inset with a dim caption above a coloured value.</summary>
+        private static void StatBox(Rect r, string caption, string value, Color valueColor)
+        {
+            HudTheme.Inset(r);
+            HudTheme.Draw(new Rect(r.x + 7f, r.y + 3f, r.width - 14f, 12f), caption,
+                          HudTheme.Small, HudTheme.TextDim);
+            HudTheme.Draw(new Rect(r.x + 7f, r.y + 16f, r.width - 14f, 18f), value,
+                          HudTheme.Value, valueColor);
+        }
+
+        /// <summary>A borderless statistic cell: dim caption over a large coloured number.</summary>
+        private static void StatCell(Rect r, string caption, string value, Color valueColor)
+        {
+            HudTheme.Draw(new Rect(r.x, r.y, r.width, 12f), caption, HudTheme.Small, HudTheme.TextDim);
+            HudTheme.Draw(new Rect(r.x, r.y + 14f, r.width, 22f), value, HudTheme.Value, valueColor);
+        }
+
+        /// <summary>A hairline-underlined "LABEL ........ value" row.</summary>
+        private static void KeyValueRow(Rect r, string key, string value, Color valueColor)
+        {
+            HudTheme.Draw(new Rect(r.x, r.y, r.width * 0.6f, r.height), key,
+                          HudTheme.Small, HudTheme.TextDim);
+            DrawRight(new Rect(r.x, r.y, r.width, r.height), value, HudTheme.Label, valueColor);
+            HudTheme.Fill(new Rect(r.x, r.yMax, r.width, 1f), HudTheme.Line);
+        }
+
+        /// <summary>Draws right-aligned text with a style that is normally left/centre aligned.</summary>
+        private static void DrawRight(Rect r, string text, GUIStyle style, Color c)
+        {
+            if (style == null) return;
+            TextAnchor prev = style.alignment;
+            style.alignment = TextAnchor.MiddleRight;
+            HudTheme.Draw(r, text, style, c);
+            style.alignment = prev;
+        }
+
+        /// <summary>Draws centred text with a style that is normally left aligned.</summary>
+        private static void DrawCenter(Rect r, string text, GUIStyle style, Color c)
+        {
+            if (style == null) return;
+            TextAnchor prev = style.alignment;
+            style.alignment = TextAnchor.MiddleCenter;
+            HudTheme.Draw(r, text, style, c);
+            style.alignment = prev;
+        }
+
+        private static string Pct(float fraction01)
+        {
+            return $"%{Mathf.Clamp01(fraction01) * 100f:0}";
+        }
+
+        /// <summary>mm:ss, the design's mission clock format.</summary>
+        private static string Clock(float seconds)
+        {
+            if (seconds < 0f) seconds = 0f;
+            int total = Mathf.FloorToInt(seconds);
+            return $"{total / 60:00}:{total % 60:00}";
+        }
+
+        /// <summary>Uppercase using the invariant culture (Turkish 'i' casing is not wanted here).</summary>
+        private static string Upper(string s)
+        {
+            return string.IsNullOrEmpty(s) ? string.Empty : s.ToUpperInvariant();
+        }
+
+        /// <summary>1-based position of the mission in <see cref="ScenarioLibrary.All"/> (M-01 … M-04).</summary>
+        private static int MissionIndex(ScenarioKind kind)
+        {
+            ScenarioKind[] all = ScenarioLibrary.All;
+            if (all != null)
+            {
+                for (int i = 0; i < all.Length; i++)
+                    if (all[i] == kind) return i + 1;
+            }
+            return 1;
+        }
+
+        private static string StateText(EngagementState s)
+        {
+            switch (s)
+            {
+                case EngagementState.Engage: return "ANGAJE";
+                case EngagementState.ReturnToBase: return "DÖNÜŞ";
+                default: return "DEVRİYE";
+            }
+        }
+
+        private static Color StateColor(EngagementState s)
+        {
+            switch (s)
+            {
+                case EngagementState.Engage: return HudTheme.Amber;
+                case EngagementState.ReturnToBase: return HudTheme.TextDim;
+                default: return HudTheme.Ok;
+            }
         }
 
         private static string StatusText(MissionStatus s)
         {
             switch (s)
             {
-                case MissionStatus.Won: return "Won";
-                case MissionStatus.Lost: return "Lost";
-                default: return "InProgress";
+                case MissionStatus.Won: return "BAŞARILI";
+                case MissionStatus.Lost: return "BAŞARISIZ";
+                default: return "DEVAM EDİYOR";
             }
         }
 
-        /// <summary>Maps the scenario's win/lose outcome onto the mission-status enum used by the banner/stars.</summary>
+        private static Color StatusColor(MissionStatus s)
+        {
+            switch (s)
+            {
+                case MissionStatus.Won: return HudTheme.Ok;
+                case MissionStatus.Lost: return HudTheme.Critical;
+                default: return HudTheme.Ok;
+            }
+        }
+
+        /// <summary>Maps the scenario's win/lose outcome onto the mission-status enum used by the report.</summary>
         private static MissionStatus MapScenario(ScenarioStatus s)
         {
             switch (s)
