@@ -28,6 +28,23 @@ namespace Sim.Runtime
         [SerializeField] private float spawnMinRadius = 15f;   // keep enemies away from the very centre
         [SerializeField] private float fighterAltitude = 14f;  // hostile fighters spawn airborne, at cruise
 
+        /// <summary>
+        /// The mission the player picked in <see cref="ScenarioMenu"/>. STATIC on purpose: the restart
+        /// path (R, and the menu's own "choose again") reloads the scene, which destroys every
+        /// component, so the choice has to outlive the reload.
+        /// </summary>
+        public static ScenarioKind SelectedKind = ScenarioKind.MixedDefense;
+
+        /// <summary>The scenario this controller is running (i.e. <see cref="SelectedKind"/>).</summary>
+        public ScenarioKind Kind => SelectedKind;
+
+        /// <summary>
+        /// False until <see cref="BeginMission"/> is called. While false <see cref="Update"/> does
+        /// nothing at all — no spawning, no wave advance, no fail check — so the mission-select menu
+        /// can hold the sim on a clean field.
+        /// </summary>
+        public bool Started { get; private set; }
+
         private ScenarioState _state;
 
         // Friendly controllers, cached and refreshed occasionally so the squad-effectiveness check
@@ -50,11 +67,25 @@ namespace Sim.Runtime
 
         private void Start()
         {
-            _state = new ScenarioState(totalWaves);
+            // Build the state from the selected scenario so the HUD can already show the right wave
+            // count behind the menu, but do NOT start: Update stays idle until BeginMission().
+            _state = new ScenarioState(ScenarioLibrary.TotalWaves(SelectedKind));
+        }
+
+        /// <summary>
+        /// Starts (or restarts) the mission for the currently <see cref="SelectedKind"/> scenario.
+        /// Called by <see cref="ScenarioMenu"/> when the player picks a mission.
+        /// </summary>
+        public void BeginMission()
+        {
+            _state = new ScenarioState(ScenarioLibrary.TotalWaves(SelectedKind));
+            Started = true;
         }
 
         private void Update()
         {
+            // Held by the mission-select menu until the player picks a scenario.
+            if (!Started) return;
             if (_state == null) return;
 
             // 1. Spawn the current wave once, when awaiting a spawn.
@@ -92,19 +123,22 @@ namespace Sim.Runtime
                 _state.Fail();
         }
 
-        /// <summary>Spawns the full enemy mix for the given (0-based) wave using <see cref="WavePlan"/>.</summary>
+        /// <summary>
+        /// Spawns the full enemy mix for the given (0-based) wave. The mix comes from
+        /// <see cref="ScenarioLibrary.Composition"/> for the selected scenario — Mixed Defense
+        /// delegates to the original <see cref="WavePlan"/>, the other missions have their own
+        /// per-wave composition (ground-only recon, SAM/AAA-only SEAD, fighters-only air combat).
+        /// Ground archetypes are scattered on the deck; fighters spawn airborne at cruise altitude.
+        /// </summary>
         private void SpawnWave(int waveIndex)
         {
-            int plain = WavePlan.PlainHostilesForWave(waveIndex);
-            int sams = WavePlan.SamsForWave(waveIndex);
-            int aaa = WavePlan.AaaForWave(waveIndex);
-            int fighters = WavePlan.FightersForWave(waveIndex);
+            WaveComposition c = ScenarioLibrary.Composition(SelectedKind, waveIndex);
 
             int wave = waveIndex + 1;
-            for (int i = 0; i < plain; i++) SpawnPlainHostile(RandomScatterPosition(), $"Hostile_W{wave}_{i}");
-            for (int i = 0; i < sams; i++) SpawnSam(RandomScatterPosition(), $"SAM_W{wave}_{i}");
-            for (int i = 0; i < aaa; i++) SpawnAaa(RandomScatterPosition(), $"AAA_W{wave}_{i}");
-            for (int i = 0; i < fighters; i++) SpawnFighter(RandomAirbornePosition(), $"Fighter_W{wave}_{i}");
+            for (int i = 0; i < c.PlainHostiles; i++) SpawnPlainHostile(RandomScatterPosition(), $"Hostile_W{wave}_{i}");
+            for (int i = 0; i < c.Sams; i++) SpawnSam(RandomScatterPosition(), $"SAM_W{wave}_{i}");
+            for (int i = 0; i < c.Aaa; i++) SpawnAaa(RandomScatterPosition(), $"AAA_W{wave}_{i}");
+            for (int i = 0; i < c.Fighters; i++) SpawnFighter(RandomAirbornePosition(), $"Fighter_W{wave}_{i}");
         }
 
         /// <summary>Scatter position lifted to the fighters' cruise altitude, so they spawn airborne.</summary>

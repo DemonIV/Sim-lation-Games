@@ -45,6 +45,11 @@ namespace Sim.Runtime
             // Global keyboard controls: R restart, P pause, +/- time scale.
             director.gameObject.AddComponent<GameControls>();
 
+            // Mission-select briefing screen. Added AFTER the ScenarioController above so its Start()
+            // can find the controller it has to release with BeginMission(). It holds the sim paused
+            // until the player picks a mission, and reopens on M.
+            director.gameObject.AddComponent<ScenarioMenu>();
+
             // Pilot mode: lets the player take over one friendly drone (C) and fly it by hand.
             // Lives on the manager object, never on a drone.
             director.gameObject.AddComponent<PlayerDroneController>();

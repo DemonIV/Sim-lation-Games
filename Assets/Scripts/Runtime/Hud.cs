@@ -16,6 +16,7 @@ namespace Sim.Runtime
         private RadarSensor[] _sensors;
         private GameControls _controls;
         private PlayerDroneController _pilot;
+        private ScenarioMenu _menu;
 
         // Cached GUI styles (built lazily on first OnGUI so we're on the GUI thread).
         private GUIStyle _labelStyle;
@@ -33,6 +34,7 @@ namespace Sim.Runtime
             _scenario = FindAnyObjectByType<ScenarioController>();
             _controls = FindAnyObjectByType<GameControls>();
             _pilot = FindAnyObjectByType<PlayerDroneController>();
+            _menu = FindAnyObjectByType<ScenarioMenu>();
             RefreshSensors();
         }
 
@@ -47,6 +49,7 @@ namespace Sim.Runtime
                 if (_scenario == null) _scenario = FindAnyObjectByType<ScenarioController>();
                 if (_controls == null) _controls = FindAnyObjectByType<GameControls>();
                 if (_pilot == null) _pilot = FindAnyObjectByType<PlayerDroneController>();
+                if (_menu == null) _menu = FindAnyObjectByType<ScenarioMenu>();
             }
         }
 
@@ -79,10 +82,16 @@ namespace Sim.Runtime
 
         private void OnGUI()
         {
+            // The mission-select briefing owns the screen while it is up; drawing the HUD over it
+            // would only make it hard to read. Checked before any BeginArea so nothing is left open.
+            if (_menu != null && _menu.IsOpen) return;
+
             EnsureStyles();
 
             GUILayout.BeginArea(new Rect(10, 10, 340, 540), GUI.skin.box);
             GUILayout.Label("İHA/SİHA Taktik Simülasyonu", _titleStyle);
+            // Active mission, as picked in the ScenarioMenu.
+            GUILayout.Label($"Görev: {ScenarioLibrary.Title(ScenarioController.SelectedKind)}", _labelStyle);
 
             if (_director == null || _director.Mission == null)
             {
@@ -164,6 +173,7 @@ namespace Sim.Runtime
             bool paused = _controls != null ? _controls.IsPaused : Time.timeScale == 0f;
             string pauseText = paused ? "DURAKLADI" : "duraklat";
             GUILayout.Label($"P: {pauseText}  +/-: hız (x{scale:0.00})  R: yeniden", _labelStyle);
+            GUILayout.Label("M: görev menüsü", _labelStyle);
 
             GUILayout.EndArea();
 

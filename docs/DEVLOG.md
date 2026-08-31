@@ -66,6 +66,9 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `MissileThreat` | Gelen füze geometrisi: çarpışmaya kalan süre ve zamanlama+açıya bağlı aldatma şansı. |
 | `EvasiveManeuver` | İsimli kaçış manevraları (Break/Dalış/Tırmanış/Makara) + irtifa duyarlı manevra seçici. |
 | `ResupplyPoint` | Üste ikmal döngüsü: üs yarıçapı içinde tam süre bekleyince tamamlanır, erken ayrılınca ilerleme sıfırlanır. |
+| `ScenarioLibrary` | Görev kütüphanesi: her senaryonun başlığı, brifingi, dalga sayısı ve dalga başına düşman kompozisyonu. |
+| `ScenarioKind` | Seçilebilir görev tipleri: Keşif / SEAD / Hava Muharebesi / Karma Savunma. |
+| `WaveComposition` | Bir dalganın düşman kompozisyonu (sabit hedef / SAM / AAA / avcı + toplam). |
 
 ### Sim.Runtime (ince MonoBehaviour'lar)
 | Bileşen | Görevi |
@@ -79,7 +82,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `GuidedMunition` | PN güdümü + arayıcı başlık + balistik ile güdümlü mühimmat, yakınlık tapası. |
 | `TargetRegistry` / `Targetable` | Canlı hedeflerin kaydı; controller'lar her kare sorgular. |
 | `SimulationBootstrap` | Play'de sahneyi primitive'lerden kurar (kamera, ışık, zemin, drone'lar, ScenarioController). |
-| `ScenarioController` | Dalga tabanlı senaryo: her dalgada üç düşman tipini (Sabit hedef / SAM / AAA) `WavePlan`'e göre spawn eder ve kazan/kaybet'i yönetir. |
+| `ScenarioController` | Dalga tabanlı senaryo: seçilen göreve göre (`ScenarioLibrary.Composition`) her dalganın düşman karışımını spawn eder ve kazan/kaybet'i yönetir; `BeginMission()` çağrılana kadar bekler. |
 | `SimulationDirector` | Görev takibi ve skorlama (dalga güvenli kill sayımı; kazan/kaybet artık ScenarioController'da). |
 | `Hud` | Ekran üstü (IMGUI) bilgi paneli: görev, skor, radar temasları. |
 | `CameraRig` | Serbest uçan kamera (WASD + fare) ve drone takip modu. |
@@ -90,6 +93,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `EnemyDroneController` | Düşman avcı drone'u: uçar, dost drone'ları tespit eder ve topla taramaya alır (hava muharebesi). |
 | `PlayerDroneController` | Pilot modu: oyuncu dost bir drone'u devralıp elle uçurur (C/Tab/W/S/A/D/↑↓/Space/F + Q/E/X). |
 | `CountermeasureDispenser` | `CountermeasureSystem` sarmalayıcısı: flare/chaff salvosu, salvo sayacı (füzeler bunu izler), kısa görsel puf. |
+| `ScenarioMenu` | Kurulum gerektirmeyen IMGUI görev seçim/brifing ekranı: açılışta çıkar, sim'i duraklatır, `M` ile tekrar açılır. |
 
 ### Testler (Sim.Tests.EditMode)
 Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştırma:
@@ -101,7 +105,8 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 1. Doğru klasörde: `git pull origin claude/slack-session-f6uh9g`
 2. Unity Hub → 6000.5.9f1 ile projeyi aç (Package Manager güncelleme sorarsa kabul et).
 3. Boş sahnede boş bir GameObject'e `SimulationBootstrap` bileşenini ekle → **Play**.
-4. Sahne kendini kurar. HUD sol üstte görev/skor/temasları gösterir.
+4. Sahne kendini kurar ve **görev seçim menüsü** açılır (sim duraklatılmış olarak bekler).
+   Bir görev seç → görev başlar. HUD sol üstte görev/skor/temasları gösterir. **M** menüye döner.
 
 **Kamera kontrolleri:** Sağ tık basılı + fare = bak · WASD = uç · Shift = hızlan · Tab = drone takip et · F = serbest mod.
 
@@ -137,6 +142,7 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `bu tur (1/2)` | Yakıt artık gerçekten bitiyor: motor durur, drone süzülerek alçalır ve yere çakılır. |
 | `bu tur (2/2)` | Füze kaçınması: flare/chaff karşı tedbirleri, kaçış manevraları ve pilot yetenekleri (Q/E/X). |
 | `bu tur (1/2)` | Üste ikmal: drone'lar üste bekleyince yakıt, mühimmat ve flare ikmali alıp göreve dönüyor. |
+| `bu tur (2/2)` | Senaryo kütüphanesi + görev seçim menüsü (Keşif / SEAD / Hava Muharebesi / Karma Savunma). |
 
 ---
 
@@ -167,6 +173,16 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   `MissileIncoming`/`TimeToImpact` üretiyor, `CountermeasureDispenser` ile flare/chaff atıyor
   (etkisi zamanlama + açıya bağlı, `MissileThreat`) ve `EvasiveManeuver` ile kaçış manevrası yapıyor.
   Oyuncu aynı araçlara **Q** (flare), **E** (art yakıcı) ve **X** (otomatik kaçış) ile erişiyor.
+- **Üste ikmal:** Üsse dönen drone `baseRadius` içinde `serviceSeconds` kadar bekleyince yakıt, top,
+  füze ve flare ikmali alıp göreve dönüyor (`ResupplyPoint` + `IhaController.Resupply()`); servis
+  sırasında üssün üzerinde yavaş tur atıyor. Mühimmatı biten filo yüzünden dalganın kilitlenmesi
+  sorunu böylece ortadan kalktı.
+- **Görev seçimi:** Artık tek bir sabit senaryo yok. `ScenarioLibrary` dört görev tanımlıyor
+  (Keşif / SEAD / Hava Muharebesi / Karma Savunma), her biri kendi dalga sayısı ve dalga başına
+  düşman kompozisyonuyla; `ScenarioMenu` açılışta brifing ekranı olarak çıkıyor ve **M** ile
+  görev sırasında yeniden açılıyor (seçim sahneyi yeniden yükleyerek sahayı temizliyor).
+  Seçilen görev statik `ScenarioController.SelectedKind`'de tutulduğu için R/menü yeniden
+  yüklemelerinden sağ çıkıyor.
 - **Skor:** `imha×100 − kayıp×150`. (Önceki sürümdeki saniyelik zaman cezası kaldırıldı; geçen süre HUD'da ayrı
   gösterilir.)
 
@@ -303,3 +319,21 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   Servis sonrası ayrı bir durum makinesine gerek yok — `EngagementPolicy.Decide` sadece
   yakıt/mühimmat/hedef okuduğu için dolu depo + dolu şarjör `State`'i aynı karede `ReturnToBase`'den
   `Patrol`/`Engage`'e çeviriyor. `Hud` drone satırında ve pilot panelinde `[İKMAL %NN]` gösteriyor.
+- **Senaryo kütüphanesi ve görev seçim menüsü:** Keşif, SEAD, Hava Muharebesi ve Karma Savunma
+  görevleri; her senaryonun kendi dalga sayısı ve düşman kompozisyonu var. **M** ile menüye dönülür.
+  Test-driven `ScenarioLibrary` (+ `ScenarioKind`, `WaveComposition`) Core + EditMode testleri
+  eklendi: Keşif yalnız yerdeki sabit hedefler + AAA (2 dalga), SEAD yalnız SAM/AAA (3 dalga),
+  Hava Muharebesi yalnız avcı drone'lar (3 dalga), Karma Savunma ise dört tipi de mevcut `WavePlan`'e
+  devrederek kuruyor (4 dalga). `ScenarioController` artık `WavePlan` yerine
+  `ScenarioLibrary.Composition(SelectedKind, dalga)` ile spawn ediyor; seçilen görev
+  **statik** `SelectedKind`'de tutuluyor (R ile sahne yeniden yüklenince kaybolmasın diye) ve
+  `Started` bayrağı `BeginMission()` çağrılana kadar `Update`'i tamamen (spawn + bozgun kontrolü
+  dahil) durduruyor. Yeni `ScenarioMenu` kurulum gerektirmeyen IMGUI brifing ekranı: açılışta
+  `Time.timeScale = 0` ile sim'i dondurup görevleri başlık/açıklama/dalga sayısıyla listeliyor,
+  seçimde `BeginMission()` çağırıp zamanı serbest bırakıyor; görev sırasında **M** menüyü yeniden
+  açıyor ve oradaki seçim `GameControls`'un R yolunu (`TargetRegistry.Clear()` + `LoadScene`)
+  aynen kullanarak sahayı temizliyor (statik `_autoBegin` sayesinde yeniden yüklemeden sonra
+  brifing bir daha sorulmuyor). Menü `timeScale == 0` altında çalıştığı için `Time.deltaTime`
+  kullanmıyor. `SimulationBootstrap` menüyü ScenarioController'dan **sonra** ekliyor (menü onu
+  bulabilsin diye); `Hud` panel başında aktif görev adını gösteriyor, menü açıkken tamamen
+  gizleniyor ve kontrol ipuçlarına `M: görev menüsü` eklendi.
