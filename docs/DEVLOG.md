@@ -69,6 +69,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `ScenarioLibrary` | Görev kütüphanesi: her senaryonun başlığı, brifingi, dalga sayısı ve dalga başına düşman kompozisyonu. |
 | `ScenarioKind` | Seçilebilir görev tipleri: Keşif / SEAD / Hava Muharebesi / Karma Savunma. |
 | `WaveComposition` | Bir dalganın düşman kompozisyonu (sabit hedef / SAM / AAA / avcı + toplam). |
+| `TerrainField` | Deterministik prosedürel arazi yükseklik alanı (Perlin + üs çevresinde düz bölge); hem arazi mesh'i hem de yer birimlerinin yerleşimi bunu kullanır. |
 
 ### Sim.Runtime (ince MonoBehaviour'lar)
 | Bileşen | Görevi |
@@ -94,6 +95,9 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `PlayerDroneController` | Pilot modu: oyuncu dost bir drone'u devralıp elle uçurur (C/Tab/W/S/A/D/↑↓/Space/F + Q/E/X). |
 | `CountermeasureDispenser` | `CountermeasureSystem` sarmalayıcısı: flare/chaff salvosu, salvo sayacı (füzeler bunu izler), kısa görsel puf. |
 | `ScenarioMenu` | Kurulum gerektirmeyen IMGUI görev seçim/brifing ekranı: açılışta çıkar, sim'i duraklatır, `M` ile tekrar açılır. |
+| `MaterialLibrary` | Standard/URP uyumlu, önbelleklenmiş materyal fabrikası (renk, metalik, pürüzsüzlük, emisyon). |
+| `VehicleModelBuilder` | Primitive'lerden araç siluetleri kurar (İHA, SİHA, düşman avcısı, SAM, AAA, yer hedefi); parçaların collider'ları silinir, fizik etkilenmez. |
+| `EnvironmentBuilder` | Prosedürel arazi mesh'i, üs pisti, ağaç/kaya/bina dağılımı ve gökyüzü/sis/ortam ışığı/güneş ayarı (tamamı görsel). |
 
 ### Testler (Sim.Tests.EditMode)
 Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştırma:
@@ -143,6 +147,7 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `bu tur (2/2)` | Füze kaçınması: flare/chaff karşı tedbirleri, kaçış manevraları ve pilot yetenekleri (Q/E/X). |
 | `bu tur (1/2)` | Üste ikmal: drone'lar üste bekleyince yakıt, mühimmat ve flare ikmali alıp göreve dönüyor. |
 | `bu tur (2/2)` | Senaryo kütüphanesi + görev seçim menüsü (Keşif / SEAD / Hava Muharebesi / Karma Savunma). |
+| `bu tur (1/2)` | Görsel yenileme (1/2): araç siluetleri, prosedürel arazi ve atmosfer. |
 
 ---
 
@@ -337,3 +342,10 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   kullanmıyor. `SimulationBootstrap` menüyü ScenarioController'dan **sonra** ekliyor (menü onu
   bulabilsin diye); `Hud` panel başında aktif görev adını gösteriyor, menü açıkken tamamen
   gizleniyor ve kontrol ipuçlarına `M: görev menüsü` eklendi.
+- **Görsel yenileme (1/2):** primitive'lerden inşa edilen gerçek araç siluetleri (İHA, SİHA, düşman
+  avcısı, SAM, AAA, yer hedefi), prosedürel tepeli arazi + üs pisti + ağaç/kaya/bina dağılımı,
+  gökyüzü/sis/ortam ışığı ve metalik malzemeler. Test-driven `TerrainField` (Core) yükseklik alanını
+  hem `EnvironmentBuilder`'ın arazi mesh'i hem de `ScenarioController`'ın yer birimleri kullanıyor,
+  böylece SAM/AAA/yer hedefleri araziye oturuyor. Modeller birimin kökü altında tek bir `"Model"`
+  çocuğunda toplanıyor, her parçanın collider'ı siliniyor ve kökün mesh'i gizleniyor — **oynanış
+  değerleri (menzil, hasar, irtifa, spawn konumları) değişmedi**, değişiklik tamamen kozmetik.

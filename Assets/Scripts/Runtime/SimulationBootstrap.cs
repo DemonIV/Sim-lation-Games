@@ -81,16 +81,17 @@ namespace Sim.Runtime
                 light.intensity = 1f;
                 lightGo.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
             }
+
+            // Sky, fog, ambient light and sun tuning for the procedural landscape (cosmetic only).
+            EnvironmentBuilder.ApplyAtmosphere(Camera.main, FindAnyObjectByType<Light>());
         }
 
-        /// <summary>Creates a large ground plane at the origin.</summary>
+        /// <summary>Creates the procedural landscape: terrain mesh, airbase pad and scenery props.</summary>
         private void CreateGround()
         {
-            var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
-            ground.name = "Ground";
-            ground.transform.position = Vector3.zero;
-            ground.transform.localScale = new Vector3(20f, 1f, 20f);
-            ApplyColor(ground, new Color(0.25f, 0.35f, 0.25f));
+            EnvironmentBuilder.BuildTerrain();
+            EnvironmentBuilder.BuildAirbase(Vector3.zero);
+            EnvironmentBuilder.ScatterProps(150f);
         }
 
         /// <summary>Spawns a recon İHA drone (blue capsule) with a patrol route and friendly Targetable.</summary>
@@ -100,6 +101,9 @@ namespace Sim.Runtime
             go.name = name;
             go.transform.position = position;
             ApplyColor(go, color);
+            // Cosmetic: hide the placeholder capsule and build a recon-UAV silhouette in its place.
+            VehicleModelBuilder.HideRootMesh(go);
+            VehicleModelBuilder.BuildReconUav(go.transform, color);
             MarkFriendly(go);
 
             // Light defensive gun, added before the controller so its Start() picks it up.
@@ -124,6 +128,9 @@ namespace Sim.Runtime
             go.name = name;
             go.transform.position = position;
             ApplyColor(go, color);
+            // Cosmetic: hide the placeholder capsule and build an armed-UAV silhouette in its place.
+            VehicleModelBuilder.HideRootMesh(go);
+            VehicleModelBuilder.BuildArmedUav(go.transform, color);
             MarkFriendly(go);
 
             // Stronger gun than the recon İHA, added before the controller so its Start() picks it up.

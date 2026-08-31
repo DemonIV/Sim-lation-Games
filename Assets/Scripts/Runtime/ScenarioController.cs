@@ -181,11 +181,16 @@ namespace Sim.Runtime
         /// <summary>Spawns a plain objective hostile: a grey cube with no weapon (pure target).</summary>
         private void SpawnPlainHostile(Vector3 pos, string name)
         {
+            // Cosmetic: sit on the procedural terrain surface (x/z unchanged).
+            pos.y = TerrainField.Height(pos.x, pos.z);
+
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
             go.name = name;
             go.transform.position = pos;
             go.transform.localScale = new Vector3(2f, 2f, 2f);
             ApplyColor(go, new Color(0.5f, 0.5f, 0.5f));
+            VehicleModelBuilder.HideRootMesh(go);
+            VehicleModelBuilder.BuildGroundTarget(go.transform, new Color(0.5f, 0.5f, 0.5f));
 
             var targetable = go.AddComponent<Targetable>();
             targetable.Faction = 1;
@@ -201,11 +206,16 @@ namespace Sim.Runtime
         /// </summary>
         private void SpawnSam(Vector3 pos, string name)
         {
+            // Cosmetic: sit on the procedural terrain surface (x/z unchanged).
+            pos.y = TerrainField.Height(pos.x, pos.z);
+
             var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             go.name = name;
             go.transform.position = pos;
             go.transform.localScale = new Vector3(3f, 2f, 3f);
             ApplyColor(go, new Color(0.5f, 0.05f, 0.05f));
+            VehicleModelBuilder.HideRootMesh(go);
+            VehicleModelBuilder.BuildSamSite(go.transform, new Color(0.5f, 0.05f, 0.05f));
 
             var targetable = go.AddComponent<Targetable>();
             targetable.Faction = 1;
@@ -224,11 +234,16 @@ namespace Sim.Runtime
         /// </summary>
         private void SpawnAaa(Vector3 pos, string name)
         {
+            // Cosmetic: sit on the procedural terrain surface (x/z unchanged).
+            pos.y = TerrainField.Height(pos.x, pos.z);
+
             var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             go.name = name;
             go.transform.position = pos;
             go.transform.localScale = new Vector3(2f, 1.5f, 2f);
             ApplyColor(go, new Color(1f, 0.55f, 0.1f));
+            VehicleModelBuilder.HideRootMesh(go);
+            VehicleModelBuilder.BuildAaaSite(go.transform, new Color(1f, 0.55f, 0.1f));
 
             var targetable = go.AddComponent<Targetable>();
             targetable.Faction = 1;
@@ -253,6 +268,9 @@ namespace Sim.Runtime
             go.transform.position = pos;
             go.transform.localScale = new Vector3(1f, 1f, 1f);
             ApplyColor(go, new Color(0.55f, 0.1f, 0.6f));
+            // Cosmetic only — the airborne spawn altitude is untouched.
+            VehicleModelBuilder.HideRootMesh(go);
+            VehicleModelBuilder.BuildEnemyFighter(go.transform, new Color(0.55f, 0.1f, 0.6f));
 
             var targetable = go.AddComponent<Targetable>();
             targetable.Faction = 1;
