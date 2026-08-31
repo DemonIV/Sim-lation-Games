@@ -178,6 +178,20 @@ namespace Sim.Runtime
             return new Vector3(x, groundY, z);
         }
 
+        /// <summary>
+        /// Moves a freshly spawned enemy under the generated-world root
+        /// (<see cref="SimulationBootstrap.Root"/>) so a restart tears it down with everything else.
+        /// World pose is kept, and the call is a no-op when there is no root (e.g. this controller
+        /// dropped into a hand-authored scene).
+        /// </summary>
+        private static void ParentToSimulationRoot(GameObject go)
+        {
+            if (go == null) return;
+            Transform root = SimulationBootstrap.Root;
+            if (root == null) return;
+            go.transform.SetParent(root, true);
+        }
+
         /// <summary>Spawns a plain objective hostile: a grey cube with no weapon (pure target).</summary>
         private void SpawnPlainHostile(Vector3 pos, string name)
         {
@@ -188,6 +202,7 @@ namespace Sim.Runtime
             go.name = name;
             go.transform.position = pos;
             go.transform.localScale = new Vector3(2f, 2f, 2f);
+            ParentToSimulationRoot(go);
             ApplyColor(go, new Color(0.5f, 0.5f, 0.5f));
             VehicleModelBuilder.HideRootMesh(go);
             VehicleModelBuilder.BuildGroundTarget(go.transform, new Color(0.5f, 0.5f, 0.5f));
@@ -216,6 +231,7 @@ namespace Sim.Runtime
             go.name = name;
             go.transform.position = pos;
             go.transform.localScale = new Vector3(3f, 2f, 3f);
+            ParentToSimulationRoot(go);
             ApplyColor(go, new Color(0.5f, 0.05f, 0.05f));
             VehicleModelBuilder.HideRootMesh(go);
             VehicleModelBuilder.BuildSamSite(go.transform, new Color(0.5f, 0.05f, 0.05f));
@@ -250,6 +266,7 @@ namespace Sim.Runtime
             go.name = name;
             go.transform.position = pos;
             go.transform.localScale = new Vector3(2f, 1.5f, 2f);
+            ParentToSimulationRoot(go);
             ApplyColor(go, new Color(1f, 0.55f, 0.1f));
             VehicleModelBuilder.HideRootMesh(go);
             VehicleModelBuilder.BuildAaaSite(go.transform, new Color(1f, 0.55f, 0.1f));
@@ -282,6 +299,7 @@ namespace Sim.Runtime
             go.name = name;
             go.transform.position = pos;
             go.transform.localScale = new Vector3(1f, 1f, 1f);
+            ParentToSimulationRoot(go);
             ApplyColor(go, new Color(0.55f, 0.1f, 0.6f));
             // Cosmetic only — the airborne spawn altitude is untouched.
             VehicleModelBuilder.HideRootMesh(go);
