@@ -196,6 +196,9 @@ namespace Sim.Runtime
             targetable.Faction = 1;
             targetable.MaxHealth = 60f;
 
+            // Cosmetic: smoke/fire once the unit is badly damaged.
+            go.AddComponent<DamageVisuals>();
+
             // Aspect-dependent radar signature so friendly RadarSensors see angle-varying RCS.
             go.AddComponent<RcsComponent>();
         }
@@ -220,6 +223,9 @@ namespace Sim.Runtime
             var targetable = go.AddComponent<Targetable>();
             targetable.Faction = 1;
             targetable.MaxHealth = 120f;
+
+            // Cosmetic: smoke/fire once the unit is badly damaged.
+            go.AddComponent<DamageVisuals>();
 
             go.AddComponent<RcsComponent>();
 
@@ -249,6 +255,9 @@ namespace Sim.Runtime
             targetable.Faction = 1;
             targetable.MaxHealth = 70f;
 
+            // Cosmetic: smoke/fire once the unit is badly damaged.
+            go.AddComponent<DamageVisuals>();
+
             go.AddComponent<RcsComponent>();
 
             var site = go.AddComponent<AirDefenseSite>();
@@ -275,6 +284,9 @@ namespace Sim.Runtime
             var targetable = go.AddComponent<Targetable>();
             targetable.Faction = 1;
             targetable.MaxHealth = 70f;
+
+            // Cosmetic: smoke/fire once the unit is badly damaged.
+            go.AddComponent<DamageVisuals>();
 
             go.AddComponent<RcsComponent>();
 

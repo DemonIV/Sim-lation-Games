@@ -67,6 +67,47 @@ namespace Sim.Runtime
             return mat;
         }
 
+        /// <summary>
+        /// Creates a NEW (uncached) material set up for alpha blending, for effects that fade their
+        /// own alpha out (smoke puffs, scorch marks). Handles both the built-in Standard shader and
+        /// URP/Lit defensively — every property write is guarded by <c>HasProperty</c>.
+        ///
+        /// Because the instance is NOT cached, the caller owns it and must
+        /// <c>Object.Destroy(material)</c> when the effect goes away.
+        /// </summary>
+        public static Material CreateTransparent(Color color)
+        {
+            Shader shader = ResolveShader();
+            if (shader == null) return null;
+
+            var mat = new Material(shader);
+
+            // Built-in Standard shader transparent setup.
+            if (mat.HasProperty("_Mode")) mat.SetFloat("_Mode", 2f);
+
+            // URP/Lit transparent setup (Surface = Transparent, Blend = Alpha).
+            if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1f);
+            if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 0f);
+
+            // Blend state, shared by both pipelines.
+            if (mat.HasProperty("_SrcBlend"))
+                mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            if (mat.HasProperty("_DstBlend"))
+                mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            if (mat.HasProperty("_ZWrite")) mat.SetInt("_ZWrite", 0);
+
+            mat.DisableKeyword("_ALPHATEST_ON");
+            mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            mat.EnableKeyword("_ALPHABLEND_ON");
+            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            mat.renderQueue = 3000;
+
+            if (mat.HasProperty("_Color")) mat.SetColor("_Color", color);
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
+
+            return mat;
+        }
+
         /// <summary>Assigns a shared material to the GameObject's Renderer, if it has one.</summary>
         public static void Apply(GameObject go, Material mat)
         {

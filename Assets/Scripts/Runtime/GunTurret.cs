@@ -101,10 +101,26 @@ namespace Sim.Runtime
             if (!gun.TryFire()) return false;
 
             TracerEffect.Spawn(self, targetPos, tracerColor);
+            MuzzleFlash();
 
             float p = HitProbability.Compute(dist, gun.EffectiveRange, gun.DispersionDeg, targetRadius);
-            if (Random.value <= p) target.TakeDamage(damagePerRound);
+            if (Random.value <= p)
+            {
+                target.TakeDamage(damagePerRound);
+                VfxLibrary.Spark(targetPos, (self - targetPos).normalized, 6, 0.25f);
+            }
             return true;
+        }
+
+        /// <summary>
+        /// Cosmetic muzzle blast for a round leaving the barrel: a very short emissive puff plus a
+        /// brief point light, placed slightly ahead of the turret along its forward axis.
+        /// </summary>
+        private void MuzzleFlash()
+        {
+            Vector3 muzzle = transform.position + transform.forward * 1.2f;
+            VfxLibrary.Glow(muzzle, 0.35f, new Color(1f, 0.95f, 0.55f), new Color(3f, 2.4f, 0.9f), 0.05f);
+            VfxLibrary.Flash(muzzle, 4f, new Color(1f, 0.85f, 0.5f), 2f, 0.05f);
         }
 
         /// <summary>
@@ -122,6 +138,8 @@ namespace Sim.Runtime
             if (aimDir.sqrMagnitude <= 1e-6f) aimDir = transform.forward;
             aimDir = aimDir.normalized;
 
+            MuzzleFlash();
+
             Targetable hit = FindTargetNearRay(self, aimDir, gun.EffectiveRange, enemyFaction, out float hitDist);
 
             if (hit == null)
@@ -130,10 +148,15 @@ namespace Sim.Runtime
                 return true;
             }
 
-            TracerEffect.Spawn(self, hit.transform.position, tracerColor);
+            Vector3 hitPos = hit.transform.position;
+            TracerEffect.Spawn(self, hitPos, tracerColor);
 
             float p = HitProbability.Compute(hitDist, gun.EffectiveRange, gun.DispersionDeg, targetRadius);
-            if (Random.value <= p) hit.TakeDamage(damagePerRound);
+            if (Random.value <= p)
+            {
+                hit.TakeDamage(damagePerRound);
+                VfxLibrary.Spark(hitPos, (self - hitPos).normalized, 6, 0.25f);
+            }
             return true;
         }
 

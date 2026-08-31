@@ -34,6 +34,83 @@ namespace Sim.Runtime
         private float _pilotSearchTimer;
         private const float PilotSearchInterval = 2f;
 
+        // ---------------------------------------------------------------- camera shake (cosmetic)
+
+        // The active rig, so effects can ask for a shake without a scene lookup every explosion.
+        private static CameraRig _instance;
+
+        // Current shake impulse: peak amplitude, total duration and how far into it we are.
+        private float _shakeStrength;
+        private float _shakeDuration;
+        private float _shakeElapsed;
+
+        // The offset/rotation actually written to the transform last frame. It is undone at the top of
+        // Update so the follow/free-fly logic always works on the clean, un-shaken pose.
+        private Vector3 _appliedShakeOffset;
+        private Quaternion _appliedShakeRot = Quaternion.identity;
+
+        /// <summary>
+        /// Asks the active camera rig to shake with the given peak amplitude (world units) for the
+        /// given duration. Safe to call when there is no camera rig in the scene.
+        /// </summary>
+        public static void RequestShake(float strength, float duration)
+        {
+            CameraRig rig = _instance;
+            if (rig == null)
+            {
+                rig = FindAnyObjectByType<CameraRig>();
+                _instance = rig;
+            }
+            if (rig == null) return;
+            rig.AddShake(strength, duration);
+        }
+
+        /// <summary>Starts (or replaces with a stronger) shake impulse.</summary>
+        private void AddShake(float strength, float duration)
+        {
+            if (strength <= 0f || duration <= 0f) return;
+            // The strongest concurrent blast wins and restarts the decay.
+            if (_shakeDuration <= 0f || strength >= _shakeStrength)
+            {
+                _shakeStrength = strength;
+                _shakeDuration = duration;
+                _shakeElapsed = 0f;
+            }
+        }
+
+        /// <summary>Adds the decaying shake offset AFTER the normal camera placement for this frame.</summary>
+        private void ApplyShake()
+        {
+            if (_shakeDuration <= 0f) return;
+
+            _shakeElapsed += Time.unscaledDeltaTime;
+            if (_shakeElapsed >= _shakeDuration)
+            {
+                _shakeDuration = 0f;
+                _shakeStrength = 0f;
+                return;
+            }
+
+            float amp = _shakeStrength * (1f - _shakeElapsed / _shakeDuration);
+            _appliedShakeOffset = Random.insideUnitSphere * amp;
+            _appliedShakeRot = Quaternion.Euler(Random.Range(-amp, amp) * 8f,
+                                                Random.Range(-amp, amp) * 8f,
+                                                Random.Range(-amp, amp) * 8f);
+
+            transform.position += _appliedShakeOffset;
+            transform.rotation = transform.rotation * _appliedShakeRot;
+        }
+
+        private void Awake()
+        {
+            _instance = this;
+        }
+
+        private void OnDestroy()
+        {
+            if (_instance == this) _instance = null;
+        }
+
         private void Start()
         {
             // Seed yaw/pitch from the camera's current rotation so there is no snap on first look.
@@ -42,8 +119,23 @@ namespace Sim.Runtime
             _yaw = euler.y;
         }
 
+        private void LateUpdate()
+        {
+            ApplyShake();
+        }
+
         private void Update()
         {
+            // Undo last frame's shake before doing anything else, so the placement logic below never
+            // sees (or accumulates) the cosmetic offset.
+            if (_appliedShakeOffset != Vector3.zero || _appliedShakeRot != Quaternion.identity)
+            {
+                transform.position -= _appliedShakeOffset;
+                transform.rotation = transform.rotation * Quaternion.Inverse(_appliedShakeRot);
+                _appliedShakeOffset = Vector3.zero;
+                _appliedShakeRot = Quaternion.identity;
+            }
+
             // Pilot mode wins: chase the drone the player is flying and swallow ALL camera input
             // (Tab/F/WASD belong to the pilot then). Normal behaviour returns on release.
             if (PilotActive())

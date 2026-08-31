@@ -41,7 +41,13 @@ namespace Sim.Runtime
             Health.ApplyDamage(amount);
             if (Health.IsDestroyed)
             {
-                ExplosionEffect.Spawn(transform.position, 6f);
+                Vector3 pos = transform.position;
+                ExplosionEffect.Spawn(pos, 6f);
+
+                // Cosmetic: a unit destroyed on (or just above) the ground leaves a burn mark behind.
+                if (pos.y <= Sim.Core.TerrainField.Height(pos.x, pos.z) + 3f)
+                    ScorchMark.Spawn(pos, 3.5f);
+
                 Destroy(gameObject);
             }
         }

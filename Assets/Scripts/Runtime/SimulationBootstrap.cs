@@ -153,6 +153,9 @@ namespace Sim.Runtime
             var targetable = go.AddComponent<Targetable>();
             targetable.Faction = 0;
             targetable.MaxHealth = 100f;
+
+            // Cosmetic: smoke/fire once the drone is badly damaged.
+            go.AddComponent<DamageVisuals>();
         }
 
         /// <summary>Injects the patrol waypoint transforms into a controller via its serialized private field.</summary>

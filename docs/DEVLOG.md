@@ -98,6 +98,9 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `MaterialLibrary` | Standard/URP uyumlu, önbelleklenmiş materyal fabrikası (renk, metalik, pürüzsüzlük, emisyon). |
 | `VehicleModelBuilder` | Primitive'lerden araç siluetleri kurar (İHA, SİHA, düşman avcısı, SAM, AAA, yer hedefi); parçaların collider'ları silinir, fizik etkilenmez. |
 | `EnvironmentBuilder` | Prosedürel arazi mesh'i, üs pisti, ağaç/kaya/bina dağılımı ve gökyüzü/sis/ortam ışığı/güneş ayarı (tamamı görsel). |
+| `VfxLibrary` | Asset'siz efekt primitifleri (emisyonlu parlama, nokta ışığı patlaması, enkaz, saydam duman, şok dalgası halkası, kıvılcım); global efekt bütçesi ile sınırlı, hepsi kendini yok eder. |
+| `ScorchMark` | İmha edilen yer birimlerinin arazide bıraktığı, zamanla sönen yanık izi (en fazla 40 iz). |
+| `DamageVisuals` | Can oranı düşen birimlerde duman, kritik seviyede alev efekti (yalnızca `Health` okur). |
 
 ### Testler (Sim.Tests.EditMode)
 Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştırma:
@@ -148,6 +151,7 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `bu tur (1/2)` | Üste ikmal: drone'lar üste bekleyince yakıt, mühimmat ve flare ikmali alıp göreve dönüyor. |
 | `bu tur (2/2)` | Senaryo kütüphanesi + görev seçim menüsü (Keşif / SEAD / Hava Muharebesi / Karma Savunma). |
 | `bu tur (1/2)` | Görsel yenileme (1/2): araç siluetleri, prosedürel arazi ve atmosfer. |
+| `bu tur (2/2a)` | Görsel yenileme (2/2a): katmanlı patlama efekti, namlu ateşi/kıvılcımlar, füze egzoz izi, hasar dumanı ve yanık izleri. |
 
 ---
 
@@ -349,3 +353,8 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   böylece SAM/AAA/yer hedefleri araziye oturuyor. Modeller birimin kökü altında tek bir `"Model"`
   çocuğunda toplanıyor, her parçanın collider'ı siliniyor ve kökün mesh'i gizleniyor — **oynanış
   değerleri (menzil, hasar, irtifa, spawn konumları) değişmedi**, değişiklik tamamen kozmetik.
+- **Görsel yenileme (2/2a):** katmanlı patlama efekti (ışık patlaması, ateş topu, şok dalgası,
+  enkaz, duman sütunu), namlu ateşi ve isabet kıvılcımları, füze motor alevi ve egzoz izi, hasarlı
+  birimlerde duman/alev, imha yerinde yanık izi, patlamada kamera sarsıntısı. Tüm efektler
+  `VfxLibrary`'nin global bütçesine (220 canlı efekt) tabi, collider'sız ve ölçekli `Time.deltaTime`
+  ile kendini yok ediyor — **oynanış değerleri değişmedi**, değişiklik tamamen kozmetik.

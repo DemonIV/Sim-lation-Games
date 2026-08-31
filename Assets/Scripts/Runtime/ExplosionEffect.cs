@@ -20,15 +20,51 @@ namespace Sim.Runtime
         private static readonly Color BaseColor = new Color(1f, 0.5f, 0.1f);
 
         /// <summary>
-        /// Creates a GameObject carrying an <see cref="ExplosionEffect"/> at the given position and
-        /// initializes it to grow up to <paramref name="size"/> world units before self-destructing.
+        /// Creates a layered blast at the given position, scaled by <paramref name="size"/> world units:
+        /// a light flash, the expanding fireball shell, a shockwave ring, debris, a rising smoke column
+        /// and a distance-attenuated camera shake. Every layer is budgeted and self-destroying, and the
+        /// whole thing is a no-op-safe cosmetic effect — the signature is unchanged so all existing call
+        /// sites keep working.
         /// </summary>
         public static void Spawn(Vector3 position, float size)
         {
+            float s = Mathf.Max(0.01f, size);
+
+            // 1) Instant light flash so nearby geometry is lit by the blast.
+            VfxLibrary.Flash(position, s * 6f, new Color(1f, 0.75f, 0.35f), 6f * (s / 3f), 0.25f);
+
+            // 2) Fireball: the expanding emissive shell.
             var go = new GameObject("ExplosionEffect");
             go.transform.position = position;
             var fx = go.AddComponent<ExplosionEffect>();
-            fx.Initialize(size);
+            fx.Initialize(s);
+
+            // 3) Shockwave ring racing outward along the ground plane.
+            VfxLibrary.Shockwave(position, s * 2.5f, 0.4f, new Color(1.5f, 0.9f, 0.4f));
+
+            // 4) Debris fragments.
+            VfxLibrary.Debris(position, Mathf.RoundToInt(4f + s * 1.5f), s * 0.12f, s * 3f,
+                              new Color(0.18f, 0.17f, 0.16f), 1.6f);
+
+            // 5) Smoke column: a few offset puffs rising at slightly different rates.
+            var smokeColor = new Color(0.16f, 0.15f, 0.15f, 0.55f);
+            int puffs = 3 + (s > 4f ? 1 : 0);
+            for (int i = 0; i < puffs; i++)
+            {
+                Vector3 offset = new Vector3(Random.Range(-0.35f, 0.35f), i * 0.4f, Random.Range(-0.35f, 0.35f)) * s;
+                VfxLibrary.Smoke(position + offset, s * 0.5f, 2.5f + i * 0.4f,
+                                 Random.Range(1.6f, 2.4f), smokeColor);
+            }
+
+            // 6) Camera shake, strongest close up and gone entirely far away.
+            Camera cam = Camera.main;
+            if (cam != null)
+            {
+                float dist = Vector3.Distance(cam.transform.position, position);
+                float falloff = Mathf.Clamp01(1f - dist / (s * 25f));
+                float strength = s * 0.12f * falloff;
+                if (strength > 0.001f) CameraRig.RequestShake(strength, 0.35f);
+            }
         }
 
         /// <summary>Builds the emissive sphere visual and stores the target size.</summary>

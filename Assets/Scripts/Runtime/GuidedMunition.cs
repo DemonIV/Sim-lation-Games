@@ -41,6 +41,10 @@ namespace Sim.Runtime
         private float _elapsed;
         private bool _launched;
 
+        // Cosmetic only: guards one-time visual construction and throttles the exhaust trail puffs.
+        private bool _visualsBuilt;
+        private float _exhaustTimer;
+
         // The target's flare/chaff dispenser (if any) plus the last salvo number this munition has
         // already rolled against, so every salvo is rolled exactly ONCE per missile.
         private CountermeasureDispenser _targetCm;
@@ -124,6 +128,9 @@ namespace Sim.Runtime
         /// </summary>
         private void SetupVisuals()
         {
+            if (_visualsBuilt) return;
+            _visualsBuilt = true;
+
             Color glow = new Color(1f, 0.85f, 0.2f);
 
             // Bright, self-lit body so the munition pops against the ground/sky.
@@ -161,6 +168,20 @@ namespace Sim.Runtime
                 if (trailShader == null) trailShader = Shader.Find("Standard");
                 if (trailShader != null) trail.material = new Material(trailShader) { color = glow };
             }
+
+            // Cosmetic: a bright emissive sphere at the rear reads as the rocket motor burning.
+            var engine = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            engine.name = "EngineGlow";
+            engine.transform.SetParent(transform, false);
+            engine.transform.localPosition = new Vector3(0f, 0f, -0.6f);
+            engine.transform.localScale = Vector3.one * 0.35f;
+
+            var engineCollider = engine.GetComponent<Collider>();
+            if (engineCollider != null) Destroy(engineCollider);
+
+            Material engineMat = MaterialLibrary.Create(new Color(1f, 0.7f, 0.2f), 0f, 0.6f,
+                                                        new Color(3f, 1.6f, 0.4f));
+            if (engineMat != null) MaterialLibrary.Apply(engine, engineMat);
         }
 
         private void FixedUpdate()
@@ -248,6 +269,16 @@ namespace Sim.Runtime
                 transform.forward = _velocity.normalized;
 
             Debug.DrawLine(self, newPos, Color.magenta);
+
+            // Cosmetic: leave a puffed exhaust trail alongside the TrailRenderer. Throttled so the
+            // effect budget is not eaten by a single missile.
+            _exhaustTimer += dt;
+            if (_exhaustTimer >= 0.08f)
+            {
+                _exhaustTimer = 0f;
+                VfxLibrary.Smoke(newPos - transform.forward * 0.8f, 0.35f, 1.2f, 0.7f,
+                                 new Color(0.55f, 0.54f, 0.52f, 0.35f));
+            }
 
             // Proximity fuze: detonate when close enough.
             if (Vector3.Distance(newPos, targetPos) <= proximityFuzeRadius)
