@@ -21,8 +21,22 @@ namespace Sim.Runtime
         // Cached GUI styles (built lazily on first OnGUI so we're on the GUI thread).
         private GUIStyle _labelStyle;
         private GUIStyle _titleStyle;
+        private GUIStyle _smallStyle;
+        private GUIStyle _warningStyle;
         private GUIStyle _bannerStyle;
         private GUIStyle _centerHintStyle;
+        private GUIStyle _panelStyle;
+
+        // 1x1 textures built once: a plain white one (tinted via GUI.color when drawing bars) and the
+        // dark translucent panel background.
+        private Texture2D _white;
+        private Texture2D _panelTex;
+
+        // Bar palette: green above 50%, amber between 20% and 50%, red below 20%.
+        private static readonly Color BarGreen = new Color(0.30f, 0.80f, 0.35f, 0.95f);
+        private static readonly Color BarAmber = new Color(0.95f, 0.70f, 0.20f, 0.95f);
+        private static readonly Color BarRed = new Color(0.90f, 0.25f, 0.20f, 0.95f);
+        private static readonly Color BarBack = new Color(0.08f, 0.09f, 0.10f, 0.90f);
 
         // Occasional refresh of the sensor list so newly spawned drones show up.
         private float _refreshTimer;
@@ -58,12 +72,49 @@ namespace Sim.Runtime
             _sensors = FindObjectsByType<RadarSensor>(FindObjectsSortMode.None);
         }
 
+        /// <summary>Builds a 1x1 texture of the given colour, kept out of the scene/asset database.</summary>
+        private static Texture2D SolidTexture(Color color)
+        {
+            var tex = new Texture2D(1, 1);
+            tex.SetPixel(0, 0, color);
+            tex.Apply();
+            tex.hideFlags = HideFlags.HideAndDontSave;
+            return tex;
+        }
+
         private void EnsureStyles()
         {
+            if (_white == null) _white = SolidTexture(Color.white);
+            if (_panelTex == null) _panelTex = SolidTexture(new Color(0.05f, 0.06f, 0.07f, 0.85f));
+
+            if (_panelStyle == null)
+            {
+                _panelStyle = new GUIStyle(GUI.skin.box);
+                _panelStyle.normal.background = _panelTex;
+                _panelStyle.padding = new RectOffset(10, 10, 8, 8);
+            }
+
             if (_labelStyle == null)
+            {
                 _labelStyle = new GUIStyle(GUI.skin.label) { fontSize = 14 };
+                _labelStyle.normal.textColor = new Color(0.88f, 0.90f, 0.92f);
+            }
             if (_titleStyle == null)
+            {
                 _titleStyle = new GUIStyle(GUI.skin.label) { fontSize = 18, fontStyle = FontStyle.Bold };
+                _titleStyle.normal.textColor = new Color(1f, 0.97f, 0.85f);
+            }
+            if (_smallStyle == null)
+            {
+                _smallStyle = new GUIStyle(GUI.skin.label) { fontSize = 11 };
+                _smallStyle.normal.textColor = new Color(0.95f, 0.96f, 0.98f);
+                _smallStyle.padding = new RectOffset(0, 0, 0, 0);
+            }
+            if (_warningStyle == null)
+            {
+                _warningStyle = new GUIStyle(GUI.skin.label) { fontSize = 14, fontStyle = FontStyle.Bold };
+                _warningStyle.normal.textColor = new Color(1f, 0.45f, 0.35f);
+            }
             if (_bannerStyle == null)
                 _bannerStyle = new GUIStyle(GUI.skin.label)
                 {
@@ -80,6 +131,46 @@ namespace Sim.Runtime
                 };
         }
 
+        /// <summary>Colour code for a 0..1 gauge: green above 50%, amber down to 20%, then red.</summary>
+        private static Color BarColor(float fraction01)
+        {
+            if (fraction01 > 0.5f) return BarGreen;
+            if (fraction01 >= 0.2f) return BarAmber;
+            return BarRed;
+        }
+
+        /// <summary>
+        /// Draws a horizontal gauge: a dark background box, a colour-coded filled foreground box and
+        /// the label drawn on top. Purely a presentation of a value the HUD already read.
+        /// </summary>
+        private void DrawBar(Rect r, float fraction01, Color fill, string label)
+        {
+            if (_white == null) return;
+
+            float f = Mathf.Clamp01(fraction01);
+            Color prev = GUI.color;
+
+            GUI.color = BarBack;
+            GUI.DrawTexture(r, _white);
+
+            if (f > 0f)
+            {
+                GUI.color = fill;
+                GUI.DrawTexture(new Rect(r.x, r.y, r.width * f, r.height), _white);
+            }
+
+            GUI.color = prev;
+            GUI.Label(new Rect(r.x + 4f, r.y - 1f, r.width - 6f, r.height + 2f), label, _smallStyle);
+        }
+
+        /// <summary>Reserves a layout rect and draws a labelled, colour-coded gauge in it.</summary>
+        private void LayoutBar(string label, float fraction01, float width)
+        {
+            Rect r = GUILayoutUtility.GetRect(width, 15f, GUILayout.Width(width));
+            float f = Mathf.Clamp01(fraction01);
+            DrawBar(r, f, BarColor(f), $"{label} {f * 100f:0}%");
+        }
+
         private void OnGUI()
         {
             // The mission-select briefing owns the screen while it is up; drawing the HUD over it
@@ -88,7 +179,7 @@ namespace Sim.Runtime
 
             EnsureStyles();
 
-            GUILayout.BeginArea(new Rect(10, 10, 340, 540), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(10, 10, 350, 620), _panelStyle);
             GUILayout.Label("İHA/SİHA Taktik Simülasyonu", _titleStyle);
             // Active mission, as picked in the ScenarioMenu.
             GUILayout.Label($"Görev: {ScenarioLibrary.Title(ScenarioController.SelectedKind)}", _labelStyle);
@@ -139,24 +230,27 @@ namespace Sim.Runtime
                     if (c == null) continue;
                     // Gun ammo only when this drone actually carries a GunTurret.
                     GunTurret gun = c.Gun;
-                    string gunText = gun != null ? $"  top={gun.AmmoFraction * 100f:0}%" : string.Empty;
                     // A dry tank is a death sentence (dead-stick descent), so flag it loudly.
                     bool dry = c.IsOutOfFuel;
                     string fuelText = dry ? "  [YAKIT BİTTİ]" : string.Empty;
                     // Flare/chaff charges, only when this drone carries a dispenser.
                     CountermeasureDispenser cm = c.Countermeasures;
-                    string flareText = cm != null ? $"  flare={cm.ChargeFraction * 100f:0}%" : string.Empty;
                     // Base servicing in progress (dwelling at base to refuel/rearm).
                     string supplyText = c.IsResupplying
                         ? $"  [İKMAL %{c.ResupplyProgress * 100f:0}]"
                         : string.Empty;
 
-                    Color prevLine = GUI.color;
-                    if (dry) GUI.color = Color.red;
-                    GUILayout.Label(
-                        $"  {c.name}: {c.State}  yakıt={c.FuelFraction * 100f:0}%  mühimmat={c.AmmoFraction * 100f:0}%{gunText}{flareText}{fuelText}{supplyText}",
-                        _labelStyle);
-                    GUI.color = prevLine;
+                    GUILayout.Label($"  {c.name}: {c.State}{fuelText}{supplyText}",
+                                    dry ? _warningStyle : _labelStyle);
+
+                    // Same numbers as before, now as colour-coded gauges.
+                    GUILayout.BeginHorizontal();
+                    LayoutBar("Yakıt", c.FuelFraction, 78f);
+                    LayoutBar("Müh.", c.AmmoFraction, 78f);
+                    if (gun != null) LayoutBar("Top", gun.AmmoFraction, 78f);
+                    if (cm != null) LayoutBar("Flare", cm.ChargeFraction, 78f);
+                    GUILayout.FlexibleSpace();
+                    GUILayout.EndHorizontal();
                     shown++;
                 }
             }
@@ -220,12 +314,12 @@ namespace Sim.Runtime
             IhaController drone = _pilot.Controlled;
             if (drone == null) return;
 
-            GUILayout.BeginArea(new Rect(Screen.width - 270f, 10f, 260f, 210f), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(Screen.width - 270f, 10f, 260f, 240f), _panelStyle);
             GUILayout.Label("PİLOT MODU", _titleStyle);
             GUILayout.Label($"Drone: {drone.name}", _labelStyle);
             GUILayout.Label($"Hız: {_pilot.Speed:0} m/s", _labelStyle);
             GUILayout.Label($"İrtifa: {drone.transform.position.y:0} m", _labelStyle);
-            GUILayout.Label($"Yakıt: {drone.FuelFraction * 100f:0}%", _labelStyle);
+            LayoutBar("Yakıt", drone.FuelFraction, 236f);
 
             if (drone.IsOutOfFuel)
             {
@@ -237,15 +331,15 @@ namespace Sim.Runtime
             }
 
             GunTurret gun = drone.Gun;
-            float gunAmmo = gun != null ? gun.AmmoFraction * 100f : 0f;
-            GUILayout.Label(gun != null ? $"Top: {gunAmmo:0}%" : "Top: yok", _labelStyle);
+            if (gun != null) LayoutBar("Top", gun.AmmoFraction, 236f);
+            else GUILayout.Label("Top: yok", _labelStyle);
 
             var siha = drone as SihaController;
-            if (siha != null)
-                GUILayout.Label($"Füze: {siha.AmmoFraction * 100f:0}%", _labelStyle);
+            if (siha != null) LayoutBar("Füze", siha.AmmoFraction, 236f);
 
             CountermeasureDispenser cm = drone.Countermeasures;
-            GUILayout.Label(cm != null ? $"flare={cm.ChargeFraction * 100f:0}%" : "flare: yok", _labelStyle);
+            if (cm != null) LayoutBar("Flare", cm.ChargeFraction, 236f);
+            else GUILayout.Label("flare: yok", _labelStyle);
 
             if (drone.IsResupplying)
             {
@@ -308,7 +402,9 @@ namespace Sim.Runtime
 
             string text = float.IsPositiveInfinity(tti) ? "⚠ FÜZE!" : $"⚠ FÜZE! {tti:0.0}s";
             Color prev = GUI.color;
-            GUI.color = Color.red;
+            // Pulse the warning so it cannot be missed. Unscaled time keeps it alive while paused.
+            float pulse = 0.55f + 0.45f * Mathf.Abs(Mathf.Sin(Time.unscaledTime * 6f));
+            GUI.color = new Color(1f, 0.25f, 0.2f, pulse);
             var rect = new Rect(0f, Screen.height * 0.2f, Screen.width, 40f);
             GUI.Label(rect, text, _centerHintStyle);
             GUI.color = prev;

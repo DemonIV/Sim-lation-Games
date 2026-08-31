@@ -34,6 +34,34 @@ namespace Sim.Runtime
         private float _pilotSearchTimer;
         private const float PilotSearchInterval = 2f;
 
+        // ---------------------------------------------------------------- camera feel (cosmetic)
+
+        [Header("Feel")]
+        // SmoothDamp time for the chase/follow position, and how quickly the look direction eases in.
+        [SerializeField] private float followSmoothTime = 0.18f;
+        [SerializeField] private float rotationLerp = 8f;
+        // Extra field of view added while the piloted drone is on afterburner.
+        [SerializeField] private float afterburnerFovBoost = 12f;
+        [SerializeField] private float fovLerp = 4f;
+
+        // SmoothDamp working state for the follow position.
+        private Vector3 _followVelocity;
+
+        // Cached camera + its authored FOV, so the afterburner kick always returns to the same base.
+        private Camera _camera;
+        private float _baseFov = 60f;
+
+        /// <summary>Widens the FOV under afterburner and eases it back when the burner is released.</summary>
+        private void UpdateFov()
+        {
+            if (_camera == null) return;
+
+            bool burner = _pilot != null && _pilot.IsActive && _pilot.AfterburnerActive;
+            float target = burner ? _baseFov + afterburnerFovBoost : _baseFov;
+            _camera.fieldOfView = Mathf.Lerp(_camera.fieldOfView, target,
+                                             Mathf.Clamp01(fovLerp * Time.unscaledDeltaTime));
+        }
+
         // ---------------------------------------------------------------- camera shake (cosmetic)
 
         // The active rig, so effects can ask for a shake without a scene lookup every explosion.
@@ -117,10 +145,16 @@ namespace Sim.Runtime
             Vector3 euler = transform.rotation.eulerAngles;
             _pitch = NormalizePitch(euler.x);
             _yaw = euler.y;
+
+            // Cache the camera and its authored FOV for the afterburner kick.
+            _camera = GetComponent<Camera>();
+            if (_camera == null) _camera = Camera.main;
+            if (_camera != null) _baseFov = _camera.fieldOfView;
         }
 
         private void LateUpdate()
         {
+            UpdateFov();
             ApplyShake();
         }
 
@@ -227,9 +261,22 @@ namespace Sim.Runtime
         {
             if (t == null) return;
 
+            float dt = Time.unscaledDeltaTime;
+
+            // Same trailing offset as before, but critically damped instead of a per-frame Lerp so
+            // the camera never snaps when the drone jinks.
             Vector3 desired = t.position - t.forward * 15f + Vector3.up * 6f;
-            transform.position = Vector3.Lerp(transform.position, desired, 5f * Time.unscaledDeltaTime);
-            transform.LookAt(t.position);
+            transform.position = Vector3.SmoothDamp(transform.position, desired, ref _followVelocity,
+                                                    followSmoothTime, Mathf.Infinity, dt);
+
+            // Ease the look direction in as well (replaces the hard LookAt snap).
+            Vector3 look = t.position - transform.position;
+            if (look.sqrMagnitude > 1e-6f)
+            {
+                Quaternion want = Quaternion.LookRotation(look.normalized, Vector3.up);
+                transform.rotation = Quaternion.Slerp(transform.rotation, want,
+                                                      Mathf.Clamp01(rotationLerp * dt));
+            }
 
             Vector3 euler = transform.rotation.eulerAngles;
             _pitch = NormalizePitch(euler.x);

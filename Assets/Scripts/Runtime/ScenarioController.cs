@@ -232,6 +232,9 @@ namespace Sim.Runtime
             var site = go.AddComponent<AirDefenseSite>();
             // detectionRange, fireRange, lockTimeSeconds, magazineSize, roundsPerSecond, munitionSpeed, damage
             site.Configure(160f, 120f, 1.2f, 6, 0.4f, 150f, 55f);
+
+            // Cosmetic: sweeping radar dish and a turret that tracks the held contact.
+            go.AddComponent<TurretVisual>();
         }
 
         /// <summary>
@@ -263,6 +266,9 @@ namespace Sim.Runtime
             var site = go.AddComponent<AirDefenseSite>();
             // detectionRange, fireRange, lockTimeSeconds, magazineSize, roundsPerSecond, munitionSpeed, damage
             site.Configure(80f, 60f, 0.8f, 20, 1.5f, 130f, 20f);
+
+            // Cosmetic: turret tracking (this archetype has no radar dish part).
+            go.AddComponent<TurretVisual>();
         }
 
         /// <summary>
@@ -301,6 +307,9 @@ namespace Sim.Runtime
             go.AddComponent<CountermeasureDispenser>().Configure(6, 2.5f, 0.5f);
 
             go.AddComponent<EnemyDroneController>();
+
+            // Cosmetic: roll into turns; only the "Model" child is rotated.
+            go.AddComponent<BankingVisual>();
         }
 
         /// <summary>

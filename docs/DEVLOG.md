@@ -101,6 +101,9 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `VfxLibrary` | Asset'siz efekt primitifleri (emisyonlu parlama, nokta ışığı patlaması, enkaz, saydam duman, şok dalgası halkası, kıvılcım); global efekt bütçesi ile sınırlı, hepsi kendini yok eder. |
 | `ScorchMark` | İmha edilen yer birimlerinin arazide bıraktığı, zamanla sönen yanık izi (en fazla 40 iz). |
 | `DamageVisuals` | Can oranı düşen birimlerde duman, kritik seviyede alev efekti (yalnızca `Health` okur). |
+| `PropellerSpinner` | "Propeller" parçasını hıza bağlı olarak kendi Z ekseninde döndürür. |
+| `BankingVisual` | Dönüşlerde yalnızca "Model" çocuğunu yatırır (kök transform'a asla dokunmaz). |
+| `TurretVisual` | SAM/AAA'da "Turret" hedefi takip eder, "Radar" tabağı sürekli döner (yalnız çocuk transform'lar). |
 
 ### Testler (Sim.Tests.EditMode)
 Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştırma:
@@ -152,11 +155,15 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `bu tur (2/2)` | Senaryo kütüphanesi + görev seçim menüsü (Keşif / SEAD / Hava Muharebesi / Karma Savunma). |
 | `bu tur (1/2)` | Görsel yenileme (1/2): araç siluetleri, prosedürel arazi ve atmosfer. |
 | `bu tur (2/2a)` | Görsel yenileme (2/2a): katmanlı patlama efekti, namlu ateşi/kıvılcımlar, füze egzoz izi, hasar dumanı ve yanık izleri. |
+| `bu tur (2/2b)` | Görsel yenileme (2/2b): dönen pervaneler, gövde yatışı, taret takibi, kamera hissi ve çubuk göstergeli HUD. |
 
 ---
 
 ## 7. Mevcut durum & bilinen sınırlar
-- **Görseller bilerek primitive** (kapsül/küp). Gerçek 3D modeller/materyaller en sona bırakıldı (M5).
+- **Görsel yenileme tamamlandı (1/2 + 2/2):** görseller hâlâ primitive'lerden inşa ediliyor ama artık
+  araç siluetleri, prosedürel arazi/atmosfer, katmanlı muharebe efektleri, hareketli parçalar
+  (pervane/taret/radar), kamera hissi ve çubuk göstergeli HUD ile birlikte. İçe aktarılmış gerçek
+  3D modeller/sesler hâlâ M5'e bırakıldı.
 - **Taktik beyin artık davranışa bağlı:** `IhaController`/`SihaController` public kancalar sunuyor
   (`AssignedTargetId`, `State`, `FuelFraction`, `AmmoFraction`, `BasePosition`, `SetThreat`). `SimulationDirector`
   her kare `TargetAllocation` ile hostile'ları drone'lara paylaştırıyor (aynı hedefe boşa gidiş yok); `EngagementPolicy`
@@ -358,3 +365,8 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   birimlerde duman/alev, imha yerinde yanık izi, patlamada kamera sarsıntısı. Tüm efektler
   `VfxLibrary`'nin global bütçesine (220 canlı efekt) tabi, collider'sız ve ölçekli `Time.deltaTime`
   ile kendini yok ediyor — **oynanış değerleri değişmedi**, değişiklik tamamen kozmetik.
+- **Görsel yenileme (2/2b):** dönen pervaneler, dönüşlerde gövde yatışı, SAM/AAA taret takibi ve
+  dönen radar tabağı, yumuşatılmış kamera + patlama sarsıntısı + art yakıcıda FOV artışı, çubuk
+  göstergeli ve daha okunaklı HUD. `BankingVisual`/`TurretVisual` **yalnızca çocuk transform'ları**
+  döndürür (kök transform'a dokunulmaz), kamera sarsıntısı takip mantığından sonra eklenip bir
+  sonraki karede geri alınır — **oynanış değerleri değişmedi**, değişiklik tamamen kozmetik.

@@ -119,6 +119,10 @@ namespace Sim.Runtime
             // Realistic radar sensor (RCS^0.25 range, jamming, alpha-beta tracking).
             // hostileFaction defaults to 1, matching the grey-cube targets.
             go.AddComponent<RadarSensor>();
+
+            // Cosmetic: spinning propeller and roll-into-the-turn on the "Model" child only.
+            go.AddComponent<PropellerSpinner>();
+            go.AddComponent<BankingVisual>();
         }
 
         /// <summary>Spawns an armed SİHA drone (red capsule) with a patrol route and friendly Targetable.</summary>
@@ -145,6 +149,10 @@ namespace Sim.Runtime
 
             // Realistic radar sensor (hostileFaction defaults to 1).
             go.AddComponent<RadarSensor>();
+
+            // Cosmetic: spinning propeller and roll-into-the-turn on the "Model" child only.
+            go.AddComponent<PropellerSpinner>();
+            go.AddComponent<BankingVisual>();
         }
 
         /// <summary>Marks a drone GameObject as a friendly Targetable (Faction = 0).</summary>
