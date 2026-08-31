@@ -43,3 +43,29 @@ with abstract, gamified, educational mechanics.
 - New Core systems (all in `Sim.Core`, all EditMode-tested): `MissionState`, `TargetAllocation`,
   `EngagementPolicy`, `FuelTank`. Runtime glue (thin MonoBehaviours): `SimulationDirector`
   (mission tracking/scoring), `Hud` (IMGUI overlay), `CameraRig` (free-fly + drone-follow camera).
+
+## Worker kuralları (her oturumda geçerli)
+
+- **Önce `docs/DEVLOG.md` oku.** Proje geçmişi, mimari, sistem envanteri ve mevcut durum orada
+  tutulur; bunların prompt'ta tekrarlanmasına gerek yoktur.
+- **Derleme yok.** Bu ortamda `dotnet`/Unity kurulu değildir, kod burada derlenemez. Her
+  düzenlemeden sonra dosyayı yeniden oku ve mekanik olarak doğrula: parantez/blok dengesi, tipler,
+  gerekli `using` satırları, çağrılan her üyenin gerçekten tanımlı olması.
+- **Önce oku, sonra düzenle.** Üye adı tahmin etme; düzenleyeceğin dosyayı ve bağımlı olduğu
+  dosyaları oku.
+- **Unity 6 API'leri.** `FindAnyObjectByType` / `FindObjectsByType(FindObjectsSortMode.None)`
+  kullan; `FindObjectOfType`, `FindObjectsOfType`, `GetInstanceID` kullanma.
+- **UnityEngine.Object null kontrolü.** Her zaman açık `== null` yaz; asla `?.` kullanma — `?.`
+  Unity'nin aşırı yüklenmiş `==` operatörünü baypas eder ve yok edilmiş nesnelerde hataya yol açar.
+- **Mimari kuralı.** Yeni oyun mantığı `Sim.Core` içinde saf C# olarak ve EditMode testli yazılır;
+  MonoBehaviour'lar ince kalır (yalnızca Core'u sahneye bağlar). Kozmetik/sunum işleri Runtime'da
+  kalır, test gerekmez.
+- **Oyun değerlerine dokunma.** Kozmetik bir görev verildiyse menzil, hasar, can, atış hızı,
+  irtifa, spawn konumu gibi değerleri değiştirme.
+- **Küçük dilimler halinde çalış.** Her mantıksal dilimi ayrı commit'le ve
+  `git push -u origin <branch>` ile gönder (ağ hatasında 2s/4s/8s/16s bekleyerek en fazla 4 deneme;
+  yetki hatasında dur ve hatayı bildir). Böylece iş yarıda kesilse bile repo derlenebilir kalır.
+- **`docs/DEVLOG.md`'yi güncelle.** Yeni sistem eklediysen sistem tablosuna satır, her turda
+  değişiklik günlüğüne madde ve commit geçmişine satır ekle.
+- **Raporunu kısa tut.** Ne değiştirdiğin, tahmin/uyarlama yaptığın yerler, commit hash'i ve push
+  sonucu.
