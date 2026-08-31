@@ -1,0 +1,326 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #07090a; font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; }
+    a { color: #e2a13f; } a:hover { color: #f0b85e; }
+  </style>
+</helmet>
+
+<div style="position: relative; width: 1600px; height: 900px; overflow: hidden; background: #07090a; color: #ece7dd;">
+
+  <!-- ==== 3D SAHNE ARKA PLANI (overlay altındaki oyun dünyası) ==== -->
+  <svg viewBox="0 0 1600 900" width="1600" height="900" style="position: absolute; inset: 0; display: block;">
+    <rect x="0" y="0" width="1600" height="318" fill="#0d1317"></rect>
+    <rect x="0" y="318" width="1600" height="104" fill="#111a1e"></rect>
+    <rect x="0" y="422" width="1600" height="50" fill="#16211f"></rect>
+    <line x1="0" y1="472" x2="1600" y2="472" stroke="#2f4442" stroke-width="1"></line>
+    <polygon points="0,472 180,444 340,464 520,432 700,460 900,440 1090,466 1280,438 1450,462 1600,446 1600,566 0,566" fill="#0a1012"></polygon>
+    <polygon points="0,534 240,506 470,540 700,510 940,544 1180,512 1420,546 1600,520 1600,900 0,900" fill="#070a0b"></polygon>
+    <line x1="640" y1="900" x2="880" y2="548" stroke="#0e1416" stroke-width="2"></line>
+    <line x1="980" y1="900" x2="912" y2="548" stroke="#0e1416" stroke-width="2"></line>
+    <!-- dost İHA siluetleri -->
+    <g fill="#040708">
+      <g transform="translate(860,150) rotate(-8) scale(0.9)">
+        <rect x="-30" y="-3" width="60" height="6" rx="3"></rect>
+        <rect x="-6" y="-17" width="9" height="34" rx="2"></rect>
+        <rect x="-27" y="-9" width="5" height="18" rx="2"></rect>
+      </g>
+      <g transform="translate(552,196) rotate(6) scale(0.62)">
+        <rect x="-30" y="-3" width="60" height="6" rx="3"></rect>
+        <rect x="-6" y="-17" width="9" height="34" rx="2"></rect>
+        <rect x="-27" y="-9" width="5" height="18" rx="2"></rect>
+      </g>
+      <!-- yer hedefleri -->
+      <g transform="translate(700,528)">
+        <rect x="-24" y="-8" width="48" height="12" rx="1"></rect>
+        <rect x="-8" y="-16" width="18" height="9" rx="1"></rect>
+        <rect x="6" y="-14" width="26" height="3"></rect>
+      </g>
+      <g transform="translate(1042,556) scale(1.15)">
+        <rect x="-26" y="-8" width="52" height="12" rx="1"></rect>
+        <rect x="-4" y="-20" width="8" height="14"></rect>
+        <rect x="-14" y="-24" width="28" height="5" rx="1"></rect>
+      </g>
+    </g>
+    <!-- sahne üzeri hedef parantezleri -->
+    <g stroke="#e05243" stroke-width="1.5" fill="none">
+      <path d="M676,502 h-10 v10 M724,502 h10 v10 M676,552 h-10 v-10 M724,552 h10 v-10"></path>
+    </g>
+    <g stroke="#e2a13f" stroke-width="1.5" fill="none" opacity="0.85">
+      <path d="M1010,524 h-9 v9 M1076,524 h9 v9 M1010,578 h-9 v-9 M1076,578 h9 v-9"></path>
+    </g>
+    <g stroke="#35c39a" stroke-width="1.5" fill="none" opacity="0.8">
+      <rect x="820" y="122" width="80" height="56"></rect>
+    </g>
+  </svg>
+
+  <!-- sahne etiketleri -->
+  <div style="position: absolute; left: 742px; top: 494px; font-size: 13px; letter-spacing: 0.14em; color: #e05243;">T-07 · SAM</div>
+  <div style="position: absolute; left: 1094px; top: 588px; font-size: 13px; letter-spacing: 0.14em; color: #e2a13f;">T-11 · AAA</div>
+  <div style="position: absolute; left: 906px; top: 120px; font-size: 13px; letter-spacing: 0.14em; color: #35c39a;">İHA-2 · DOST</div>
+
+  <!-- ==== EKRAN KÖŞE ÇENTİKLERİ ==== -->
+  <svg viewBox="0 0 1600 900" width="1600" height="900" style="position: absolute; inset: 0; display: block;" fill="none" stroke="#e2a13f" stroke-width="2" opacity="0.55">
+    <path d="M18,42 v-24 h24 M1582,42 v-24 h-24 M18,858 v24 h24 M1582,858 v24 h-24"></path>
+  </svg>
+
+  <!-- ==== SOL SÜTUN: GÖREV + RADAR ==== -->
+  <div style="position: absolute; left: 28px; top: 26px; width: 428px; display: flex; flex-direction: column; gap: 14px;">
+
+    <!-- GÖREV PANELİ -->
+    <div style="background: rgba(14,18,20,0.93); border: 1px solid #2b3336;">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; border-bottom: 1px solid #2b3336; background: #12181a;">
+        <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.22em; color: #e2a13f;">GÖREV</span>
+        <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.06em; color: #6f6a62;">M-02</span>
+      </div>
+      <div style="padding: 12px;">
+        <div style="font-size: 25px; font-weight: 600; letter-spacing: 0.045em; line-height: 1.1; color: #ece7dd;">SEAD — HAVA SAVUNMASI BASTIRMA</div>
+
+        <div style="display: flex; gap: 10px; margin-top: 14px;">
+          <div style="flex-grow: 1; border: 1px solid #2b3336; background: #0f1416; padding: 7px 10px;">
+            <div style="font-size: 11px; letter-spacing: 0.2em; color: #8f8a80;">DURUM</div>
+            <div style="font-size: 17px; font-weight: 600; letter-spacing: 0.08em; color: #35c39a;">DEVAM EDİYOR</div>
+          </div>
+          <div style="width: 128px; border: 1px solid #2b3336; background: #0f1416; padding: 7px 10px;">
+            <div style="font-size: 11px; letter-spacing: 0.2em; color: #8f8a80;">SÜRE</div>
+            <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 17px; font-weight: 500; color: #ece7dd;">02:14</div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px solid #22282a; padding-bottom: 5px;">
+            <span style="font-size: 12px; letter-spacing: 0.18em; color: #8f8a80;">DALGA</span>
+            <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 16px; color: #e2a13f;">2/3</span>
+          </div>
+          <div style="display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px solid #22282a; padding-bottom: 5px;">
+            <span style="font-size: 12px; letter-spacing: 0.18em; color: #8f8a80;">DÜŞMAN</span>
+            <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 16px; color: #e05243;">5</span>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px;">
+          <div>
+            <div style="font-size: 11px; letter-spacing: 0.2em; color: #8f8a80;">İMHA</div>
+            <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 22px; font-weight: 500; color: #ece7dd;">3/8</div>
+          </div>
+          <div>
+            <div style="font-size: 11px; letter-spacing: 0.2em; color: #8f8a80;">KAYIP</div>
+            <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 22px; font-weight: 500; color: #35c39a;">0/1</div>
+          </div>
+          <div>
+            <div style="font-size: 11px; letter-spacing: 0.2em; color: #8f8a80;">SKOR</div>
+            <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 22px; font-weight: 500; color: #e2a13f;">300</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RADAR TEMASLARI -->
+    <div style="background: rgba(14,18,20,0.93); border: 1px solid #2b3336;">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; border-bottom: 1px solid #2b3336; background: #12181a;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e2a13f" stroke-width="1.6">
+            <circle cx="12" cy="12" r="9"></circle>
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 12 L19 7"></path>
+          </svg>
+          <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.22em; color: #e2a13f;">RADAR TEMASLARI</span>
+        </div>
+        <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #6f6a62;">3 AKTİF</span>
+      </div>
+      <div style="display: flex; flex-direction: column;">
+
+        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid #1e2426;">
+          <span style="width: 4px; height: 22px; background: #e05243;"></span>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 15px; color: #ece7dd; width: 52px;">T-07</span>
+          <span style="font-size: 13px; letter-spacing: 0.16em; color: #e05243; border: 1px solid #e05243; padding: 1px 7px;">SAM</span>
+          <span style="flex-grow: 1;"></span>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 15px; color: #ece7dd;">118 m</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid #1e2426;">
+          <span style="width: 4px; height: 22px; background: #e2a13f;"></span>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 15px; color: #ece7dd; width: 52px;">T-11</span>
+          <span style="font-size: 13px; letter-spacing: 0.16em; color: #e2a13f; border: 1px solid #6b5326; padding: 1px 7px;">AAA</span>
+          <span style="flex-grow: 1;"></span>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 15px; color: #ece7dd;">246 m</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 12px;">
+          <span style="width: 4px; height: 22px; background: #6f6a62;"></span>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 15px; color: #ece7dd; width: 52px;">T-03</span>
+          <span style="font-size: 13px; letter-spacing: 0.16em; color: #b7b0a4; border: 1px solid #3a4144; padding: 1px 7px;">AVCI</span>
+          <span style="flex-grow: 1;"></span>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 15px; color: #b7b0a4;">402 m</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==== SAĞ SÜTUN: DRONE DURUMU ==== -->
+  <div style="position: absolute; right: 28px; top: 26px; width: 468px; background: rgba(14,18,20,0.93); border: 1px solid #2b3336;">
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; border-bottom: 1px solid #2b3336; background: #12181a;">
+      <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.22em; color: #e2a13f;">FİLO DURUMU</span>
+      <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #6f6a62;">3 / 3 HAVADA</span>
+    </div>
+
+    <!-- İHA-1 -->
+    <div style="padding: 11px 12px; border-bottom: 1px solid #1e2426;">
+      <div style="display: flex; align-items: center; gap: 9px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#35c39a" stroke-width="1.6">
+          <path d="M3 12 h18"></path><path d="M9 12 v-6"></path><path d="M15 12 v6"></path><circle cx="12" cy="12" r="2"></circle>
+        </svg>
+        <span style="font-size: 19px; font-weight: 600; letter-spacing: 0.1em;">İHA-1</span>
+        <span style="font-size: 12px; letter-spacing: 0.18em; color: #35c39a; border: 1px solid #2a6b58; padding: 1px 7px;">DEVRİYE</span>
+        <span style="flex-grow: 1;"></span>
+        <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #6f6a62;">142 m · 31 m/s</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 18px; margin-top: 9px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 11px; letter-spacing: 0.16em; color: #8f8a80; width: 40px;">YAKIT</span>
+          <div style="flex-grow: 1; height: 9px; border: 1px solid #2b3336; background: #0f1416;"><div style="width: 78%; height: 100%; background: #35c39a;"></div></div>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #b7b0a4; width: 30px; text-align: right;">78</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 11px; letter-spacing: 0.16em; color: #8f8a80; width: 40px;">TOP</span>
+          <div style="flex-grow: 1; height: 9px; border: 1px solid #2b3336; background: #0f1416;"><div style="width: 64%; height: 100%; background: #35c39a;"></div></div>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #b7b0a4; width: 30px; text-align: right;">64</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 11px; letter-spacing: 0.16em; color: #8f8a80; width: 40px;">FÜZE</span>
+          <div style="flex-grow: 1; height: 9px; border: 1px solid #2b3336; background: #0f1416;"><div style="width: 100%; height: 100%; background: #35c39a;"></div></div>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #b7b0a4; width: 30px; text-align: right;">2</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 11px; letter-spacing: 0.16em; color: #8f8a80; width: 40px;">FLARE</span>
+          <div style="flex-grow: 1; height: 9px; border: 1px solid #2b3336; background: #0f1416;"><div style="width: 83%; height: 100%; background: #35c39a;"></div></div>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #b7b0a4; width: 30px; text-align: right;">5</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- İHA-2 -->
+    <div style="padding: 11px 12px; border-bottom: 1px solid #1e2426;">
+      <div style="display: flex; align-items: center; gap: 9px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#e2a13f" stroke-width="1.6">
+          <path d="M3 12 h18"></path><path d="M9 12 v-6"></path><path d="M15 12 v6"></path><circle cx="12" cy="12" r="2"></circle>
+        </svg>
+        <span style="font-size: 19px; font-weight: 600; letter-spacing: 0.1em;">İHA-2</span>
+        <span style="font-size: 12px; letter-spacing: 0.18em; color: #e2a13f; border: 1px solid #6b5326; padding: 1px 7px;">ANGAJE</span>
+        <span style="flex-grow: 1;"></span>
+        <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #6f6a62;">96 m · 44 m/s</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 18px; margin-top: 9px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 11px; letter-spacing: 0.16em; color: #8f8a80; width: 40px;">YAKIT</span>
+          <div style="flex-grow: 1; height: 9px; border: 1px solid #2b3336; background: #0f1416;"><div style="width: 41%; height: 100%; background: #e2a13f;"></div></div>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #e2a13f; width: 30px; text-align: right;">41</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 11px; letter-spacing: 0.16em; color: #8f8a80; width: 40px;">TOP</span>
+          <div style="flex-grow: 1; height: 9px; border: 1px solid #2b3336; background: #0f1416;"><div style="width: 22%; height: 100%; background: #e2a13f;"></div></div>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #e2a13f; width: 30px; text-align: right;">22</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 11px; letter-spacing: 0.16em; color: #8f8a80; width: 40px;">FÜZE</span>
+          <div style="flex-grow: 1; height: 9px; border: 1px solid #2b3336; background: #0f1416;"><div style="width: 50%; height: 100%; background: #e2a13f;"></div></div>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #e2a13f; width: 30px; text-align: right;">1</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 11px; letter-spacing: 0.16em; color: #8f8a80; width: 40px;">FLARE</span>
+          <div style="flex-grow: 1; height: 9px; border: 1px solid #2b3336; background: #0f1416;"><div style="width: 12%; height: 100%; background: #e05243;"></div></div>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #e05243; width: 30px; text-align: right;">1</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- SİHA-1 -->
+    <div style="padding: 11px 12px;">
+      <div style="display: flex; align-items: center; gap: 9px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#e05243" stroke-width="1.6">
+          <path d="M3 12 h18"></path><path d="M9 12 v-6"></path><path d="M15 12 v6"></path><circle cx="12" cy="12" r="2"></circle>
+        </svg>
+        <span style="font-size: 19px; font-weight: 600; letter-spacing: 0.1em;">SİHA-1</span>
+        <span style="font-size: 12px; letter-spacing: 0.18em; color: #b7b0a4; border: 1px solid #3a4144; padding: 1px 7px;">DÖNÜŞ</span>
+        <span style="font-size: 12px; letter-spacing: 0.14em; color: #35c39a; border: 1px solid #2a6b58; background: #0e1a17; padding: 1px 7px;">[İKMAL %60]</span>
+        <span style="flex-grow: 1;"></span>
+        <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #6f6a62;">61 m · 28 m/s</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 18px; margin-top: 9px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 11px; letter-spacing: 0.16em; color: #8f8a80; width: 40px;">YAKIT</span>
+          <div style="flex-grow: 1; height: 9px; border: 1px solid #2b3336; background: #0f1416;"><div style="width: 14%; height: 100%; background: #e05243;"></div></div>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #e05243; width: 30px; text-align: right;">14</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 11px; letter-spacing: 0.16em; color: #8f8a80; width: 40px;">TOP</span>
+          <div style="flex-grow: 1; height: 9px; border: 1px solid #2b3336; background: #0f1416;"><div style="width: 8%; height: 100%; background: #e05243;"></div></div>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #e05243; width: 30px; text-align: right;">8</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 11px; letter-spacing: 0.16em; color: #8f8a80; width: 40px;">FÜZE</span>
+          <div style="flex-grow: 1; height: 9px; border: 1px solid #2b3336; background: #0f1416;"><div style="width: 0%; height: 100%; background: #e05243;"></div></div>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #e05243; width: 30px; text-align: right;">0</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 11px; letter-spacing: 0.16em; color: #8f8a80; width: 40px;">FLARE</span>
+          <div style="flex-grow: 1; height: 9px; border: 1px solid #2b3336; background: #0f1416;"><div style="width: 60%; height: 100%; background: #35c39a;"></div></div>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #b7b0a4; width: 30px; text-align: right;">3</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 14px; padding: 6px 12px; border-top: 1px solid #2b3336; background: #0f1416;">
+      <span style="font-size: 11px; letter-spacing: 0.16em; color: #6f6a62;">BAR RENK KODU</span>
+      <span style="flex-grow: 1;"></span>
+      <span style="display: flex; align-items: center; gap: 5px; font-size: 11px; letter-spacing: 0.12em; color: #8f8a80;"><span style="width: 12px; height: 8px; background: #35c39a;"></span>&gt;50</span>
+      <span style="display: flex; align-items: center; gap: 5px; font-size: 11px; letter-spacing: 0.12em; color: #8f8a80;"><span style="width: 12px; height: 8px; background: #e2a13f;"></span>20–50</span>
+      <span style="display: flex; align-items: center; gap: 5px; font-size: 11px; letter-spacing: 0.12em; color: #8f8a80;"><span style="width: 12px; height: 8px; background: #e05243;"></span>&lt;20</span>
+    </div>
+  </div>
+
+  <!-- ==== FÜZE UYARISI ==== -->
+  <div style="position: absolute; left: 50%; top: 246px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 10px 22px; background: #1a0d0c; border: 1px solid #e05243;">
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#e05243" stroke-width="1.8" stroke-linejoin="round">
+      <path d="M12 3 L22 20 H2 Z"></path>
+      <path d="M12 9.5 v5"></path>
+      <path d="M12 17.2 v0.6"></path>
+    </svg>
+    <span style="font-size: 34px; font-weight: 700; letter-spacing: 0.14em; color: #e05243; line-height: 1;">FÜZE!</span>
+    <span style="width: 1px; height: 30px; background: #5c2a25;"></span>
+    <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 30px; font-weight: 700; color: #ece7dd; line-height: 1;">2.4 s</span>
+    <span style="font-size: 13px; letter-spacing: 0.2em; color: #c98a80; align-self: flex-end;">Q: FLARE</span>
+  </div>
+
+  <!-- ==== ALT KONTROL ŞERİDİ ==== -->
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; gap: 12px; height: 34px; background: rgba(10,13,14,0.94); border-top: 1px solid #22282a;">
+    <span style="font-size: 12px; letter-spacing: 0.14em; color: #7d786f;">WASD + SAĞ TIK: KAMERA</span>
+    <span style="color: #3a4144;">·</span>
+    <span style="font-size: 12px; letter-spacing: 0.14em; color: #7d786f;">TAB: DRONE TAKİP</span>
+    <span style="color: #3a4144;">·</span>
+    <span style="font-size: 12px; letter-spacing: 0.14em; color: #7d786f;">F: SERBEST</span>
+    <span style="color: #3a4144;">·</span>
+    <span style="font-size: 12px; letter-spacing: 0.14em; color: #7d786f;">C: PİLOT MODU</span>
+    <span style="color: #3a4144;">·</span>
+    <span style="font-size: 12px; letter-spacing: 0.14em; color: #7d786f;">P: DURAKLAT</span>
+    <span style="color: #3a4144;">·</span>
+    <span style="font-size: 12px; letter-spacing: 0.14em; color: #7d786f;">+/−: HIZ</span>
+    <span style="color: #3a4144;">·</span>
+    <span style="font-size: 12px; letter-spacing: 0.14em; color: #7d786f;">R: YENİDEN</span>
+    <span style="color: #3a4144;">·</span>
+    <span style="font-size: 12px; letter-spacing: 0.14em; color: #7d786f;">M: GÖREV MENÜSÜ</span>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

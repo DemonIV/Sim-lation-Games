@@ -1,0 +1,9 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1600, "h": 900, "title": "Ana Muharebe HUD" },
+    { "file": "PilotHud.dc.html", "x": 1760, "y": 0, "w": 1600, "h": 900, "title": "Pilot Modu HUD" },
+    { "file": "MissionSelect.dc.html", "x": 0, "y": 1100, "w": 1600, "h": 900, "title": "Görev Seçim Menüsü" },
+    { "file": "MissionEnd.dc.html", "x": 1760, "y": 1100, "w": 1600, "h": 900, "title": "Görev Sonu Ekranı" }
+  ],
+  "launch": { "view": "canvas" }
+}

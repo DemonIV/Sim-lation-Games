@@ -156,6 +156,7 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `bu tur (1/2)` | Görsel yenileme (1/2): araç siluetleri, prosedürel arazi ve atmosfer. |
 | `bu tur (2/2a)` | Görsel yenileme (2/2a): katmanlı patlama efekti, namlu ateşi/kıvılcımlar, füze egzoz izi, hasar dumanı ve yanık izleri. |
 | `bu tur (2/2b)` | Görsel yenileme (2/2b): dönen pervaneler, gövde yatışı, taret takibi, kamera hissi ve çubuk göstergeli HUD. |
+| `bu tur` | HUD tasarım mockup'ı: dört artboard'lı tasarım tuvali (`docs/design/hud/`), askerî gösterge estetiği. |
 
 ---
 
@@ -370,3 +371,8 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   göstergeli ve daha okunaklı HUD. `BankingVisual`/`TurretVisual` **yalnızca çocuk transform'ları**
   döndürür (kök transform'a dokunulmaz), kamera sarsıntısı takip mantığından sonra eklenip bir
   sonraki karede geri alınır — **oynanış değerleri değişmedi**, değişiklik tamamen kozmetik.
+- **HUD tasarım mockup'ı:** Oyunun hedeflenen HUD görünümü `docs/design/hud/` klasöründe dört
+  artboard'lı bir tasarım tuvali olarak duruyor (Ana Muharebe HUD, Pilot Modu HUD, Görev Seçim
+  Menüsü, Görev Sonu Ekranı). Görüntülemek için `docs/design/hud/iha-siha-hud.html` dosyasını bir
+  tarayıcıda aç; kaydırıp yakınlaştırabilir, PNG/PDF olarak dışa aktarabilirsin. Detaylar ve palet
+  için `docs/design/hud/README.md`. **Henüz Unity'ye uygulanmadı** — bu yalnızca görsel hedef.
