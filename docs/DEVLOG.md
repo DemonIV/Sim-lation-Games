@@ -161,6 +161,7 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `c1ce582` | HUD tasarım mockup'ına göre yeniden stillendirildi (`HudTheme` + `Hud`). |
 | `98213d4` | CLAUDE.md'ye kalıcı worker kuralları eklendi (önce DEVLOG oku, derleme yok, Unity 6 API, null kontrolü, küçük commit'ler). |
 | `bu tur` | Görev seçim menüsü HUD tasarımına uygun hâle getirildi (`ScenarioMenu` artık `HudTheme` kullanıyor). |
+| `bu tur` | Çalışma zamanı sahnesi analizi: `docs/SCENE.md` (hiyerarşi, bileşen envanteri, yerleşim, yaşam döngüsü, 19 bulgu). |
 
 ---
 
@@ -396,3 +397,15 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   değişmedi; hiçbir oyun değeri okunmuyor/yazılmıyor. Zorluk göstergesi tamamen sunum amaçlı,
   görev uzunluğundan (`ScenarioLibrary.TotalWaves`) türetiliyor. Tipografi HUD'daki gibi yaklaşık
   (font asset'i yok, IMGUI'de harf aralığı ayarı yok).
+- **Çalışma zamanı sahnesi analizi (`docs/SCENE.md`):** Depoda `.unity` sahne varlığı olmadığı
+  doğrulandı (sahne tamamen `SimulationBootstrap.Awake` içinde primitive'lerden kuruluyor) ve
+  üretilen sahne kaynak koddan yeniden kurgulandı: kök hiyerarşi (~1050 GameObject), araç tipi
+  başına `"Model"` alt ağacı ve adlı animasyon parçaları, nesne başına bileşen envanteri, uzamsal
+  yerleşim (kamera/ışık, 300×300 m arazi, üs ayak izi, prop dağılımı, drone spawn/rotaları, düşman
+  spawn kuralları ve irtifalar) ve yaşam döngüsü (Awake/Start sırası, dalga döngüsü, `R`/menü
+  yeniden yüklemesi ve reload'dan sağ çıkan statikler). Belge ciddiyet etiketli **19 bulgu**
+  içeriyor; en kritikleri: Build Settings'te kayıtlı sahne olmadığı için `LoadScene(buildIndex)`
+  tabanlı yeniden başlatmanın çalışmaması (B-01), `RadarSensor`'ın kare başına O(n²) taraması
+  (B-02) ve `SimulationDirector.Start`'ın artık hiç düşman sayamaması + `MissionState`'in ikinci
+  dost kaybında skoru dondurması (B-03). **Yalnızca analiz — hiçbir oyun/çalışma zamanı kodu
+  değiştirilmedi.**
