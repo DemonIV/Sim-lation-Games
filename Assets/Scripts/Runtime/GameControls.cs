@@ -1,11 +1,11 @@
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 namespace Sim.Runtime
 {
     /// <summary>
     /// Global keyboard controls for the sim: restart, pause, and time-scale adjustment.
-    /// Thin glue only — it manipulates <see cref="Time.timeScale"/> and reloads the active scene.
+    /// Thin glue only — it manipulates <see cref="Time.timeScale"/> and asks
+    /// <see cref="SimulationBootstrap"/> to rebuild the generated world.
     ///
     /// Keys: R = restart · P = pause/resume · +/- (top row or keypad) = faster/slower.
     /// </summary>
@@ -25,12 +25,15 @@ namespace Sim.Runtime
 
         private void Update()
         {
-            // R: restart the active scene from a clean slate.
+            // R: restart from a clean slate by rebuilding the generated world in place. Reloading the
+            // scene is not an option — the project has no .unity scene asset in Build Settings, so the
+            // active scene has no build index to reload (finding B-01).
             if (Input.GetKeyDown(KeyCode.R))
             {
-                Time.timeScale = 1f;
-                TargetRegistry.Clear();
-                SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+                SimulationBootstrap boot = SimulationBootstrap.Instance;
+                if (boot == null) boot = FindAnyObjectByType<SimulationBootstrap>();
+                // No bootstrap (hand-authored scene): there is nothing to rebuild, so leave the sim as is.
+                if (boot != null) boot.Rebuild();
                 return;
             }
 

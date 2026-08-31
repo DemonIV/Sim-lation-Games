@@ -41,6 +41,61 @@ namespace Sim.Runtime
         }
 
         /// <summary>
+        /// Restarts the mission IN PLACE: tears the generated world down and builds it again.
+        ///
+        /// <para>
+        /// This replaces the old <c>SceneManager.LoadScene</c> restart, which could not work: the
+        /// project ships no .unity scene asset, so the runtime scene has no build index and reloading
+        /// it threw (finding B-01). Rebuilding under the <see cref="Root"/> object achieves the same
+        /// clean slate without touching Build Settings.
+        /// </para>
+        ///
+        /// <para>
+        /// Statics that must NOT survive are reset here (registry, live munitions, effect budget,
+        /// time scale). Statics that MUST survive are deliberately left alone:
+        /// <see cref="ScenarioController.SelectedKind"/> (the player's mission choice) and
+        /// <see cref="ScenarioMenu"/>'s auto-begin flag (set by a mid-mission mission switch just
+        /// before calling this, and consumed by the freshly built menu so the briefing does not
+        /// wrongly reappear).
+        /// </para>
+        /// </summary>
+        public void Rebuild()
+        {
+            // 1. Hand any piloted drone back to its AI before the drone itself goes away.
+            var pilot = FindAnyObjectByType<PlayerDroneController>();
+            if (pilot != null) pilot.ReleasePlayerControl();
+
+            // 2. Tear the old world down. Deactivating first stops every Update/OnGUI on it
+            //    immediately — Destroy alone is deferred to the end of the frame, which would let the
+            //    dying objects run one more tick alongside the freshly built ones.
+            if (Root != null)
+            {
+                GameObject old = Root.gameObject;
+                Root = null;
+                old.SetActive(false);
+                Destroy(old);
+            }
+
+            // 3. Munitions are spawned parentless (they must not follow their launcher), so they
+            //    outlive the root and have to be cleaned up explicitly.
+            for (int i = GuidedMunition.Active.Count - 1; i >= 0; i--)
+            {
+                GuidedMunition m = GuidedMunition.Active[i];
+                if (m == null) continue;
+                m.gameObject.SetActive(false);
+                Destroy(m.gameObject);
+            }
+            GuidedMunition.Active.Clear();
+
+            // 4. Reset the remaining global state. Build() clears the registry again on its way in.
+            TargetRegistry.Clear();
+            VfxLibrary.ResetBudget();
+            Time.timeScale = 1f;
+
+            Build();
+        }
+
+        /// <summary>
         /// Creates the whole generated scene under a fresh "Simulation" root. Split out of
         /// <see cref="Awake"/> so it can be re-invoked to restart the mission in place.
         /// </summary>

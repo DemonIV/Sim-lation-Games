@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using Sim.Core;
 
 namespace Sim.Runtime
@@ -19,8 +18,9 @@ namespace Sim.Runtime
     /// <para>
     /// Pressing <c>M</c> during a mission reopens it. Choosing from there cannot simply restart the
     /// scenario in place — the field is already full of hostiles and the drones are worn down — so it
-    /// reloads the active scene through the same path <see cref="GameControls"/> uses for <c>R</c>.
-    /// The chosen mission survives that reload because <c>SelectedKind</c> is static.
+    /// rebuilds the generated world through the same path <see cref="GameControls"/> uses for
+    /// <c>R</c> (<see cref="SimulationBootstrap.Rebuild"/>). The chosen mission survives that rebuild
+    /// because <c>SelectedKind</c> is static.
     /// </para>
     ///
     /// <para>
@@ -56,16 +56,17 @@ namespace Sim.Runtime
         public bool IsOpen { get; private set; }
 
         /// <summary>
-        /// True once the player has picked a mission at least once in this scene load. Used to tell a
-        /// fresh launch (just begin the mission) apart from a mid-mission reopen (reload the scene).
+        /// True once the player has picked a mission at least once with THIS component. Used to tell a
+        /// fresh launch (just begin the mission) apart from a mid-mission reopen (rebuild the world).
         /// </summary>
         private bool _missionStarted;
 
         /// <summary>
-        /// Set just before the mid-mission scene reload and consumed by <see cref="Start"/> in the
-        /// freshly loaded scene, so the player does not have to pick the same mission twice. STATIC
-        /// for the same reason as <see cref="ScenarioController.SelectedKind"/>: it must survive the
-        /// reload that destroys this component.
+        /// Set just before the mid-mission rebuild and consumed by <see cref="Start"/> on the freshly
+        /// built menu, so the player does not have to pick the same mission twice. STATIC for the same
+        /// reason as <see cref="ScenarioController.SelectedKind"/>: it must survive the rebuild that
+        /// destroys this component. <see cref="SimulationBootstrap.Rebuild"/> leaves it alone on
+        /// purpose.
         /// </summary>
         private static bool _autoBegin;
 
@@ -76,7 +77,8 @@ namespace Sim.Runtime
             if (_autoBegin)
             {
                 // Coming back from a mission change: the choice was already made, so skip the briefing
-                // and launch straight into the freshly rebuilt field.
+                // and launch straight into the freshly rebuilt field. Note this menu is a NEW component
+                // built by SimulationBootstrap.Rebuild — the one the player clicked is already gone.
                 _autoBegin = false;
                 _missionStarted = true;
                 IsOpen = false;
@@ -381,25 +383,30 @@ namespace Sim.Runtime
         }
 
         /// <summary>
-        /// Applies the player's choice. On the first pick of a scene load the mission simply begins;
-        /// a mid-mission pick reloads the scene first so the new mission starts on a clean field.
+        /// Applies the player's choice. On the first pick the mission simply begins; a mid-mission
+        /// pick rebuilds the generated world first, so the new mission starts on a clean field.
         /// </summary>
         private void Choose(ScenarioKind kind)
         {
             ScenarioController.SelectedKind = kind;
 
-            if (_missionStarted)
+            SimulationBootstrap boot = SimulationBootstrap.Instance;
+            if (boot == null) boot = FindAnyObjectByType<SimulationBootstrap>();
+
+            if (_missionStarted && boot != null)
             {
                 // Mid-mission change: mirror GameControls' R restart exactly. SelectedKind and
-                // _autoBegin are static, so the freshly loaded scene picks up the mission chosen here
-                // and starts it without showing this briefing a second time.
+                // _autoBegin are static, so the menu rebuilt below picks up the mission chosen here
+                // and starts it without showing this briefing a second time. Rebuild() restores the
+                // time scale and clears the registry itself.
                 IsOpen = false;
                 _autoBegin = true;
-                Time.timeScale = 1f;
-                TargetRegistry.Clear();
-                SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+                boot.Rebuild();
                 return;
             }
+
+            // No bootstrap to rebuild with (hand-authored scene): fall through and just (re)start the
+            // scenario in place — the best that can be done without regenerating the field.
 
             if (_controller == null) _controller = FindAnyObjectByType<ScenarioController>();
             if (_controller != null) _controller.BeginMission();

@@ -116,6 +116,16 @@ namespace Sim.Runtime
             ReleaseControl();
         }
 
+        /// <summary>
+        /// Hands any piloted drone back to its AI. Public entry point for the restart path
+        /// (<see cref="SimulationBootstrap.Rebuild"/>), which tears the drone down right afterwards.
+        /// Safe to call when nothing is being piloted.
+        /// </summary>
+        public void ReleasePlayerControl()
+        {
+            ReleaseControl();
+        }
+
         /// <summary>Takes control of the selected drone, or hands the current one back to its AI.</summary>
         private void ToggleControl()
         {
