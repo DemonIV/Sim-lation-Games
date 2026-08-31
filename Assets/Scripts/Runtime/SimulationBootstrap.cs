@@ -16,10 +16,44 @@ namespace Sim.Runtime
     /// </summary>
     public class SimulationBootstrap : MonoBehaviour
     {
+        /// <summary>
+        /// The bootstrap component currently living in the scene, so other systems can reach it
+        /// without a scene scan. Set in <see cref="Awake"/>, cleared in <see cref="OnDestroy"/>.
+        /// </summary>
+        public static SimulationBootstrap Instance { get; private set; }
+
+        /// <summary>
+        /// Parent of EVERYTHING <see cref="Build"/> generates (terrain, airbase, props, drones,
+        /// waypoints, managers). Kept as a single root so the whole generated world can be torn down
+        /// and rebuilt in one step. The main camera and the sun deliberately stay OUTSIDE it.
+        /// </summary>
+        public static Transform Root { get; private set; }
+
         private void Awake()
+        {
+            Instance = this;
+            Build();
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+        }
+
+        /// <summary>
+        /// Creates the whole generated scene under a fresh "Simulation" root. Split out of
+        /// <see cref="Awake"/> so it can be re-invoked to restart the mission in place.
+        /// </summary>
+        private void Build()
         {
             // Defensive: drop any stale registry entries left over from a previous scene load/restart.
             TargetRegistry.Clear();
+
+            // One root for the generated world. Camera and sun are created outside it on purpose:
+            // they must survive a rebuild.
+            var rootGo = new GameObject("Simulation");
+            rootGo.transform.position = Vector3.zero;
+            Root = rootGo.transform;
 
             EnsureCameraAndLight();
             CreateGround();
@@ -34,12 +68,16 @@ namespace Sim.Runtime
             // Wave-based scenario. The ScenarioController (created after the drones) now owns ALL enemy
             // spawning — escalating waves of three hostile archetypes (plain target / SAM / AAA) — and
             // decides win/lose. The old fixed enemy spawns were removed in favour of this system.
-            new GameObject("ScenarioController").AddComponent<ScenarioController>();
+            var scenarioGo = new GameObject("ScenarioController");
+            scenarioGo.transform.SetParent(Root, false);
+            scenarioGo.AddComponent<ScenarioController>();
 
             // Tactical layer (M1). Created LAST so the director's Start() counts every hostile that
             // was just spawned. The SimulationDirector tracks mission progress/score; the Hud draws
             // an IMGUI overlay reading that state.
-            var director = new GameObject("SimulationDirector").AddComponent<SimulationDirector>();
+            var directorGo = new GameObject("SimulationDirector");
+            directorGo.transform.SetParent(Root, false);
+            var director = directorGo.AddComponent<SimulationDirector>();
             director.gameObject.AddComponent<Hud>();
 
             // Global keyboard controls: R restart, P pause, +/- time scale.
@@ -60,7 +98,11 @@ namespace Sim.Runtime
                 Camera.main.gameObject.AddComponent<CameraRig>();
         }
 
-        /// <summary>Creates a main camera looking down over the field plus a directional light, if none exist.</summary>
+        /// <summary>
+        /// Creates a main camera looking down over the field plus a directional light, if none exist.
+        /// Both live OUTSIDE the Simulation root, so a rebuild keeps them — which is also why both
+        /// creations are guarded: on the second pass the existing camera/sun are simply reused.
+        /// </summary>
         private void EnsureCameraAndLight()
         {
             if (Camera.main == null)
@@ -73,25 +115,50 @@ namespace Sim.Runtime
                 cam.farClipPlane = 1000f;
             }
 
-            if (FindAnyObjectByType<Light>() == null)
+            Light sun = FindSun();
+            if (sun == null)
             {
                 var lightGo = new GameObject("Directional Light");
-                var light = lightGo.AddComponent<Light>();
-                light.type = LightType.Directional;
-                light.intensity = 1f;
+                sun = lightGo.AddComponent<Light>();
+                sun.type = LightType.Directional;
+                sun.intensity = 1f;
                 lightGo.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
             }
 
             // Sky, fog, ambient light and sun tuning for the procedural landscape (cosmetic only).
-            EnvironmentBuilder.ApplyAtmosphere(Camera.main, FindAnyObjectByType<Light>());
+            EnvironmentBuilder.ApplyAtmosphere(Camera.main, sun);
+        }
+
+        /// <summary>
+        /// The scene's directional light, or null. Explicitly typed: effect flashes spawn POINT lights,
+        /// so a plain "is there any Light?" test could mistake a live explosion for the sun.
+        /// </summary>
+        private static Light FindSun()
+        {
+            Light[] lights = FindObjectsByType<Light>(FindObjectsSortMode.None);
+            for (int i = 0; i < lights.Length; i++)
+            {
+                Light l = lights[i];
+                if (l == null) continue;
+                if (l.type == LightType.Directional) return l;
+            }
+            return null;
         }
 
         /// <summary>Creates the procedural landscape: terrain mesh, airbase pad and scenery props.</summary>
         private void CreateGround()
         {
-            EnvironmentBuilder.BuildTerrain();
-            EnvironmentBuilder.BuildAirbase(Vector3.zero);
-            EnvironmentBuilder.ScatterProps(150f);
+            Parent(EnvironmentBuilder.BuildTerrain());
+            Parent(EnvironmentBuilder.BuildAirbase(Vector3.zero));
+            Parent(EnvironmentBuilder.ScatterProps(150f));
+        }
+
+        /// <summary>Moves a generated object under the Simulation root, keeping its world pose.</summary>
+        private static void Parent(GameObject go)
+        {
+            if (go == null) return;
+            if (Root == null) return;
+            go.transform.SetParent(Root, true);
         }
 
         /// <summary>Spawns a recon İHA drone (blue capsule) with a patrol route and friendly Targetable.</summary>
@@ -100,6 +167,7 @@ namespace Sim.Runtime
             var go = GameObject.CreatePrimitive(PrimitiveType.Capsule);
             go.name = name;
             go.transform.position = position;
+            Parent(go);
             ApplyColor(go, color);
             // Cosmetic: hide the placeholder capsule and build a recon-UAV silhouette in its place.
             VehicleModelBuilder.HideRootMesh(go);
@@ -131,6 +199,7 @@ namespace Sim.Runtime
             var go = GameObject.CreatePrimitive(PrimitiveType.Capsule);
             go.name = name;
             go.transform.position = position;
+            Parent(go);
             ApplyColor(go, color);
             // Cosmetic: hide the placeholder capsule and build an armed-UAV silhouette in its place.
             VehicleModelBuilder.HideRootMesh(go);
@@ -190,6 +259,7 @@ namespace Sim.Runtime
             {
                 var wp = new GameObject($"WP_{center.x}_{center.z}_{i}");
                 wp.transform.position = center + offsets[i];
+                Parent(wp);
                 list.Add(wp.transform);
             }
             return list;
