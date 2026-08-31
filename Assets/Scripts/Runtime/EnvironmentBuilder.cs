@@ -86,7 +86,8 @@ namespace Sim.Runtime
 
         /// <summary>Builds a modest airbase: an apron pad, a runway with markings and two hangars.</summary>
         /// <param name="centre">World position of the apron centre (usually the origin).</param>
-        public static void BuildAirbase(Vector3 centre)
+        /// <returns>The "Airbase" root GameObject that parents everything created here.</returns>
+        public static GameObject BuildAirbase(Vector3 centre)
         {
             var root = new GameObject("Airbase");
             root.transform.position = centre;
@@ -107,6 +108,8 @@ namespace Sim.Runtime
 
             Prop(root.transform, PrimitiveType.Cube, "Hangar_1", new Vector3(-13f, 1.6f, -8f), new Vector3(7f, 3.2f, 9f), Vector3.zero, hangar);
             Prop(root.transform, PrimitiveType.Cube, "Hangar_2", new Vector3(-13f, 1.4f, 6f), new Vector3(6f, 2.8f, 8f), Vector3.zero, hangar);
+
+            return root;
         }
 
         /// <summary>
@@ -117,7 +120,8 @@ namespace Sim.Runtime
         /// <param name="treeCount">Number of trees.</param>
         /// <param name="rockCount">Number of rocks.</param>
         /// <param name="buildingCount">Number of small buildings.</param>
-        public static void ScatterProps(float halfExtent, int treeCount = 220, int rockCount = 70, int buildingCount = 18)
+        /// <returns>The "Props" root GameObject that parents every scattered prop.</returns>
+        public static GameObject ScatterProps(float halfExtent, int treeCount = 220, int rockCount = 70, int buildingCount = 18)
         {
             Random.InitState(12345);
 
@@ -176,6 +180,8 @@ namespace Sim.Runtime
                     new Vector3(w, h, d), new Vector3(0f, Random.Range(0f, 360f), 0f), wall);
                 building.transform.position = p + new Vector3(0f, h * 0.5f, 0f);
             }
+
+            return root;
         }
 
         /// <summary>
