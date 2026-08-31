@@ -2,7 +2,7 @@
 
 > Bu dosya, projede yapılan tüm işleri ve kararları kaydeder; oturumlar arası bağlamı (context) korumak ve projeyi hızlı anlamak içindir.
 
-**Son güncelleme:** 2026-08-30
+**Son güncelleme:** 2026-08-31
 **Branch:** `claude/slack-session-f6uh9g`
 **Unity sürümü:** 6000.5.9f1
 
@@ -158,6 +158,9 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `bu tur (2/2b)` | Görsel yenileme (2/2b): dönen pervaneler, gövde yatışı, taret takibi, kamera hissi ve çubuk göstergeli HUD. |
 | `bu tur` | HUD tasarım mockup'ı: dört artboard'lı tasarım tuvali (`docs/design/hud/`), askerî gösterge estetiği. |
 | `bu tur (1/2)` | Düzeltme: taret namluları/füze tüpleri artık ölçeksiz taret pivotunun çocuğu, taretle birlikte dönüyor. |
+| `c1ce582` | HUD tasarım mockup'ına göre yeniden stillendirildi (`HudTheme` + `Hud`). |
+| `98213d4` | CLAUDE.md'ye kalıcı worker kuralları eklendi (önce DEVLOG oku, derleme yok, Unity 6 API, null kontrolü, küçük commit'ler). |
+| `bu tur` | Görev seçim menüsü HUD tasarımına uygun hâle getirildi (`ScenarioMenu` artık `HudTheme` kullanıyor). |
 
 ---
 
@@ -381,3 +384,15 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   çocuğu; taret hedefe döndüğünde namlular da dönüyor. (`"Turret"` artık boş bir pivot,
   görünen silindir `"TurretBody"` olarak onun altında; pivotun ölçeği `(1,1,1)` olduğu için
   silindirin `(0.9, 0.5, 0.9)` / `(0.8, 0.4, 0.8)` ölçeği namluları ezmiyor. Kozmetik.)
+- **Görev seçim menüsü yeniden stillendirildi:** `ScenarioMenu` artık eski IMGUI kutu/buton
+  görünümü yerine `HudTheme`'i (muharebe HUD'uyla aynı palet, panel, ince çerçeve, tag ve çizim
+  yardımcıları) kullanıyor ve `docs/design/hud/MissionSelect.dc.html` mockup'ına uyuyor: tam ekran
+  koyu fon + amber köşe ayraçları, ortalanmış `İHA / SİHA TAKTİK SİMÜLASYONU` başlığı ve amber
+  `GÖREV SEÇ` alt başlığı, yan yana dört görev kartı (M-01…M-04 kodu, üç bloklu zorluk göstergesi,
+  büyük başlık, tek satırlık Türkçe brifing, `N DALGA` + KOLAY/ORTA/ZOR satırı, fare üzerindeyken
+  amber vurgu ve `BAŞLAT` şeridi) ve altta derli toplu kontrol lejandı. **Davranış birebir aynı:**
+  `Time.timeScale` yönetimi, `IsOpen`, `M` ile yeniden açma, `ScenarioController.SelectedKind`
+  ataması, `BeginMission()` ve görev ortasında seçim yapıldığında sahne yeniden yükleme yolu
+  değişmedi; hiçbir oyun değeri okunmuyor/yazılmıyor. Zorluk göstergesi tamamen sunum amaçlı,
+  görev uzunluğundan (`ScenarioLibrary.TotalWaves`) türetiliyor. Tipografi HUD'daki gibi yaklaşık
+  (font asset'i yok, IMGUI'de harf aralığı ayarı yok).

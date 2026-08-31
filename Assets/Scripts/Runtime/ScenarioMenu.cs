@@ -23,22 +23,34 @@ namespace Sim.Runtime
     /// The chosen mission survives that reload because <c>SelectedKind</c> is static.
     /// </para>
     ///
+    /// <para>
+    /// PRESENTATION: styled after <c>docs/design/hud/MissionSelect.dc.html</c> and drawn entirely
+    /// with <see cref="HudTheme"/> (same palette, panels, hairline borders and tags as the combat
+    /// HUD) — dark full-screen backdrop, centred heading, a row of mission cards with a briefing
+    /// line, wave count and a three-block difficulty indicator, and the controls legend at the
+    /// bottom. Same typography caveat as the rest of the HUD: no font assets and no letter-spacing
+    /// in IMGUI, so the type only approximates the mockup.
+    /// </para>
+    ///
     /// Because the menu runs at <c>timeScale == 0</c> it never reads <see cref="Time.deltaTime"/>.
     /// </summary>
     public class ScenarioMenu : MonoBehaviour
     {
-        // Panel geometry.
-        private const float PanelWidth = 560f;
-        private const float PanelHeight = 420f;
+        // Layout constants (design: 1600x900 artboard, scaled to the actual screen).
+        private const float CardGap = 14f;
+        private const float CardHeaderH = 20f;
+        private const float CardActionH = 20f;
+        private const float CardFooterH = 26f;
+        private const float LegendH = 92f;
+        private const float FooterH = 24f;
 
         private ScenarioController _controller;
 
-        // Cached GUI styles, built lazily on the GUI thread (first OnGUI).
-        private GUIStyle _headingStyle;
-        private GUIStyle _subtitleStyle;
-        private GUIStyle _buttonStyle;
-        private GUIStyle _descStyle;
-        private GUIStyle _legendStyle;
+        /// <summary>
+        /// Word-wrapped briefing text. The theme's <c>Small</c> face with wrapping turned on —
+        /// a local variant of the shared style, not a second palette.
+        /// </summary>
+        private GUIStyle _brief;
 
         /// <summary>True while the menu is showing and the sim is held paused.</summary>
         public bool IsOpen { get; private set; }
@@ -100,75 +112,272 @@ namespace Sim.Runtime
             }
         }
 
+        /// <summary>Builds the one local style. Call from OnGUI, after <c>HudTheme.Ensure()</c>.</summary>
         private void EnsureStyles()
         {
-            if (_headingStyle == null)
-                _headingStyle = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = 24,
-                    fontStyle = FontStyle.Bold,
-                    alignment = TextAnchor.MiddleCenter
-                };
-            if (_subtitleStyle == null)
-                _subtitleStyle = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = 16,
-                    alignment = TextAnchor.MiddleCenter
-                };
-            if (_buttonStyle == null)
-                _buttonStyle = new GUIStyle(GUI.skin.button)
-                {
-                    fontSize = 16,
-                    fontStyle = FontStyle.Bold,
-                    alignment = TextAnchor.MiddleCenter
-                };
-            if (_descStyle == null)
-                _descStyle = new GUIStyle(GUI.skin.label) { fontSize = 12, wordWrap = true };
-            if (_legendStyle == null)
-                _legendStyle = new GUIStyle(GUI.skin.label) { fontSize = 12 };
+            if (_brief != null) return;
+
+            _brief = new GUIStyle(HudTheme.Small)
+            {
+                fontSize = 12,
+                wordWrap = true,
+                alignment = TextAnchor.UpperLeft
+            };
         }
+
+        // ------------------------------------------------------------------ drawing
 
         private void OnGUI()
         {
             if (!IsOpen) return;
 
+            HudTheme.Ensure();
             EnsureStyles();
 
-            var panel = new Rect(
-                (Screen.width - PanelWidth) * 0.5f,
-                (Screen.height - PanelHeight) * 0.5f,
-                PanelWidth, PanelHeight);
+            float sw = Screen.width;
+            float sh = Screen.height;
 
-            GUILayout.BeginArea(panel, GUI.skin.box);
+            // Dark full-screen backdrop over the frozen field.
+            HudTheme.Fill(new Rect(0f, 0f, sw, sh),
+                          new Color(HudTheme.Bg.r, HudTheme.Bg.g, HudTheme.Bg.b, 0.94f));
 
-            GUILayout.Space(8);
-            GUILayout.Label("İHA / SİHA TAKTİK SİMÜLASYONU", _headingStyle);
-            GUILayout.Label("Görev seç", _subtitleStyle);
-            GUILayout.Space(8);
+            // Bottom caption strip, then the corner brackets on top of it.
+            var footer = new Rect(0f, sh - FooterH, sw, FooterH);
+            HudTheme.Fill(footer, HudTheme.PanelAlt);
+            HudTheme.Fill(new Rect(0f, footer.y, sw, 1f), HudTheme.Line);
+            HudTheme.Draw(footer, "EĞİTİM AMAÇLI SOYUT SİMÜLASYON",
+                          HudTheme.Centered, HudTheme.TextFaint);
 
+            DrawCornerBrackets(sw, sh);
+
+            float margin = Mathf.Clamp(sw * 0.07f, 24f, 130f);
+            float contentW = Mathf.Max(320f, sw - margin * 2f);
+
+            // ---- heading
+            float top = Mathf.Clamp(sh * 0.08f, 20f, 90f);
+            DrawEyebrow(new Rect(0f, top, sw, 14f), "TAKTİK EĞİTİM SİMÜLATÖRÜ");
+
+            GUIStyle titleStyle = sw < 1180f ? HudTheme.Verdict28C() : HudTheme.Verdict;
+            HudTheme.Draw(new Rect(0f, top + 22f, sw, 46f), "İHA / SİHA TAKTİK SİMÜLASYONU",
+                          titleStyle, HudTheme.Text);
+
+            DrawSubtitle(new Rect(0f, top + 74f, sw, 28f), "GÖREV SEÇ");
+            float headingBottom = top + 106f;
+
+            // ---- controls legend, sitting just above the caption strip
+            float legendY = footer.y - 22f - LegendH;
+            DrawLegend(new Rect(margin, legendY, contentW, LegendH));
+
+            // ---- mission cards
             ScenarioKind[] kinds = ScenarioLibrary.All;
-            if (kinds != null)
-            {
-                for (int i = 0; i < kinds.Length; i++)
-                {
-                    ScenarioKind kind = kinds[i];
-                    string label = $"{ScenarioLibrary.Title(kind)}   —   Dalga: {ScenarioLibrary.TotalWaves(kind)}";
-                    if (GUILayout.Button(label, _buttonStyle, GUILayout.Height(30f)))
-                        Choose(kind);
+            if (kinds == null || kinds.Length == 0) return;
 
-                    GUILayout.Label($"    {ScenarioLibrary.Description(kind)}", _descStyle);
-                    GUILayout.Space(4);
+            float cardsTop = headingBottom + 24f;
+            float cardsH = Mathf.Max(170f, legendY - 24f - cardsTop);
+            float cardW = (contentW - CardGap * (kinds.Length - 1)) / kinds.Length;
+
+            for (int i = 0; i < kinds.Length; i++)
+            {
+                var r = new Rect(margin + i * (cardW + CardGap), cardsTop, cardW, cardsH);
+                if (DrawCard(r, kinds[i], i))
+                {
+                    Choose(kinds[i]);
+                    // Choose may reload the scene; stop drawing this frame.
+                    return;
                 }
             }
+        }
 
-            GUILayout.FlexibleSpace();
-            GUILayout.Label("Kamera: WASD + sağ tık bak · Tab drone takip · F serbest", _legendStyle);
-            GUILayout.Label("Pilot: C aç/kapat · W/S gaz · A/D dönüş · ↑/↓ yunuslama", _legendStyle);
-            GUILayout.Label("Silah: Space top · F füze · Q flare · E art yakıcı · X kaçış", _legendStyle);
-            GUILayout.Label("Genel: P duraklat · +/- hız · R yeniden · M görev menüsü", _legendStyle);
-            GUILayout.Space(6);
+        /// <summary>
+        /// One mission card: header (mission code + difficulty blocks), title, briefing line, a
+        /// footer with the wave count and difficulty word, and an action strip. Returns true when
+        /// the card was clicked.
+        /// </summary>
+        private bool DrawCard(Rect r, ScenarioKind kind, int index)
+        {
+            bool hover = r.Contains(Event.current.mousePosition);
+            Color accent = hover ? HudTheme.Amber : HudTheme.Line;
 
-            GUILayout.EndArea();
+            int waves = ScenarioLibrary.TotalWaves(kind);
+            int level = DifficultyLevel(waves);
+            Color diff = DifficultyColor(level);
+
+            // Body: flat panel fill, warmed to amber while hovered, with a 1px accent border.
+            HudTheme.Fill(r, hover ? Tint(HudTheme.Amber, 0.12f, 0.96f) : HudTheme.PanelBg);
+            HudTheme.Border(r, accent);
+
+            // Header strip.
+            var head = new Rect(r.x + 1f, r.y + 1f, r.width - 2f, CardHeaderH);
+            HudTheme.Fill(head, hover ? Tint(HudTheme.Amber, 0.20f, 1f) : HudTheme.PanelAlt);
+            HudTheme.Fill(new Rect(head.x, head.yMax - 1f, head.width, 1f), accent);
+            HudTheme.Draw(new Rect(head.x + 8f, head.y, 60f, head.height), $"M-{index + 1:00}",
+                          HudTheme.Small, hover ? HudTheme.Amber : HudTheme.TextFaint);
+            DrawDifficultyBlocks(new Rect(head.xMax - 53f, head.y + 6f, 45f, 9f), level, diff);
+
+            float x = r.x + 14f;
+            float cw = Mathf.Max(20f, r.width - 28f);
+
+            float actionY = r.yMax - 1f - CardActionH;
+            float footY = actionY - CardFooterH;
+
+            // Title (uppercase, wrapped) and the one-line briefing.
+            float y = head.yMax + 10f;
+            HudTheme.Draw(new Rect(x, y, cw, 44f), Upper(ScenarioLibrary.Title(kind)),
+                          HudTheme.Title, HudTheme.Text);
+            y += 48f;
+            HudTheme.Draw(new Rect(x, y, cw, Mathf.Max(14f, footY - y - 8f)),
+                          ScenarioLibrary.Description(kind), _brief,
+                          hover ? HudTheme.Text : HudTheme.TextDim);
+
+            // Footer: hairline, wave count on the left, difficulty word on the right.
+            HudTheme.Fill(new Rect(x, footY, cw, 1f), HudTheme.Line);
+            HudTheme.Draw(new Rect(x, footY + 7f, cw * 0.5f, 16f), $"{waves} DALGA",
+                          HudTheme.Small, HudTheme.TextDim);
+            HudTheme.Draw(new Rect(x, footY + 7f, cw, 16f), DifficultyText(level),
+                          HudTheme.SmallRight, diff);
+
+            // Action strip: amber call-to-action while hovered, dim hint otherwise.
+            var action = new Rect(r.x + 1f, actionY, r.width - 2f, CardActionH);
+            if (hover)
+            {
+                HudTheme.Fill(action, HudTheme.Amber);
+                HudTheme.Draw(action, "BAŞLAT", HudTheme.TagText, HudTheme.Bg);
+            }
+            else
+            {
+                HudTheme.Fill(new Rect(action.x, action.y, action.width, 1f), HudTheme.Line);
+                HudTheme.Draw(action, "SEÇMEK İÇİN TIKLA", HudTheme.TagText, HudTheme.TextFaint);
+            }
+
+            // Invisible hit area over the whole card — the card art above is the "button face".
+            return GUI.Button(r, GUIContent.none, GUIStyle.none);
+        }
+
+        /// <summary>Three small blocks; the first <paramref name="level"/> of them are filled.</summary>
+        private static void DrawDifficultyBlocks(Rect r, int level, Color c)
+        {
+            const int count = 3;
+            float gap = 3f;
+            float w = (r.width - gap * (count - 1)) / count;
+
+            for (int i = 0; i < count; i++)
+            {
+                var block = new Rect(r.x + i * (w + gap), r.y, w, r.height);
+                if (i < level) HudTheme.Fill(block, c);
+                else HudTheme.Border(block, HudTheme.Line);
+            }
+        }
+
+        /// <summary>Centred small caption flanked by two hairlines.</summary>
+        private static void DrawEyebrow(Rect r, string text)
+        {
+            HudTheme.Draw(r, text, HudTheme.Centered, HudTheme.TextDim);
+
+            float half = HudTheme.Centered.CalcSize(new GUIContent(text)).x * 0.5f;
+            float cy = r.y + r.height * 0.5f;
+            HudTheme.Fill(new Rect(r.center.x - half - 96f, cy, 80f, 1f), HudTheme.Line);
+            HudTheme.Fill(new Rect(r.center.x + half + 16f, cy, 80f, 1f), HudTheme.Line);
+        }
+
+        /// <summary>Centred amber subtitle flanked by two short amber rules.</summary>
+        private static void DrawSubtitle(Rect r, string text)
+        {
+            GUIStyle style = HudTheme.Verdict28C();
+            HudTheme.Draw(r, text, style, HudTheme.Amber);
+
+            float half = style.CalcSize(new GUIContent(text)).x * 0.5f;
+            float cy = r.y + r.height * 0.5f - 1f;
+            HudTheme.Fill(new Rect(r.center.x - half - 38f, cy, 24f, 2f), HudTheme.Amber);
+            HudTheme.Fill(new Rect(r.center.x + half + 14f, cy, 24f, 2f), HudTheme.Amber);
+        }
+
+        /// <summary>
+        /// The compact controls legend: a labelled left cell and the four key rows on the right.
+        /// Same information as before, set in the HUD's type and colours.
+        /// </summary>
+        private static void DrawLegend(Rect r)
+        {
+            HudTheme.Panel(r);
+
+            const float labelW = 190f;
+            HudTheme.Fill(new Rect(r.x + labelW, r.y + 1f, 1f, r.height - 2f), HudTheme.Line);
+            HudTheme.Draw(new Rect(r.x + 14f, r.y + 14f, labelW - 28f, 16f), "KONTROLLER",
+                          HudTheme.SectionLabel, HudTheme.Amber);
+            HudTheme.Draw(new Rect(r.x + 14f, r.y + 32f, labelW - 28f, 14f), "KAMERA VE PİLOT",
+                          HudTheme.Small, HudTheme.TextFaint);
+
+            float x = r.x + labelW + 16f;
+            float w = Mathf.Max(40f, r.xMax - 16f - x);
+            float y = r.y + 12f;
+
+            HudTheme.Draw(new Rect(x, y, w, 18f),
+                          "WASD + SAĞ TIK: KAMERA · TAB: DRONE TAKİP · F: SERBEST",
+                          HudTheme.Small, HudTheme.TextDim);
+            HudTheme.Draw(new Rect(x, y + 18f, w, 18f),
+                          "C: PİLOT MODU · W/S: GAZ · A/D: DÖNÜŞ · ↑/↓: YUNUSLAMA",
+                          HudTheme.Small, HudTheme.TextDim);
+            HudTheme.Draw(new Rect(x, y + 36f, w, 18f),
+                          "SPACE: TOP · F: FÜZE · Q: FLARE · E: ART YAKICI · X: KAÇIŞ",
+                          HudTheme.Small, HudTheme.TextDim);
+            HudTheme.Draw(new Rect(x, y + 54f, w, 18f),
+                          "P: DURAKLAT · +/−: HIZ · R: YENİDEN · M: GÖREV MENÜSÜ",
+                          HudTheme.Small, HudTheme.TextDim);
+        }
+
+        /// <summary>The mockup's four amber corner brackets.</summary>
+        private static void DrawCornerBrackets(float sw, float sh)
+        {
+            const float inset = 18f;
+            const float arm = 26f;
+            const float t = 2f;
+            Color c = new Color(HudTheme.Amber.r, HudTheme.Amber.g, HudTheme.Amber.b, 0.55f);
+
+            HudTheme.Fill(new Rect(inset, inset, arm, t), c);
+            HudTheme.Fill(new Rect(inset, inset, t, arm), c);
+
+            HudTheme.Fill(new Rect(sw - inset - arm, inset, arm, t), c);
+            HudTheme.Fill(new Rect(sw - inset - t, inset, t, arm), c);
+
+            HudTheme.Fill(new Rect(inset, sh - inset - t, arm, t), c);
+            HudTheme.Fill(new Rect(inset, sh - inset - arm, t, arm), c);
+
+            HudTheme.Fill(new Rect(sw - inset - arm, sh - inset - t, arm, t), c);
+            HudTheme.Fill(new Rect(sw - inset - t, sh - inset - arm, t, arm), c);
+        }
+
+        // ------------------------------------------------------------------ small helpers
+
+        /// <summary>A very dark tint of an accent colour, used for hovered fills.</summary>
+        private static Color Tint(Color accent, float amount, float alpha)
+        {
+            return new Color(accent.r * amount, accent.g * amount, accent.b * amount, alpha);
+        }
+
+        /// <summary>
+        /// Presentation-only difficulty rating derived from the mission length, matching the mockup
+        /// (2 waves = easy, 3 = medium, 4 = hard). Reads mission data; changes nothing.
+        /// </summary>
+        private static int DifficultyLevel(int waves)
+        {
+            return Mathf.Clamp(waves - 1, 1, 3);
+        }
+
+        private static Color DifficultyColor(int level)
+        {
+            if (level <= 1) return HudTheme.Ok;
+            return level == 2 ? HudTheme.Amber : HudTheme.Critical;
+        }
+
+        private static string DifficultyText(int level)
+        {
+            if (level <= 1) return "KOLAY";
+            return level == 2 ? "ORTA" : "ZOR";
+        }
+
+        /// <summary>Uppercase using the invariant culture, exactly as <see cref="Hud"/> does.</summary>
+        private static string Upper(string s)
+        {
+            return string.IsNullOrEmpty(s) ? string.Empty : s.ToUpperInvariant();
         }
 
         /// <summary>
