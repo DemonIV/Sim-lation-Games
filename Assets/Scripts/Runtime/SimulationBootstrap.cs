@@ -127,9 +127,10 @@ namespace Sim.Runtime
             scenarioGo.transform.SetParent(Root, false);
             scenarioGo.AddComponent<ScenarioController>();
 
-            // Tactical layer (M1). Created LAST so the director's Start() counts every hostile that
-            // was just spawned. The SimulationDirector tracks mission progress/score; the Hud draws
-            // an IMGUI overlay reading that state.
+            // Tactical layer (M1). The SimulationDirector tracks mission stats/score (win/lose belongs
+            // to the ScenarioController above); the Hud draws an IMGUI overlay reading that state.
+            // Creation order no longer matters for counting: hostiles are spawned wave by wave from
+            // ScenarioController.Update, so the field is empty whatever runs first.
             var directorGo = new GameObject("SimulationDirector");
             directorGo.transform.SetParent(Root, false);
             var director = directorGo.AddComponent<SimulationDirector>();

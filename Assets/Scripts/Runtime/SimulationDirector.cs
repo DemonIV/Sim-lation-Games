@@ -9,12 +9,14 @@ namespace Sim.Runtime
     /// when hostiles or friendlies disappear (are destroyed), and feeds those events into a pure-logic
     /// <see cref="MissionState"/> that scores the scenario. The HUD reads this component's accessors.
     ///
+    /// It is a SCORE tracker only — win/lose belongs to <see cref="ScenarioController"/>, so the
+    /// mission state here is deliberately built so it can never terminate itself (see
+    /// <see cref="Start"/>).
+    ///
     /// Faction convention (from <see cref="Targetable"/>): 0 = friendly, 1 = hostile.
     /// </summary>
     public class SimulationDirector : MonoBehaviour
     {
-        [SerializeField] private int maxFriendlyLosses = 1;
-
         /// <summary>Pure-logic mission/score tracker. Populated in <see cref="Start"/>.</summary>
         public MissionState Mission { get; private set; }
 
@@ -39,11 +41,22 @@ namespace Sim.Runtime
 
         private void Start()
         {
-            // Count starting populations. GetSnapshot already filters out destroyed targets.
-            int hostilesTotal = TargetRegistry.GetSnapshot(1).Count;
-            Mission = new MissionState(hostilesTotal, maxFriendlyLosses);
+            // This instance is a pure STAT/SCORE tracker: win/lose lives in ScenarioController, which
+            // owns the waves (clearing the last one wins; a combat-ineffective squad loses).
+            //
+            // So the MissionState is built so it can NEVER auto-terminate (finding B-03): a hostile
+            // total of 0 means the "all hostiles destroyed" branch never fires, and an effectively
+            // infinite friendly-loss allowance means a second friendly loss can no longer flip the
+            // status to Lost. Either would have frozen Status away from InProgress, after which
+            // RecordHostileDestroyed/RecordFriendlyLost return early and the score silently stops
+            // moving for the rest of the mission.
+            //
+            // A real starting hostile count is not available here anyway: waves spawn later, from
+            // ScenarioController.Update, so the field is still empty at this point.
+            Mission = new MissionState(0, int.MaxValue);
 
-            HostilesAlive = hostilesTotal;
+            // Count starting populations. GetSnapshot already filters out destroyed targets.
+            HostilesAlive = TargetRegistry.GetSnapshot(1).Count;
             FriendliesAlive = TargetRegistry.GetSnapshot(0).Count;
             _prevHostilesAlive = HostilesAlive;
             _prevFriendliesAlive = FriendliesAlive;

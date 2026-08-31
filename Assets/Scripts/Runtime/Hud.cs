@@ -152,10 +152,13 @@ namespace Sim.Runtime
 
             // İMHA / KAYIP / SKOR
             float cell = (cw - 8f) / 3f;
+            // Running totals only: the director's MissionState is a pure counter (no hostile total and
+            // no friendly-loss limit), because win/lose is the ScenarioController's job. The mission
+            // length is already shown by the DALGA row above.
             StatCell(new Rect(cx, cy, cell, 38f), "İMHA",
-                     $"{m.HostilesDestroyed}/{m.HostilesTotal}", HudTheme.Text);
+                     m.HostilesDestroyed.ToString(), HudTheme.Text);
             StatCell(new Rect(cx + cell + 4f, cy, cell, 38f), "KAYIP",
-                     $"{m.FriendliesLost}/{m.MaxFriendlyLosses}",
+                     m.FriendliesLost.ToString(),
                      m.FriendliesLost > 0 ? HudTheme.Critical : HudTheme.Ok);
             StatCell(new Rect(cx + (cell + 4f) * 2f, cy, cell, 38f), "SKOR",
                      m.Score.ToString(), HudTheme.Amber);
@@ -639,7 +642,7 @@ namespace Sim.Runtime
             float cell = (cw - 12f) / 4f;
             StatCell(new Rect(x, y, cell, 44f), "SÜRE", Clock(m.ElapsedTime), HudTheme.Text);
             StatCell(new Rect(x + cell + 4f, y, cell, 44f), "İMHA",
-                     $"{m.HostilesDestroyed}/{m.HostilesTotal}", won ? HudTheme.Ok : HudTheme.Text);
+                     m.HostilesDestroyed.ToString(), won ? HudTheme.Ok : HudTheme.Text);
             StatCell(new Rect(x + (cell + 4f) * 2f, y, cell, 44f), "KAYIP",
                      m.FriendliesLost.ToString(),
                      m.FriendliesLost > 0 ? HudTheme.Critical : HudTheme.Ok);

@@ -82,9 +82,9 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `Jammer` | Gemi üstü gürültü karıştırıcı (EW menzil düşürme). |
 | `GuidedMunition` | PN güdümü + arayıcı başlık + balistik ile güdümlü mühimmat, yakınlık tapası. |
 | `TargetRegistry` / `Targetable` | Canlı hedeflerin kaydı; controller'lar her kare sorgular. |
-| `SimulationBootstrap` | Play'de sahneyi primitive'lerden kurar (kamera, ışık, zemin, drone'lar, ScenarioController). |
+| `SimulationBootstrap` | Play'de sahneyi primitive'lerden kurar (kamera, ışık, zemin, drone'lar, ScenarioController). Üretilen her şey tek bir `Simulation` kökünün altındadır; `Rebuild()` bu kökü yıkıp yeniden kurar (yerinde yeniden başlatma). |
 | `ScenarioController` | Dalga tabanlı senaryo: seçilen göreve göre (`ScenarioLibrary.Composition`) her dalganın düşman karışımını spawn eder ve kazan/kaybet'i yönetir; `BeginMission()` çağrılana kadar bekler. |
-| `SimulationDirector` | Görev takibi ve skorlama (dalga güvenli kill sayımı; kazan/kaybet artık ScenarioController'da). |
+| `SimulationDirector` | Görev takibi ve skorlama (dalga güvenli kill sayımı; kazan/kaybet ScenarioController'da, bu yüzden `MissionState` saf sayaç olarak kurulur ve kendi kendine bitmez). |
 | `Hud` | Ekran üstü (IMGUI) bilgi paneli: görev, skor, radar temasları. |
 | `CameraRig` | Serbest uçan kamera (WASD + fare) ve drone takip modu. |
 | `ExplosionEffect` | Asset'siz patlama işareti: büyüyüp sönen emisyonlu küre (mühimmat isabeti + imha). |
@@ -162,6 +162,11 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `98213d4` | CLAUDE.md'ye kalıcı worker kuralları eklendi (önce DEVLOG oku, derleme yok, Unity 6 API, null kontrolü, küçük commit'ler). |
 | `bu tur` | Görev seçim menüsü HUD tasarımına uygun hâle getirildi (`ScenarioMenu` artık `HudTheme` kullanıyor). |
 | `bu tur` | Çalışma zamanı sahnesi analizi: `docs/SCENE.md` (hiyerarşi, bileşen envanteri, yerleşim, yaşam döngüsü, 19 bulgu). |
+| `e62b9b0` | `EnvironmentBuilder.BuildAirbase`/`ScatterProps` artık ürettikleri kökü döndürüyor. |
+| `110ab11` | Üretilen sahne tek bir `Simulation` kökü altına taşındı; `Build()` ayrıldı, statik `Instance`/`Root` eklendi. |
+| `88e787b` | Dalga düşmanları da `Simulation` kökünün altında spawn ediliyor. |
+| `ffbdadc` | **B-01:** yeniden başlatma artık sahne yüklemiyor, `SimulationBootstrap.Rebuild()` ile yerinde yeniden kuruluyor. |
+| `bu tur` | **B-03:** görev skoru artık tüm görev boyunca birikiyor (`MissionState` saf sayaç). |
 
 ---
 
@@ -202,9 +207,9 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 - **Görev seçimi:** Artık tek bir sabit senaryo yok. `ScenarioLibrary` dört görev tanımlıyor
   (Keşif / SEAD / Hava Muharebesi / Karma Savunma), her biri kendi dalga sayısı ve dalga başına
   düşman kompozisyonuyla; `ScenarioMenu` açılışta brifing ekranı olarak çıkıyor ve **M** ile
-  görev sırasında yeniden açılıyor (seçim sahneyi yeniden yükleyerek sahayı temizliyor).
-  Seçilen görev statik `ScenarioController.SelectedKind`'de tutulduğu için R/menü yeniden
-  yüklemelerinden sağ çıkıyor.
+  görev sırasında yeniden açılıyor (seçim, üretilen dünyayı `SimulationBootstrap.Rebuild()` ile
+  yerinde yeniden kurarak sahayı temizliyor). Seçilen görev statik
+  `ScenarioController.SelectedKind`'de tutulduğu için R/menü yeniden kurulumlarından sağ çıkıyor.
 - **Skor:** `imha×100 − kayıp×150`. (Önceki sürümdeki saniyelik zaman cezası kaldırıldı; geçen süre HUD'da ayrı
   gösterilir.)
 
@@ -409,3 +414,21 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   (B-02) ve `SimulationDirector.Start`'ın artık hiç düşman sayamaması + `MissionState`'in ikinci
   dost kaybında skoru dondurması (B-03). **Yalnızca analiz — hiçbir oyun/çalışma zamanı kodu
   değiştirilmedi.**
+- **Yerinde yeniden başlatma (B-01) + skor birikimi (B-03):** `SimulationBootstrap` ürettiği her
+  şeyi (arazi, üs, proplar, drone'lar, waypoint'ler, `ScenarioController`, `SimulationDirector`)
+  artık tek bir **`Simulation`** kök nesnesinin altına kuruyor; kurulum gövdesi `Awake`'ten
+  `Build()`'e taşındı ve sınıf statik `Instance`/`Root` sunuyor. Yeni `Rebuild()` pilot kontrolünü
+  bırakır, kökü devre dışı bırakıp yok eder, kökün dışında kalan güdümlü mühimmatları temizler,
+  yaşamaması gereken statikleri sıfırlar (`TargetRegistry`, `GuidedMunition.Active`,
+  `VfxLibrary.ResetBudget()`, `Time.timeScale = 1`) ve `Build()`'i yeniden çağırır. `Main Camera`
+  ve `Directional Light` bilerek kökün dışında kalır (ışık araması artık **yönlü** ışığa bakıyor,
+  patlama nokta ışıkları güneş sanılmıyor). `GameControls`'un **R** yolu ve `ScenarioMenu`'nün
+  görev ortası değişimi `SceneManager.LoadScene` yerine `Rebuild()` çağırıyor — depoda Build
+  Settings'e kayıtlı sahne olmadığı için o yol zaten çalışmıyordu (B-01). Seçilen görev
+  (`ScenarioController.SelectedKind`) ve menünün `_autoBegin` bayrağı statik oldukları için
+  yeniden kurulumdan sağ çıkar; `Rebuild()` bunlara **dokunmaz**. Ayrıca `SimulationDirector`
+  artık `new MissionState(0, int.MaxValue)` kuruyor: kazan/kaybet `ScenarioController`'ın işi
+  olduğu için bu örnek saf bir istatistik/skor sayacı ve ikinci dost kaybında skoru dondurmuyor
+  (B-03). `Core/MissionState.cs` ve testleri **değişmedi**; HUD'un `İMHA`/`KAYIP` hücreleri
+  anlamsız paydaları (`/0`, `/2147483647`) göstermemek için yalnız sayacı yazıyor. **Oyun
+  değerleri (menzil, hasar, can, irtifa, spawn konumları) değişmedi.**

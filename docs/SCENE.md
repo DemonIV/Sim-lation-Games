@@ -14,12 +14,18 @@
 `.unity.meta` de yoktur. `ProjectSettings/` yalnızca `ProjectVersion.txt` içerir (yani
 `EditorBuildSettings.asset` da yok → **Build Settings sahne listesi boş**).
 
-Sahnenin tamamı `Sim.Runtime.SimulationBootstrap.Awake()` (`Assets/Scripts/Runtime/SimulationBootstrap.cs:19`)
-içinde primitive'lerden kurulur. Kullanım (DEVLOG §4): boş bir sahne aç → boş bir GameObject'e
+Sahnenin tamamı `Sim.Runtime.SimulationBootstrap.Awake()` → `Build()`
+(`Assets/Scripts/Runtime/SimulationBootstrap.cs`) içinde primitive'lerden kurulur. Kullanım (DEVLOG §4): boş bir sahne aç → boş bir GameObject'e
 `SimulationBootstrap` ekle → Play. Bu kararın iki sonucu vardır ve ikisi de aşağıdaki bulgular
 tablosunda yer alır: (a) `SceneManager.LoadScene(GetActiveScene().buildIndex)` tabanlı yeniden
 başlatma yolu kayıtlı bir sahne varlığı olmadan çalışmaz (B-01); (b) sahnedeki her şey her Play'de
 sıfırdan üretildiği için başlangıç maliyeti ve nesne sayısı tamamen kodun kontrolündedir.
+
+> **Güncelleme (B-01 çözüldü):** yeniden başlatma artık sahne yüklemiyor. Üretilen dünyanın tamamı
+> tek bir **`Simulation`** kök nesnesinin altında kuruluyor ve `SimulationBootstrap.Rebuild()` bu
+> kökü yıkıp `Build()`'i yeniden çağırıyor (`R` ve görev ortasında menüden seçim bu yolu kullanır).
+> `Main Camera` ile `Directional Light` bilerek kökün **dışında** kalır, yeniden kurulumdan sağ
+> çıkar.
 
 Render hattı: `Packages/manifest.json` **URP içermez** (`com.unity.render-pipelines.universal` yok)
 → proje **Built-in** hatta çalışır. Koddaki tüm `Universal Render Pipeline/Lit` yedekleri ölü
@@ -31,10 +37,14 @@ koddur; `RenderSettings.fog` / `skybox` / `ambientMode` çağrıları Built-in'd
 
 ### 1.1 Açılışta (Awake) kurulan kök nesneler
 
+Not: aşağıdaki `Terrain`'den itibaren **her şey** tek bir `Simulation` kök nesnesinin çocuğudur
+(yeniden kurulum için); `Main Camera` ve `Directional Light` kökün dışındadır.
+
 ```
 <Kullanıcının boş GameObject'i>        ← SimulationBootstrap (sahnedeki tek elle kurulan nesne)
 Main Camera                            ← yalnızca Camera.main yoksa oluşturulur, tag "MainCamera"
-Directional Light                      ← yalnızca sahnede hiç Light yoksa oluşturulur
+Directional Light                      ← yalnızca sahnede yönlü ışık yoksa oluşturulur
+Simulation                             ← üretilen dünyanın tek kökü (Rebuild bunu yıkar)
 Terrain                                ← prosedürel mesh, collider yok
 Airbase
 ├── Apron            (Cylinder)
@@ -47,7 +57,7 @@ Props
 ├── Rock_0 … Rock_69                   (Sphere)
 └── Building_0 … Building_17           (Cube)
 IHA_1, IHA_2, SIHA_1                   (Capsule kök + "Model" çocuğu)
-WP_<x>_<z>_0 … _3                      (drone başına 4 boş waypoint, KÖK seviyesinde, parent'sız)
+WP_<x>_<z>_0 … _3                      (drone başına 4 boş waypoint, Simulation kökünün altında)
 ScenarioController                     (boş GameObject)
 SimulationDirector                     (boş GameObject — 5 yönetici bileşen taşır)
 ```
@@ -80,7 +90,8 @@ Animasyonla adı üzerinden bulunan parçalar: `"Propeller"` (`PropellerSpinner`
 ### 1.3 Dalga başına üretilenler (`ScenarioController.SpawnWave`, `ScenarioController.cs:133`)
 
 Adlandırma: `Hostile_W{dalga}_{i}`, `SAM_W{dalga}_{i}`, `AAA_W{dalga}_{i}`, `Fighter_W{dalga}_{i}`.
-Hepsi **kök seviyesinde**, parent'sız oluşturulur. Adet, seçilen senaryonun
+Hepsi **`Simulation` kökünün** altında oluşturulur (yeniden kurulumda birlikte yıkılsınlar diye).
+Adet, seçilen senaryonun
 `ScenarioLibrary.Composition(SelectedKind, waveIndex)` çıktısından gelir.
 
 ### 1.4 Geçici (kısa ömürlü) nesneler
@@ -190,11 +201,12 @@ kamera başlangıcı 60 m · sis görünürlüğü ~400 m · far clip 1200 m · 
 
 ### 4.1 Awake (tek kare, sırayla)
 
-`SimulationBootstrap.Awake` (`:19`):
+`SimulationBootstrap.Awake` → `Build()`:
 
-1. `TargetRegistry.Clear()` — önceki sahne yüklemesinden kalan kayıtları düşürür.
-2. `EnsureCameraAndLight()` → kamera (yoksa), ışık (hiç `Light` yoksa),
-   `EnvironmentBuilder.ApplyAtmosphere(Camera.main, FindAnyObjectByType<Light>())`.
+1. `TargetRegistry.Clear()` — önceki kurulumdan kalan kayıtları düşürür; ardından `Simulation`
+   kök nesnesi oluşturulur (`Root`) ve 3–6. adımdaki her şey onun altına bağlanır.
+2. `EnsureCameraAndLight()` → kamera (yoksa), **yönlü** ışık (yoksa; patlama nokta ışıkları
+   sayılmaz), `EnvironmentBuilder.ApplyAtmosphere(Camera.main, sun)`. İkisi de kökün dışında.
 3. `CreateGround()` → `BuildTerrain()` + `BuildAirbase(Vector3.zero)` + `ScatterProps(150)`.
 4. `SpawnIha` ×2, `SpawnSiha` ×1 — her birinde `GunTurret` ve `CountermeasureDispenser`
    controller'dan **önce** eklenir; `AssignRoute` patrol listesini **reflection** ile private
@@ -213,7 +225,7 @@ kamera başlangıcı 60 m · sis görünürlüğü ~400 m · far clip 1200 m · 
 | `IhaController`/`SihaController` | `EnsureInitialized()`: FlightModel, WaypointNavigator (waypoint konumları **kopyalanır**), TargetingSystem, FuelTank, EngagementPolicy, ResupplyPoint, `_gun`/`_self`/`_cm`, `BasePosition` = spawn |
 | `RadarSensor`, `GunTurret`, `CountermeasureDispenser`, `AirDefenseSite`, `EnemyDroneController` | saf mantık çekirdeklerini tembel kurar (`EnsureInitialized`/`EnsureGun`) |
 | `ScenarioController` | `_state = new ScenarioState(ScenarioLibrary.TotalWaves(SelectedKind))`; **`Started` false kalır** |
-| `SimulationDirector` | `MissionState(hostilesTotal, 1)` — bu anda sahada **hiç düşman yok**, dolayısıyla daima `HostilesTotal = 0` (B-03) |
+| `SimulationDirector` | `MissionState(0, int.MaxValue)` — saf skor sayacı, kendi kendine asla bitmez; kazan/kaybet `ScenarioController`'da (B-03 çözüldü) |
 | `ScenarioMenu` | `_autoBegin` ise doğrudan `BeginMission()` + `timeScale = 1`; değilse `IsOpen = true`, `timeScale = 0` |
 | `Hud` | yönetici referanslarını + `RadarSensor[]` listesini bulur (2 s'de bir tazelenir) |
 | `CameraRig` | yaw/pitch'i mevcut rotasyondan tohumlar, `_baseFov` |
@@ -264,9 +276,9 @@ kullanıcı fark eder · **düşük** = ölü kod, kozmetik tutarsızlık, küç
 
 | # | Ciddiyet | Bulgu | Yer | Önerilen düzeltme |
 |---|---|---|---|---|
-| **B-01** | **yüksek** | Depoda kayıtlı bir `.unity` sahnesi ve `EditorBuildSettings.asset` yok. Build Settings'e eklenmemiş bir sahnede `Scene.buildIndex` **−1** döner, `SceneManager.LoadScene(-1)` istisna atar. Yani **`R` yeniden başlatma ve menüden görev değiştirme kutu dışında çalışmaz** — mid-mission görev seçimi de aynı yolu kullandığı için sessizce ölür (`_autoBegin` true kalır ve sonraki gerçek reload'da brifingi atlar). | `GameControls.cs:33`, `ScenarioMenu.cs:400` | Ya minimal bir `Assets/Scenes/Main.unity` (içinde tek `SimulationBootstrap` nesnesi) ekleyip Build Settings'e koy, ya da yeniden yükleme yolunu `buildIndex < 0` durumunda `SceneManager.LoadScene(GetActiveScene().name)`'e / sahne içi yeniden kuruluma düşür. |
+| **B-01** ✅ **ÇÖZÜLDÜ** | **yüksek** | Depoda kayıtlı bir `.unity` sahnesi ve `EditorBuildSettings.asset` yok. Build Settings'e eklenmemiş bir sahnede `Scene.buildIndex` **−1** döner, `SceneManager.LoadScene(-1)` istisna atar. Yani **`R` yeniden başlatma ve menüden görev değiştirme kutu dışında çalışmaz** — mid-mission görev seçimi de aynı yolu kullandığı için sessizce ölür (`_autoBegin` true kalır ve sonraki gerçek reload'da brifingi atlar). | `GameControls.cs:33`, `ScenarioMenu.cs:400` | Ya minimal bir `Assets/Scenes/Main.unity` (içinde tek `SimulationBootstrap` nesnesi) ekleyip Build Settings'e koy, ya da yeniden yükleme yolunu `buildIndex < 0` durumunda `SceneManager.LoadScene(GetActiveScene().name)`'e / sahne içi yeniden kuruluma düşür. **Çözüm:** sahne içi yeniden kurulum — üretilen dünya tek bir `Simulation` kökü altında toplandı, `SimulationBootstrap.Rebuild()` bu kökü yıkıp `Build()`'i yeniden çağırıyor; `GameControls` (R) ve `ScenarioMenu` artık `SceneManager` kullanmıyor. |
 | **B-02** | **yüksek** | `RadarSensor.Update` her kare **her aday hedef için** `TargetRegistry.FindById` çağırıyor; `FindById` de her çağrıda `Prune()` + tam liste taraması yapıyor → drone başına **O(n²)** + üstüne aday başına iki `GetComponent` (`RcsComponent`, `Jammer`). Sahnede hiçbir nesneye `Jammer` **eklenmiyor**, yani bu `GetComponent` her kare boşuna. | `RadarSensor.cs:83-105` | `GetSnapshot` yerine `TargetRegistry.All` üzerinde tek geçiş yap (id→Targetable araması gereksiz), `RcsComponent`/`Jammer` referanslarını `Targetable` üzerinde bir kez çözülüp önbelleklenmiş alanlardan oku. |
-| **B-03** | **orta** | `SimulationDirector.Start` başlangıç düşman sayısını sayıyor ama o anda **hiç düşman yok** (spawn artık `ScenarioController.Update`'te) → `MissionState.HostilesTotal` her zaman 0. Bootstrap'teki "created LAST so the director's Start() counts every hostile that was just spawned" yorumu **eskimiş**. Ayrıca `MaxFriendlyLosses = 1`: **ikinci dost kaybında `MissionState.Status = Lost`** olur ve `RecordHostileDestroyed` erken döner → **skor sessizce donar**, oysa `ScenarioController` görevi sürdürmeye devam eder. | `SimulationDirector.cs:40-52`, `MissionState.cs:45-49`, `SimulationBootstrap.cs:39-41` | Skor takibini kazan/kaybet değerlendirmesinden ayır: `MissionState`'i yalnız sayaç olarak kullan (`Evaluate()` çağrısını kaldır veya `MaxFriendlyLosses = int.MaxValue` ver) ve eskimiş yorumu güncelle. |
+| **B-03** ✅ **ÇÖZÜLDÜ** | **orta** | `SimulationDirector.Start` başlangıç düşman sayısını sayıyor ama o anda **hiç düşman yok** (spawn artık `ScenarioController.Update`'te) → `MissionState.HostilesTotal` her zaman 0. Bootstrap'teki "created LAST so the director's Start() counts every hostile that was just spawned" yorumu **eskimiş**. Ayrıca `MaxFriendlyLosses = 1`: **ikinci dost kaybında `MissionState.Status = Lost`** olur ve `RecordHostileDestroyed` erken döner → **skor sessizce donar**, oysa `ScenarioController` görevi sürdürmeye devam eder. | `SimulationDirector.cs:40-52`, `MissionState.cs:45-49`, `SimulationBootstrap.cs:39-41` | Skor takibini kazan/kaybet değerlendirmesinden ayır: `MissionState`'i yalnız sayaç olarak kullan (`Evaluate()` çağrısını kaldır veya `MaxFriendlyLosses = int.MaxValue` ver) ve eskimiş yorumu güncelle. **Çözüm:** `SimulationDirector.Start` artık `new MissionState(0, int.MaxValue)` kuruyor (asla kendi kendine bitmez, skor görev boyunca birikir), `maxFriendlyLosses` alanı kaldırıldı, bootstrap'teki eskimiş yorum güncellendi; HUD `İMHA`/`KAYIP` hücreleri anlamsız `/0` ve `/2147483647` paydalarını göstermemek için yalnız sayacı yazıyor (`Core/MissionState.cs` değişmedi). |
 | **B-04** | **orta** | `TracerEffect.Spawn` her mermi için bir `GameObject` + `LineRenderer` + `Shader.Find` + **`new Material`** üretiyor ve materyali **hiç yok etmiyor**; `ExplosionEffect` de `_material`'ı `OnDestroy`'da bırakmıyor. `GunTurret` 8–10 atış/sn ile çalıştığından saniyede onlarca materyal sızıyor. Ayrıca izli mermiler `VfxLibrary` bütçesine **tabi değil**. | `TracerEffect.cs:24-51`, `ExplosionEffect.cs:74-118` | İzli mermi materyalini statik olarak bir kez üret ve paylaş (`sharedMaterial`); `ExplosionEffect`'e `OnDestroy` içinde `Destroy(_material)` ekle; izli mermileri de `VfxLibrary.TrySpawnBudget()` ile sınırla. |
 | **B-05** | **orta** | Projede **hiç `Rigidbody`, raycast veya çarpışma geri çağrısı yok** — ama drone, düşman, SAM/AAA ve **her mühimmat** kökünde collider duruyor (`HideRootMesh` collider'ı bilerek bırakıyor). Rigidbody'siz collider'lar her kare transform'la taşınıyor → PhysX'in statik broadphase'ini sürekli yeniden kurması. `com.unity.modules.physics` bağımlılığı da fiilen kullanılmıyor. | `VehicleModelBuilder.cs:161`, `SihaController.cs:158`, `AirDefenseSite.cs:132`, `ScenarioController.cs:187/215/249/281` | Kök collider'ları da sil (mühimmat dahil) veya en azından mühimmatlarınkini kaldır. İleride raycast gerekirse collider'ları ayrı bir katmanda bilinçli olarak geri getir. |
 | **B-06** | **orta** | Yönetici katmanı her kare `TargetRegistry.GetSnapshot()` ile **yeni `List<DetectableTarget>`** ayırıyor: `ScenarioController.Update` 1, `SimulationDirector.Update` 2 + `UpdateAllocation` 1, artı drone başına 1 (`RunSensing`) + 1 (`RadarSensor`), AAA/SAM başına 1, avcı başına 1. `UpdateAllocation` ayrıca her kare 3 liste + 1 `int[]` ayırıyor. 8 düşmanlı bir dalgada kare başına 15+ tahsis. | `TargetRegistry.cs:110-124`, `SimulationDirector.cs:71-72, 108-141`, `ScenarioController.cs:99` | `GetSnapshot`'a yeniden kullanılabilir bir tampon alan aşırı yüklemesi ekle (`GetSnapshot(int faction, List<DetectableTarget> buffer)`); yalnız sayım gereken yerlerde (`ScenarioController.cs:99`) tahsissiz bir `CountAlive(faction)` kullan. |
