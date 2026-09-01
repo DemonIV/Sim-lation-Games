@@ -22,6 +22,55 @@ namespace Sim.Runtime
         /// <summary>Stable simulation id assigned at Awake, used across detection snapshots.</summary>
         public int Id { get; private set; }
 
+        private RcsComponent _rcs;
+        private Jammer _jammer;
+        private bool _sensorComponentsResolved;
+
+        /// <summary>
+        /// Cached <see cref="RcsComponent"/> on this object, or null when it has none. Resolved once
+        /// (lazily, so every spawn-time <c>AddComponent</c> has already run) instead of once per radar
+        /// per frame. Call <see cref="RefreshSensorComponents"/> if one is added later at runtime.
+        /// </summary>
+        public RcsComponent Rcs
+        {
+            get
+            {
+                ResolveSensorComponents();
+                return _rcs;
+            }
+        }
+
+        /// <summary>
+        /// Cached <see cref="Jammer"/> on this object, or null when it has none. Nothing in the scene
+        /// currently mounts a jammer, so this stays null and the radar's jamming path costs nothing.
+        /// </summary>
+        public Jammer Jammer
+        {
+            get
+            {
+                ResolveSensorComponents();
+                return _jammer;
+            }
+        }
+
+        /// <summary>
+        /// Re-resolves the cached sensor components. Only needed when an <see cref="RcsComponent"/> or
+        /// <see cref="Jammer"/> is attached (or removed) after this object has already been scanned.
+        /// </summary>
+        public void RefreshSensorComponents()
+        {
+            _sensorComponentsResolved = false;
+            ResolveSensorComponents();
+        }
+
+        private void ResolveSensorComponents()
+        {
+            if (_sensorComponentsResolved) return;
+            _sensorComponentsResolved = true;
+            _rcs = GetComponent<RcsComponent>();
+            _jammer = GetComponent<Jammer>();
+        }
+
         private void Awake()
         {
             Health = new Health(MaxHealth);

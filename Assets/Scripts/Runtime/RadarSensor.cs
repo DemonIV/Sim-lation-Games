@@ -73,39 +73,45 @@ namespace Sim.Runtime
             Vector3 self = transform.position;
             Vector3 forward = transform.forward;
 
-            List<DetectableTarget> snapshot = TargetRegistry.GetSnapshot(hostileFaction);
+            // Scan the registry directly: the old path built a snapshot list and then called
+            // FindById per candidate, and every FindById pruned + walked the whole list again
+            // (O(n²) per sensor per frame, plus one list allocation). Pruning once here and reading
+            // the live Targetables keeps exactly the same candidate set and order.
+            TargetRegistry.Prune();
+            List<Targetable> all = TargetRegistry.All;
 
             bool found = false;
             int bestId = -1;
             Vector3 bestPos = Vector3.zero;
             float bestDist = float.MaxValue;
 
-            for (int i = 0; i < snapshot.Count; i++)
+            for (int i = 0; i < all.Count; i++)
             {
-                DetectableTarget candidate = snapshot[i];
-
-                // Resolve the live Targetable so we can read aspect RCS and jamming state. The target
-                // can be DESTROYED between the snapshot and this lookup (Unity's == reports that as
-                // null), in which case there is nothing left to paint — skip the candidate entirely
-                // rather than touching any of its members.
-                Targetable t = TargetRegistry.FindById(candidate.Id);
+                // A target can be DESTROYED while the scan runs (Unity's == reports that as null), in
+                // which case there is nothing left to paint — skip it rather than touching a member.
+                Targetable t = all[i];
                 if (t == null) continue;
+                if (t.Faction != hostileFaction) continue;
+                if (t.Health != null && t.Health.IsDestroyed) continue;
+
+                Vector3 targetPos = t.transform.position;
 
                 // Aspect-dependent RCS if the target carries an RcsComponent, else the nominal value.
+                // The component reference is cached on the Targetable, so this is a field read.
                 float rcs = referenceRcs;
-                RcsComponent rcsComp = t.GetComponent<RcsComponent>();
+                RcsComponent rcsComp = t.Rcs;
                 if (rcsComp != null) rcs = rcsComp.RcsFrom(self);
 
                 // Baseline detection range from the radar range equation.
                 float range = _radar.DetectionRange(rcs);
 
-                // Noise jamming shortens the burn-through range.
-                Jammer jammer = t.GetComponent<Jammer>();
+                // Noise jamming shortens the burn-through range (cached lookup: free when absent).
+                Jammer jammer = t.Jammer;
                 if (jammer != null)
                     range = ElectronicWarfare.EffectiveRange(range, jammer.Strength);
 
                 // Detectable if inside the (jamming-reduced) range and within the beam.
-                Vector3 to = candidate.Position - self;
+                Vector3 to = targetPos - self;
                 float dist = to.magnitude;
                 if (dist > range) continue;
                 if (dist > 1e-6f && Vector3.Angle(forward, to) > beamWidthDeg * 0.5f) continue;
@@ -114,8 +120,8 @@ namespace Sim.Runtime
                 if (dist < bestDist)
                 {
                     bestDist = dist;
-                    bestId = candidate.Id;
-                    bestPos = candidate.Position;
+                    bestId = t.Id;
+                    bestPos = targetPos;
                     found = true;
                 }
             }
