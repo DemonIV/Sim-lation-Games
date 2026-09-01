@@ -53,7 +53,8 @@ namespace Sim.Runtime
         /// <para>
         /// Statics that must NOT survive are reset here (registry, live munitions, effect budget,
         /// time scale). Statics that MUST survive are deliberately left alone:
-        /// <see cref="ScenarioController.SelectedKind"/> (the player's mission choice) and
+        /// <see cref="ScenarioController.SelectedKind"/> (the player's mission choice),
+        /// <see cref="ScenarioController.SelectedAircraftId"/> (the player's aircraft choice) and
         /// <see cref="ScenarioMenu"/>'s auto-begin flag (set by a mid-mission mission switch just
         /// before calling this, and consumed by the freshly built menu so the briefing does not
         /// wrongly reappear).

@@ -46,6 +46,25 @@ namespace Sim.Runtime
         /// </summary>
         public static ScenarioKind SelectedKind = ScenarioKind.MixedDefense;
 
+        /// <summary>
+        /// Id of the aircraft archetype the player picked in <see cref="ScenarioMenu"/>
+        /// (see <see cref="AircraftCatalog"/>). STATIC for exactly the same reason as
+        /// <see cref="SelectedKind"/>: <see cref="SimulationBootstrap.Rebuild"/> destroys every
+        /// component, so the choice has to outlive the rebuild.
+        /// <para>
+        /// Defaults to the SİHA baseline, so a player who never touches the selector flies precisely
+        /// what the simulation shipped before.
+        /// </para>
+        /// </summary>
+        public static string SelectedAircraftId = AircraftCatalog.Default.Id;
+
+        /// <summary>
+        /// The selected aircraft profile, resolved defensively: an unknown or empty
+        /// <see cref="SelectedAircraftId"/> falls back to <see cref="AircraftCatalog.Default"/> instead
+        /// of throwing. Never null.
+        /// </summary>
+        public static AircraftProfile SelectedAircraft => AircraftCatalog.GetOrDefault(SelectedAircraftId);
+
         /// <summary>The scenario this controller is running (i.e. <see cref="SelectedKind"/>).</summary>
         public ScenarioKind Kind => SelectedKind;
 
