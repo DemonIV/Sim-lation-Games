@@ -53,18 +53,19 @@ Airbase
 ├── Hangar_1         (Cube)
 └── Hangar_2         (Cube)
 Props
-├── Tree_0 … Tree_219                  (boş kök; her biri 3 çocuk: Trunk, Foliage_0, Foliage_1)
+├── Tree_0 … Tree_219                  (boş kök; tür başına 5/6/3 çocuk — kozalaklı/geniş yapraklı/çalı)
 ├── Rock_0 … Rock_69                   (Sphere)
-└── Building_0 … Building_17           (Cube)
+└── Building_0 … Building_17           (boş kök; arketipe göre 9…11 çocuk — depo/blok/kule)
 IHA_1, IHA_2, SIHA_1                   (Capsule kök + "Model" çocuğu)
 WP_<x>_<z>_0 … _3                      (drone başına 4 boş waypoint, Simulation kökünün altında)
 ScenarioController                     (boş GameObject)
 SimulationDirector                     (boş GameObject — 5 yönetici bileşen taşır)
 ```
 
-Yaklaşık nesne sayısı: Props ≈ **969** GameObject (220×4 + 70 + 18 + kök), Airbase 15,
-drone'lar 3×(1 kök + 1 `Model` + 11…15 parça) ≈ 45, waypoint'ler 12, arazi 1, yöneticiler 2.
-Toplam açılış ≈ **1050 GameObject**, ~1000+ ayrı `MeshRenderer`.
+Yaklaşık nesne sayısı: Props ≈ **1550** GameObject (220 ağaç kökü + ~1070 ağaç parçası + 70 kaya
++ 18 bina kökü + ~180 bina parçası + kök), Airbase 15, drone'lar 3×(1 kök + 1 `Model` + 19…37 parça)
+≈ 90, waypoint'ler 12, arazi 1, yöneticiler 2. Toplam açılış ≈ **1670 GameObject**.
+(Dünya detayı turundan önce: Props ≈ 969, toplam ≈ 1050.)
 
 ### 1.2 Araç model hiyerarşileri
 
@@ -160,7 +161,7 @@ kullanılmıyor (bkz. B-05).
   `Runway` küp **6 × 44 m** (z ekseninde ±22); 9 pist çizgisi z = −18…+18, adım 4.5;
   `Hangar_1` (−13, 1.6, −8) 7×3.2×9; `Hangar_2` (−13, 1.4, 6) 6×2.8×8.
   **Üssün gerçek ayak izi ≈ 22 m yarıçap.**
-- **Prop dağılımı:** `ScatterProps(halfExtent = 150)` — 220 ağaç, 70 kaya, 18 bina;
+- **Prop dağılımı:** `ScatterProps(halfExtent = 150)` — 220 ağaç (3 tür), 70 kaya, 18 bina (3 arketip);
   keep-out = `FlatRadius + 10` = **55 m**; nokta başına 12 deneme, bulunamazsa atlanır;
   hepsi `TerrainField.Height` ile araziye oturtulur. Sabit tohum: `Random.InitState(12345)`
   (`EnvironmentBuilder.cs:122`) — bkz. B-08.
@@ -291,10 +292,10 @@ kullanıcı fark eder · **düşük** = ölü kod, kozmetik tutarsızlık, küç
 | **B-13** | **düşük** | 12 waypoint GameObject'i kök seviyesinde, parent'sız oluşturuluyor; `IhaController.EnsureInitialized` konumları `List<Vector3>`'e **kopyaladığı** için Start'tan sonra transform'lar hiç okunmuyor. Drone yok edilse bile hiyerarşide kalıyorlar. Ayrıca rota, private alana **reflection** ile yazılıyor. | `SimulationBootstrap.cs:170-196`, `IhaController.cs:245-253` | Waypoint'leri drone'un çocuğu yap veya tek bir `Routes` kökü altında topla; daha iyisi, `IhaController`'a `public void SetRoute(IList<Vector3>)` ekleyip reflection'ı ve GameObject'leri tümden kaldır. |
 | **B-14** | **düşük** | Ordering kırılganlığı: `ScenarioController.Start` (`:72`) `_state`'i **koşulsuz** yeniden kuruyor. `ScenarioMenu.Start` `_autoBegin` yolunda `BeginMission()` çağırdığı için, Unity `ScenarioMenu.Start`'ı önce çalıştırırsa `Started = true` kalır ama dalga durumu sıfırlanır. Bugün nesne oluşturma sırası sayesinde zararsız, ama garanti değil. Benzer şekilde bootstrap'teki "GunTurret'ı controller'dan önce ekle" yorumları gereksiz — bağımlılıklar `Start`'ta `GetComponent` ile çözülüyor. | `ScenarioController.cs:68-73`, `ScenarioMenu.cs:76-86`, `SimulationBootstrap.cs:109-116` | `Start`'ı `if (_state == null)` ile korumalı hâle getir. |
 | **B-15** | **düşük** | Görünür dünya kenarı: arazi ±150 m, sis yoğunluğu 0.0025 (≈400 m'de doyum), far clip 1200 m. Arazi sınırı (150–212 m) sis tarafından gizlenmiyor → kamera yükseldiğinde keskin bir kenar ve altında boş gökyüzü görünür. Kameranın ve pilot modundaki drone'un **hiçbir dünya sınırı yok**. | `EnvironmentBuilder.cs:22, 205-208, 224`, `CameraRig.cs:200-233` | Sis yoğunluğunu ~0.006–0.008'e çıkar (kozmetik) veya araziyi büyüt; opsiyonel olarak serbest kamerayı ±200 m kutusuna sıkıştır. |
-| **B-16** | **düşük** | Draw call yükü: `ScatterProps` her ağaç için **rastgele renkli** bir yaprak materyali, her bina için rastgele bir duvar materyali üretiyor. `MaterialLibrary` renk anahtarına göre önbelleklediği için bunlar birleşmiyor → ~220 benzersiz yaprak materyali, 660 ağaç renderer'ı; `enableInstancing` hiçbir yerde açılmıyor, çalışma zamanı nesnelerinde static batching de yok. | `EnvironmentBuilder.cs:144-149, 172-176`, `MaterialLibrary.cs:38-68` | Yaprak/duvar renklerini küçük bir palete (örn. 4–6 varyant) yuvarla ve `Create` içinde `mat.enableInstancing = true` ayarla. |
+| **B-16** 🟡 **KISMEN ÇÖZÜLDÜ** | **düşük** | Draw call yükü: `ScatterProps` her ağaç için **rastgele renkli** bir yaprak materyali, her bina için rastgele bir duvar materyali üretiyor. `MaterialLibrary` renk anahtarına göre önbelleklediği için bunlar birleşmiyor → ~220 benzersiz yaprak materyali, 660 ağaç renderer'ı; `enableInstancing` hiçbir yerde açılmıyor, çalışma zamanı nesnelerinde static batching de yok. | `EnvironmentBuilder.cs:144-149, 172-176`, `MaterialLibrary.cs:38-68` | Yaprak/duvar renklerini küçük bir palete (örn. 4–6 varyant) yuvarla ve `Create` içinde `mat.enableInstancing = true` ayarla. **Kısmi çözüm (dünya detayı turu):** `ScatterProps` artık 6 tonluk yaprak + 5 tonluk duvar **paletinden** çekiyor (`FoliagePalette`/`WallPalette`), yani dağılımın toplam materyal sayısı ~240 → **17**. Prop sayısı arttığı için (~968 → ~1553 GameObject) renderer sayısı büyüdü ama artık **paylaşılan** materyaller kullanıyorlar. **Kalan iş:** `MaterialLibrary.Create` içinde `enableInstancing`. |
 | **B-17** | **düşük** | `ApplyAtmosphere` her sahne yüklemesinde **yeni bir skybox `Material`** üretip `RenderSettings.skybox`'a atıyor; eskisi serbest bırakılmıyor. Ayrıca ışığı `FindAnyObjectByType<Light>()` ile buluyor — kullanıcının sahnesinde bir point light varsa **onu** güneşe dönüştürür (`sun.type = Directional`). URP yedek kodları da (`Universal Render Pipeline/Lit`, `_Surface`/`_Blend` yazımları) bu manifest ile hiç çalışmaz; ters yönde, bir gün URP'ye geçilirse `RenderSettings.fog`/`Skybox/Procedural` davranışı ve `Shader.Find("Standard")` **sessizce** bozulur. | `EnvironmentBuilder.cs:185-225`, `SimulationBootstrap.cs:76-86` | Skybox materyalini statik olarak bir kez üret; ışığı `light.type == LightType.Directional` filtresiyle seç. Çalışma zamanı `Shader.Find` bağımlılıklarını (`Standard`, `Sprites/Default`, `Unlit/Color`) Graphics Settings → Always Included Shaders'a ekle, aksi hâlde bir player build'inde materyaller macenta düşer. |
 | **B-18** | **düşük** | `Hud.OnGUI` kare başına en az iki kez (Layout + Repaint) çalışıp ~19 string interpolasyonu üretiyor; `HudTheme.Fill/Border/Bar` her çağrıda `GUI.DrawTexture` yapıyor. Görünür bir kare kaybı yok ama sürekli GC baskısı var. | `Hud.cs:85-108` | Değişmeyen metinleri (görev adı, kontrol şeridi) önbellekle veya yalnız `Event.current.type == EventType.Repaint` içinde çiz. |
-| **B-19** | **düşük** | `TurretVisual`, `Radar` tabağını `Space.Self` üzerinde Y ekseninde döndürüyor; tabağın local euler'ı `(60, 0, 0)` olduğu için dönüş ekseni eğik → tabak taramak yerine yalpalıyor. | `TurretVisual.cs:44`, `VehicleModelBuilder.cs:113` | Tabağı ölçeksiz bir pivot altına al (tüpler/namlular için zaten yapılan desen) ve pivotu döndür. |
+| **B-19** ✅ **ÇÖZÜLDÜ** | **düşük** | `TurretVisual`, `Radar` tabağını `Space.Self` üzerinde Y ekseninde döndürüyor; tabağın local euler'ı `(60, 0, 0)` olduğu için dönüş ekseni eğik → tabak taramak yerine yalpalıyor. | `TurretVisual.cs:44`, `VehicleModelBuilder.cs:113` | Tabağı ölçeksiz bir pivot altına al (tüpler/namlular için zaten yapılan desen) ve pivotu döndür. **Çözüm:** Patriot tipi bataryada `"Radar"` artık ölçeksiz ve **döndürülmemiş** bir pivot; faz dizisi panelinin ~30° geriye yatıklığı altındaki `"ArrayMount"` çocuğunda duruyor, böylece `TurretVisual`'ın `Space.Self` Y dönüşü temiz bir azimut taraması oluyor. |
 
 ### Kontrol edilip **sorun bulunmayan** noktalar
 

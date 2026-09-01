@@ -34,6 +34,13 @@ birebir aynısı olduğu için selektöre dokunmayan oyuncu için hiçbir şey d
 `BuildFighterJet` gövdesi (alan kuralına göndermeli beş segmentli gövde, saydam kabin, kırık delta
 kanat, çift dikey stabilizatör, yan hava alıkları, lüle + `"EngineGlow"`, dört pilon, karın sensörü)
 ve aynı detay seviyesine çekilmiş keşif İHA / SİHA gövdeleri. Hiçbir oyun değeri değişmedi.
+En son tur yine **kozmetik**: dünya detayı. Hava savunması artık **Patriot tipi bir batarya**
+(M901 rampa treyleri + yükselen 2×2 kanister rampası, faz dizisi radar treyleri, atış kontrol
+sığınağı — 37 parça), AAA ise ayrı kalsın diye detaylandırılmış bir **top kundağı** (14 parça).
+Dağılımdaki binalar tek kutu yerine **üç çok katlı arketip** (depo / blok / kule), ağaçlar ise
+**üç tür** (kozalaklı / geniş yapraklı / çalı) oldu; yaprak ve duvar renkleri kuantalanmış palete
+alındı. `docs/SCENE.md` bulgusu **B-19** kapandı, **B-16**'nın palet yarısı yapıldı. Hiçbir oyun
+değeri değişmedi.
 
 ### Yeni oturum için okuma sırası
 1. Bu bölüm.
@@ -65,7 +72,7 @@ ve aynı detay seviyesine çekilmiş keşif İHA / SİHA gövdeleri. Hiçbir oyu
 ### Açık işler (öncelik sırasıyla)
 | # | Bulgu | İş |
 |---|---|---|
-| 1 | **B-10…B-19** | `docs/SCENE.md`'deki kalan **düşük** öncelikli bulgular (ölü `ApplyColor`, üs konumu ile `BasePosition` uyumsuzluğu, ölü alanlar, waypoint GameObject'leri, sis/dünya sınırı, draw call/materyal birleştirme, skybox materyali, HUD string'leri, radar tabağı ekseni). |
+| 1 | **B-10…B-18** | `docs/SCENE.md`'deki kalan **düşük** öncelikli bulgular (ölü `ApplyColor`, üs konumu ile `BasePosition` uyumsuzluğu, ölü alanlar, waypoint GameObject'leri, sis/dünya sınırı, skybox materyali, HUD string'leri). **B-19 kapandı**; **B-16** kısmen kapandı — palet yapıldı, `MaterialLibrary.Create` içinde `enableInstancing` hâlâ açık iş. |
 | 2 | — | **Bilinen küçük hata:** görev kazanıldıktan sonra `MissionState.ElapsedTime` saymaya devam ediyor (director'ın örneği bilerek hiç bitmiyor); debrief saati director tarafında durdurulmalı. |
 | 3 | — | **Henüz karar verilmedi:** gerçek 3D modeller (render hattı kararı + çalışan bir glTF içe aktarıcı gerekir), ses, zorluk seviyeleri. |
 
@@ -174,8 +181,8 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `CountermeasureDispenser` | `CountermeasureSystem` sarmalayıcısı: flare/chaff salvosu, salvo sayacı (füzeler bunu izler), kısa görsel puf. |
 | `ScenarioMenu` | Kurulum gerektirmeyen IMGUI görev seçim/brifing ekranı: açılışta çıkar, sim'i duraklatır, `M` ile tekrar açılır. |
 | `MaterialLibrary` | Standard/URP uyumlu, önbelleklenmiş materyal fabrikası (renk, metalik, pürüzsüzlük, emisyon). |
-| `VehicleModelBuilder` | Primitive'lerden araç siluetleri kurar (keşif İHA 19, SİHA 27, savaş uçağı 37 parça; ayrıca düşman avcısı, SAM, AAA, yer hedefi); parçaların collider'ları silinir, fizik etkilenmez. `"Model"` çocuğu kökün ölçeğini tersler; `"Fuselage"`/`"Propeller"`/`"Radar"`/`"EngineGlow"`/`"Turret"`+`"TurretBody"` adları animasyon ve kamera kodunun sözleşmesidir. |
-| `EnvironmentBuilder` | Prosedürel arazi mesh'i, üs pisti, ağaç/kaya/bina dağılımı ve gökyüzü/sis/ortam ışığı/güneş ayarı (tamamı görsel). |
+| `VehicleModelBuilder` | Primitive'lerden araç siluetleri kurar (keşif İHA 19, SİHA 27, savaş uçağı 37, **Patriot tipi SAM bataryası 37**, **AAA topu 14** parça; ayrıca düşman avcısı, yer hedefi); parçaların collider'ları silinir, fizik etkilenmez. `"Model"` çocuğu kökün ölçeğini tersler; `"Fuselage"`/`"Propeller"`/`"Radar"`/`"EngineGlow"`/`"Turret"`+`"TurretBody"` adları animasyon ve kamera kodunun sözleşmesidir. Açılı alt gruplar (SAM rampası, faz dizisi paneli) ölçeksiz **döndürülmüş pivot** üzerinde durur. |
+| `EnvironmentBuilder` | Prosedürel arazi mesh'i, üs pisti, gökyüzü/sis/ortam ışığı/güneş ayarı ve prop dağılımı (tamamı görsel, hiçbirinde collider yok). Dağılımda **üç ağaç türü** (kozalaklı 5 / geniş yapraklı 6 / çalı 3 parça) ve **üç bina arketipi** (depo 9 / orta katlı blok 9–11 / kule 11 parça); boy, taç yarıçapı, eğim, arketip ve renk seçimi hep aynı **sabit tohumlu** akıştan çekilir. Yaprak/duvar renkleri 6 + 5 tonluk **kuantalanmış palete** bağlıdır (materyal sayısı ~240 → 17). |
 | `VfxLibrary` | Asset'siz efekt primitifleri (emisyonlu parlama, nokta ışığı patlaması, enkaz, saydam duman, şok dalgası halkası, kıvılcım); global efekt bütçesi ile sınırlı, hepsi kendini yok eder. |
 | `ScorchMark` | İmha edilen yer birimlerinin arazide bıraktığı, zamanla sönen yanık izi (en fazla 40 iz). |
 | `DamageVisuals` | Can oranı düşen birimlerde duman, kritik seviyede alev efekti (yalnızca `Health` okur). |
@@ -274,6 +281,9 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
 | `4a612c6` | Gerçek savaş uçağı gövdesi (`BuildFighterJet`) + `Accent`/`Glow`/`CanopyGlass` materyal yardımcıları. |
 | `16ace38` | `SpawnPlayerAircraft` jet için gerçek gövdeyi kuruyor; ödünç silüet notu kaldırıldı. |
 | `1f56d83` | Keşif İHA ve SİHA gövdeleri detaylandırıldı (bağımsız SİHA gövdesi, ters V-kuyruk, satcom kubbesi, açık livre). |
+| `a1abae6` | Üç detaylı uçak gövdesi için DEVLOG maddesi. |
+| `eac02eb` | Patriot tipi SAM bataryası (M901 rampa treyleri + faz dizisi radar treyleri + atış kontrol sığınağı) ve detaylandırılmış AAA top kundağı. |
+| `c669709` | Çok katlı bina arketipleri ve üç ağaç türü; yaprak/duvar renkleri kuantalanmış palete alındı (B-16'nın palet yarısı). |
 
 ---
 
@@ -727,3 +737,47 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
   (`BuildEnemyFighter` içinden çıkarılan, değeri değişmemiş egzoz materyali) yardımcıları eklendi;
   kabin camı **önbelleğe alınıyor** (`CreateTransparent` önbelleksiz örnek döndürdüğü için, her
   kurulumda bir cam materyali sızmasın diye — bkz. B-04).
+- **Dünya detayı (kozmetik tur, kullanıcı isteği: "hava savunma füzeleri de patriotlar gibi olsun,
+  gerçek bina ve ağaçlar olsun"):** üç dilim, **hiçbir oyun değeri değişmedi** (menzil, kilitlenme,
+  şarjör, atış hızı, mühimmat hızı, hasar, can, spawn sayısı/konumu aynı).
+  **(1) Patriot tipi SAM bataryası — `BuildSamSite` (37 parça, eskiden 8):** artık tek bir kutu +
+  dört tüp değil, bir **atış birimi**: M901 tipi alçak yataklı **rampa treyleri** (yatak, boyun,
+  çeki kancası, dört bojili teker, iki destek kirişi), üzerinde **yükselen 2×2 kanister rampası**
+  (dört kare kanister, patlayan ön kapaklar, arka plaka, iki yan ray), yanına park etmiş
+  **faz dizisi radar treyleri** (yatak, iki teker, kriko, ~30° geriye yatık büyük panel + ince
+  çerçeve, koyu metal materyalde) ve bir **atış kontrol sığınağı** (kızaklı kabin, kapı, jeneratör,
+  egzoz, anten direği + whip). Rampa mevcut `"Turret"` (ölçeksiz, boş) pivotunda durduğu için
+  `TurretVisual`'ın taraması aynen çalışıyor; yükseliş açısı ikinci bir ölçeksiz pivotta (`"Rack"`)
+  tutuluyor, böylece kanisterler dönmemiş koordinatlarda yazılabiliyor ve hiçbir parça kesme
+  (shear) yemiyor. Rampa gerçek M901 gibi **arkadan** mafsallanıyor: yükselince kanister ağızları
+  yukarı-ileri gidiyor, kuyrukları yatağa gömülmüyor ve ağızlar kabaca **model orijininin üstünde**
+  kalıyor. Bu önemli, çünkü `AirDefenseSite.LaunchMunition` mermiyi **birim kökünün konumundan**
+  spawn ediyor (adlandırılmış namlu transform'u yok, oyun değeri olduğu için değiştirilmedi) —
+  ön destek kirişi de o noktayı boşta bırakacak şekilde geri çekildi.
+  **(2) AAA topu — `BuildAaaSite` (14 parça, eskiden 4):** SAM'den görsel olarak ayrı kalması için
+  bilerek **top** olarak bırakıldı; çekili kundak (teker, destek kızakları, cephane sandığı) ve
+  taretinde koruma kalkanı, beşik, nişangâh ve iki namlu ağızlığı eklendi.
+  **(3) Binalar — `EnvironmentBuilder` (ortalama ~10 parça/bina, eskiden 1):** üç arketip —
+  **depo** (podyum, uzun hol, tepe pencere şeridi, kepenk kapı, 20° yatık üç testere dişi çatı
+  şeridi, iki çatı bacası), **orta katlı blok** (2–3 kat, kat silmesi + cam şerit, korkuluk,
+  merdiven kulesi, anten) ve **kule** (köşe payandaları, üç cam şerit, korkuluk, geri çekilmiş üst
+  kat, baca, direk). Pencere sıraları **doku değil panel**: duvar bloğundan birkaç santim geniş
+  koyu "bant" kutuları, tek parçayla dört cepheyi birden boyuyor. Ölçüler eski 3–8 m zarfına yakın
+  tutuldu; yalnız ince anten/direkler yukarı taşıyor, böylece binalar drone'ların 10–14 m seyir
+  bandını yutmuyor.
+  **(4) Ağaçlar (ortalama ~4.85 parça/ağaç, eskiden 3):** üç tür — **kozalaklı** (ince gövde +
+  daralan üç kademe + tepe sivrisi; Unity'de koni primitifi yok, klasik kademeli silindir çamı
+  kullanıldı), **geniş yapraklı** (gövde + iki açılı dal güdüğü + üç örtüşen, eksenden kaydırılmış
+  taç küresi) ve **çalı** (gövdesiz, üç alçak küme). Her örnekte boy, taç yarıçapı, eğim (yaw +
+  birkaç derece yatıklık) ve yeşil tonu aynı **sabit tohumlu** akıştan çekiliyor.
+  **Materyal yolu:** yeni API eklenmedi — `MaterialLibrary.Create`'in mevcut **renk anahtarlı
+  önbelleği** kullanıldı, ama örnek başına sürekli rastgele renk yerine **kuantalanmış palet**
+  (6 yaprak + 5 duvar tonu). Eski kod önbelleği fiilen baypas edip ağaç/bina başına birer materyal
+  üretiyordu; dağılımın toplam materyal sayısı ~240'tan **17'ye** indi (B-16'nın palet yarısı;
+  `enableInstancing` hâlâ açık iş).
+  **Nesne bütçesi:** prop kökü ~968 → ~1553 GameObject (aynı büyüklük mertebesi). Ağaç sayısı,
+  kaya sayısı, bina sayısı ve dağılım tohumu **değişmedi**.
+  **Collider sözleşmesi:** aynı — dağılımdaki her parça hâlâ collider'ı silen `Prop()`'tan geçiyor,
+  yeni prop kökleri boş `GameObject`. `B-19` bu turda kapandı: `"Radar"` artık ölçeksiz ve
+  **döndürülmemiş** bir pivot, 30°'lik yatıklık altındaki `"ArrayMount"` çocuğunda; tabak yalpalamak
+  yerine düzgün azimut taraması yapıyor.
