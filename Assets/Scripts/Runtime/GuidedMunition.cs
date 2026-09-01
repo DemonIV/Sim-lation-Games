@@ -11,6 +11,15 @@ namespace Sim.Runtime
     /// <see cref="Sim.Core.BallisticProjectile"/> model while a thrust term trims speed back toward
     /// cruise. On proximity it applies gamified damage to the target and self-destructs.
     ///
+    /// <para>
+    /// The munition is a BOUNDED pursuer, which is what makes it beatable: its steering is clamped to
+    /// the turn rate an airframe pulling <c>maxLoadG</c> can actually fly at its current speed (see
+    /// <see cref="Sim.Core.MissileAgility"/>), and its seeker really gates guidance — when the target
+    /// stays outside the seeker cone for longer than the grace period the munition goes ballistic
+    /// instead of tracking. A target that flies straight is on a collision course and is hit; a target
+    /// that breaks hard late demands more load than the airframe has and is missed.
+    /// </para>
+    ///
     /// NOTE: this is a GAME / EDUCATIONAL guidance model with abstract, gamified parameters — not a
     /// fidelity-accurate weapon simulation.
     /// </summary>
@@ -23,9 +32,20 @@ namespace Sim.Runtime
         [SerializeField] private float damage = 60f;
         [SerializeField] private float maxLifetime = 12f;
 
+        [Header("Airframe")]
+        // Structural load limit in g. Turn rate = maxLoadG * 9.81 / speed, so this is the single knob
+        // that decides whether a break turn can defeat this munition. The default is the SİHA's own
+        // air-to-ground missile: 18 g at the 180 m/s cruise above is ~57 deg/s, ample against the
+        // static ground targets it is fired at. Air-defence rounds override it at launch.
+        [SerializeField] private float maxLoadG = 18f;
+
         [Header("Seeker")]
         [SerializeField] private float maxOffBoresightDeg = 45f;
         [SerializeField] private float maxSlewRateDeg = 60f;
+        // How long the seeker may stay off the target line of sight before the munition gives up and
+        // goes ballistic. Short enough that a real break defeats the shot, long enough that the normal
+        // endgame slew lag (the last fraction of a second) does not.
+        [SerializeField] private float lostLockGraceSeconds = 0.4f;
 
         // Lightweight ballistic model providing gravity + drag influence on the flight path.
         private readonly BallisticProjectile _ballistic = new BallisticProjectile
@@ -40,6 +60,37 @@ namespace Sim.Runtime
         private SeekerGimbal _seeker;
         private float _elapsed;
         private bool _launched;
+
+        // Smoothed estimate of the target's velocity, finite-differenced from its position each step.
+        // TRUE proportional navigation needs the real relative velocity: with the target abstracted to
+        // zero the law degenerates into a pursuit course, whose load demand grows the same way whether
+        // the target is flying straight or breaking — and then no load limit can tell the two apart.
+        private Vector3 _targetVelocity;
+        private Vector3 _lastTargetPos;
+        private bool _hasLastTargetPos;
+
+        // Seeker gating: how long the seeker has been off the target, and whether the munition has
+        // already given up and gone ballistic (unguided) as a result.
+        private float _lostLockTimer;
+        private bool _lostLock;
+        private float _ballisticElapsed;
+
+        // The target's drone controller (if any), so a salvo released DURING a break turn is scored
+        // with MissileThreat's break bonus. May be null (static ground targets carry no controller).
+        private IhaController _targetDrone;
+
+        /// <summary>
+        /// Exponential smoothing applied to the per-step target-velocity estimate. The target moves in
+        /// Update while this integrates in FixedUpdate, so a raw finite difference alternates between
+        /// zero and a double step; smoothing over ~0.1 s removes that without adding real lag.
+        /// </summary>
+        private const float TargetVelocitySmoothing = 0.25f;
+
+        /// <summary>
+        /// How long a munition that has lost its seeker keeps flying unguided before it self-destructs.
+        /// Long enough for the player to SEE it fly harmlessly past, short enough not to litter the sky.
+        /// </summary>
+        private const float BallisticSelfDestructSeconds = 1.5f;
 
         // Cosmetic only: guards one-time visual construction and throttles the exhaust trail puffs.
         private bool _visualsBuilt;
@@ -67,6 +118,17 @@ namespace Sim.Runtime
         public Vector3 Velocity => _velocity;
 
         /// <summary>
+        /// True while this munition is still homing. False once it has been decoyed or its seeker has
+        /// lost the target for longer than the grace period, i.e. once the shot has been DEFEATED and
+        /// it is coasting ballistically. Missile-warning scans skip non-guiding munitions, so beating
+        /// a shot clears the warning immediately instead of leaving a phantom threat on the HUD.
+        /// </summary>
+        public bool IsGuiding => _launched && !_lostLock && _target != null;
+
+        /// <summary>Structural load limit of this airframe, in g. See <see cref="Sim.Core.MissileAgility"/>.</summary>
+        public float MaxLoadG => maxLoadG;
+
+        /// <summary>
         /// Arms and fires the munition toward the given target with an initial velocity, overriding the
         /// serialized default warhead <paramref name="damage"/>. Preferred over reflection for wiring a
         /// shooter's damage into the munition.
@@ -88,13 +150,33 @@ namespace Sim.Runtime
             Launch(target, initialVelocity, damage);
         }
 
+        /// <summary>
+        /// As <see cref="Launch(Targetable, Vector3, float, float)"/>, but also sets the airframe's
+        /// structural load limit in g, which decides how hard a target has to break to defeat it.
+        /// A non-positive value keeps the serialized default.
+        /// </summary>
+        public void Launch(Targetable target, Vector3 initialVelocity, float damage, float cruiseSpeed,
+                           float maxLoadG)
+        {
+            if (maxLoadG > 0f) this.maxLoadG = maxLoadG;
+            Launch(target, initialVelocity, damage, cruiseSpeed);
+        }
+
         /// <summary>Arms and fires the munition toward the given target with an initial velocity.</summary>
         public void Launch(Targetable target, Vector3 initialVelocity)
         {
             _target = target;
             _velocity = initialVelocity;
             Vector3 boresight = initialVelocity.sqrMagnitude > 1e-6f ? initialVelocity.normalized : transform.forward;
-            _seeker = new SeekerGimbal(boresight)
+
+            // The seeker starts looking AT THE TARGET, not down the launch rail: a shooter that fires
+            // on a lead course points the airframe ahead of the target, and a seeker seeded with the
+            // rail direction would spend the whole (short) flight slewing onto a target it can already
+            // see. The off-boresight cone still has to contain that lead angle.
+            Vector3 toTarget = target != null ? target.transform.position - transform.position : Vector3.zero;
+            Vector3 seekerLook = toTarget.sqrMagnitude > 1e-6f ? toTarget.normalized : boresight;
+
+            _seeker = new SeekerGimbal(seekerLook)
             {
                 MaxOffBoresightDeg = maxOffBoresightDeg,
                 MaxSlewRateDeg = maxSlewRateDeg
@@ -102,10 +184,21 @@ namespace Sim.Runtime
             _elapsed = 0f;
             _launched = true;
 
+            // Guidance state: no lock loss yet, and no target-velocity history to difference against.
+            _lostLockTimer = 0f;
+            _lostLock = false;
+            _ballisticElapsed = 0f;
+            _targetVelocity = Vector3.zero;
+            _hasLastTargetPos = target != null;
+            _lastTargetPos = target != null ? target.transform.position : transform.position;
+
             // Countermeasures: remember the target's dispenser and its CURRENT salvo number, so only
             // salvos released AFTER launch can decoy this munition.
             _targetCm = target != null ? target.GetComponent<CountermeasureDispenser>() : null;
             _lastSalvoSeen = _targetCm != null ? _targetCm.SalvoCount : 0;
+
+            // Break-turn coupling for that salvo roll (null for targets that are not drones).
+            _targetDrone = target != null ? target.GetComponent<IhaController>() : null;
 
             if (!Active.Contains(this)) Active.Add(this);
 
@@ -228,42 +321,90 @@ namespace Sim.Runtime
             Vector3 self = transform.position;
             Vector3 targetPos = _target.transform.position;
 
+            // Target velocity estimate: finite difference of its position, exponentially smoothed.
+            // Feeds the TRUE relative velocity into the guidance law below.
+            if (dt > 0f && _hasLastTargetPos)
+            {
+                Vector3 sample = (targetPos - _lastTargetPos) / dt;
+                _targetVelocity = Vector3.Lerp(_targetVelocity, sample, TargetVelocitySmoothing);
+            }
+            _lastTargetPos = targetPos;
+            _hasLastTargetPos = true;
+
             // Line of sight to the target and the seeker slew toward it.
             Vector3 los = targetPos - self;
             Vector3 boresight = _velocity.sqrMagnitude > 1e-6f ? _velocity.normalized : transform.forward;
-            _seeker.Track(boresight, los.sqrMagnitude > 1e-6f ? los.normalized : boresight, dt);
 
-            // Countermeasures: when the target has released a NEW flare/chaff salvo, roll ONCE for it.
-            // An early release against a missile that is off the target's nose works best
-            // (see Sim.Core.MissileThreat).
-            if (_targetCm != null && _targetCm.SalvoCount != _lastSalvoSeen)
+            // Seeker gate: the seeker really decides whether this munition guides. Track() honours the
+            // slew-rate and off-boresight limits and reports whether it is actually ON the line of
+            // sight; sustained failure (a target that has broken out of the cone) drops the lock.
+            if (!_lostLock)
             {
+                bool tracking = _seeker.Track(boresight,
+                                              los.sqrMagnitude > 1e-6f ? los.normalized : boresight, dt);
+                if (tracking) _lostLockTimer = 0f;
+                else _lostLockTimer += dt;
+
+                if (_lostLockTimer > Mathf.Max(0f, lostLockGraceSeconds))
+                {
+                    _lostLock = true;
+                    _ballisticElapsed = 0f;
+                }
+            }
+
+            if (_lostLock)
+            {
+                // Unguided from here: coast on gravity/drag/thrust only, then scrub itself.
+                _ballisticElapsed += dt;
+                if (_ballisticElapsed > BallisticSelfDestructSeconds)
+                {
+                    ExplosionEffect.Spawn(self, 1.5f);
+                    Destroy(gameObject);
+                    return;
+                }
+            }
+            else if (_targetCm != null && _targetCm.SalvoCount != _lastSalvoSeen)
+            {
+                // Countermeasures: when the target has released a NEW flare/chaff salvo, roll ONCE for
+                // it. An early release against a missile that is off the target's nose works best, and
+                // a salvo thrown DURING a break turn works better still (see Sim.Core.MissileThreat).
                 _lastSalvoSeen = _targetCm.SalvoCount;
 
                 float range = los.magnitude;
-                // Relative velocity with the target abstracted to zero, as in the guidance below.
-                float closing = ProportionalNavigation.ClosingVelocity(los, -_velocity);
+                float closing = ProportionalNavigation.ClosingVelocity(los, _targetVelocity - _velocity);
                 float tti = MissileThreat.TimeToImpact(range, closing);
                 Vector3 toMissile = self - targetPos;
                 float aspectDot = toMissile.sqrMagnitude > 1e-6f
                     ? Vector3.Dot(_target.transform.forward, toMissile.normalized)
                     : 0f;
+                bool breaking = _targetDrone != null && _targetDrone.Breaking;
 
-                if (Random.value < MissileThreat.DecoyChance(_targetCm.DecoyProbability, tti, aspectDot))
+                if (Random.value < MissileThreat.DecoyChance(_targetCm.DecoyProbability, tti,
+                                                             aspectDot, breaking))
                 {
                     // Decoyed: the seeker breaks lock. The existing miss path (null target) destroys
                     // the munition on the next step.
                     ExplosionEffect.Spawn(self, 1.5f);
                     _target = null;
                     _targetCm = null;
+                    _targetDrone = null;
                     return;
                 }
             }
 
-            // Proportional navigation guidance (target velocity abstracted to zero for now).
-            Vector3 relPos = targetPos - self;
-            Vector3 relVel = Vector3.zero - _velocity;
-            Vector3 accel = ProportionalNavigation.Acceleration(relPos, relVel, navGain);
+            // Heading and speed BEFORE this step's steering, for the structural turn limit below.
+            Vector3 headingBefore = boresight;
+            float speedBefore = _velocity.magnitude;
+
+            // Proportional navigation guidance against the TRUE relative velocity. Suspended once the
+            // seeker has given up: an unguided round only flies gravity, drag and thrust.
+            Vector3 accel = Vector3.zero;
+            if (!_lostLock)
+            {
+                Vector3 relPos = targetPos - self;
+                Vector3 relVel = _targetVelocity - _velocity;
+                accel = ProportionalNavigation.Acceleration(relPos, relVel, navGain);
+            }
 
             // Gravity + aerodynamic drag influence from the ballistic model.
             var state = new BallisticState(self, _velocity);
@@ -279,6 +420,18 @@ namespace Sim.Runtime
             float newSpeed = _velocity.magnitude;
             if (newSpeed > 1e-6f)
                 _velocity = _velocity.normalized * Mathf.Lerp(newSpeed, cruiseSpeed, 0.1f);
+
+            // STRUCTURAL TURN LIMIT. Without this the guidance law rotates the velocity vector by
+            // whatever angle it likes each step, which makes the munition an unbeatable pursuer: any
+            // line-of-sight rate the target generates is matched within a frame. Clamping the heading
+            // change to maxLoadG at the current speed is what gives a late, hard break a chance.
+            if (speedBefore > 1e-3f && _velocity.sqrMagnitude > 1e-6f)
+            {
+                float maxTurnRad = MissileAgility.MaxTurnRateRad(maxLoadG, speedBefore);
+                Vector3 limited = MissileAgility.ClampTurn(headingBefore, _velocity.normalized,
+                                                           maxTurnRad, dt);
+                _velocity = limited * _velocity.magnitude;
+            }
 
             // Move and orient along the velocity vector.
             Vector3 newPos = self + _velocity * dt;

@@ -31,6 +31,11 @@ namespace Sim.Runtime
         // visible long enough for the player to react, flare and break away.
         [SerializeField] private float munitionSpeed = 85f;
         [SerializeField] private float damage = 55f;
+        // Structural load limit of the round, in g (see Sim.Core.MissileAgility). This is what decides
+        // whether a hard break turn can defeat the shot: the round is launched on a LEAD course, so a
+        // drone that keeps flying straight is on a collision course and is hit, while one that breaks
+        // demands a load correction that scales as 1/timeToImpact and eventually exceeds this limit.
+        [SerializeField] private float munitionLoadG = 6f;
         [SerializeField] private int friendlyFaction = 0;
 
         // Pure-logic cores.
@@ -48,6 +53,19 @@ namespace Sim.Runtime
         public void Configure(float detectionRange, float fireRange, float lockTimeSeconds,
                               int magazineSize, float roundsPerSecond, float munitionSpeed, float damage)
         {
+            Configure(detectionRange, fireRange, lockTimeSeconds, magazineSize, roundsPerSecond,
+                      munitionSpeed, damage, munitionLoadG);
+        }
+
+        /// <summary>
+        /// <see cref="Configure(float,float,float,int,float,float,float)"/> with the round's structural
+        /// load limit (g) as well — the knob that decides how hard a drone has to break to survive it.
+        /// A non-positive value keeps the current setting.
+        /// </summary>
+        public void Configure(float detectionRange, float fireRange, float lockTimeSeconds,
+                              int magazineSize, float roundsPerSecond, float munitionSpeed, float damage,
+                              float munitionLoadG)
+        {
             this.detectionRange = detectionRange;
             this.fireRange = fireRange;
             this.lockTimeSeconds = lockTimeSeconds;
@@ -55,6 +73,7 @@ namespace Sim.Runtime
             this.roundsPerSecond = roundsPerSecond;
             this.munitionSpeed = munitionSpeed;
             this.damage = damage;
+            if (munitionLoadG > 0f) this.munitionLoadG = munitionLoadG;
 
             // Drop anything already built from the previous values so it is rebuilt on next use.
             _targeting = null;
@@ -140,7 +159,15 @@ namespace Sim.Runtime
             go.transform.position = origin;
             go.transform.localScale = Vector3.one * 0.6f;
 
-            Vector3 toTarget = targetPos - origin;
+            // Fire-control solution: aim at where the drone WILL be, not where it is. Without this
+            // lead the round leaves the rail with a standing heading error the size of the drone's
+            // crossing angle, and a load-limited round would then miss a target that is simply flying
+            // straight — the opposite of what should happen. With it, straight-and-level is a
+            // guaranteed collision course and only an actual manoeuvre can spoil the intercept.
+            Vector3 targetVel = TargetVelocity(target);
+            Vector3 aim = Ballistics.ComputeInterceptPoint(origin, targetPos, targetVel, munitionSpeed);
+
+            Vector3 toTarget = aim - origin;
             Vector3 dir = toTarget.sqrMagnitude > 1e-6f ? toTarget.normalized : Vector3.up;
             go.transform.forward = dir;
 
@@ -168,8 +195,25 @@ namespace Sim.Runtime
 
             // Launch with this site's damage AND cruise speed passed explicitly. The cruise speed
             // matters: without it the munition's motor would trim back up to its own default cruise
-            // speed and arrive just as fast as before, however slowly it left the rail.
-            munition.Launch(target, dir * munitionSpeed, damage, munitionSpeed);
+            // speed and arrive just as fast as before, however slowly it left the rail. The load limit
+            // is passed for the same reason — it is a property of THIS site's round, not of the
+            // SİHA air-to-ground missile the component defaults to.
+            munition.Launch(target, dir * munitionSpeed, damage, munitionSpeed, munitionLoadG);
+        }
+
+        /// <summary>
+        /// Best available velocity estimate for the engaged drone, used for the lead solution above.
+        /// Drones carry a pure-logic flight model (airspeed along the nose) that stays correct whether
+        /// the AI or the human pilot is flying; anything else is treated as stationary.
+        /// </summary>
+        private static Vector3 TargetVelocity(Targetable target)
+        {
+            if (target == null) return Vector3.zero;
+
+            IhaController drone = target.GetComponent<IhaController>();
+            if (drone == null) return Vector3.zero;
+
+            return drone.transform.forward * drone.Speed;
         }
     }
 }

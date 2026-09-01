@@ -17,7 +17,7 @@ namespace Sim.Runtime
     /// Controls: <c>C</c> take/release control · <c>Tab</c> pick drone · <c>W</c>/<c>S</c> throttle ·
     /// <c>A</c>/<c>D</c> yaw · <c>↑</c>/<c>↓</c> (or Left-Alt + mouse Y) pitch · <c>Space</c> guns ·
     /// <c>F</c> guided munition (SİHA only) · <c>Q</c> flares/chaff · <c>E</c> (held) afterburner ·
-    /// <c>X</c> automatic evasive maneuver.
+    /// <c>X</c> evasive break turn (an over-g burst onto the beam, on a cooldown).
     ///
     /// This is a GAME / EDUCATIONAL flight feel with abstract, gamified parameters.
     /// </summary>
@@ -73,8 +73,29 @@ namespace Sim.Runtime
         /// <summary>Fuel-burn multiplier while the afterburner is held.</summary>
         private const float AfterburnerFuelMultiplier = 3f;
 
-        /// <summary>Duration of the one-shot automatic evasive maneuver (X), in seconds.</summary>
-        private const float EvadeDuration = 1.5f;
+        /// <summary>
+        /// Duration of the one-shot evasive break turn (X), in seconds. Covers
+        /// <see cref="Sim.Core.EvasiveManeuver.BreakWindowSeconds"/>, so a break released as the cue
+        /// lights up is still being flown when the missile arrives — letting go halfway through would
+        /// hand the guidance law a straight, non-manoeuvring target again.
+        /// </summary>
+        private const float EvadeDuration = 2f;
+
+        /// <summary>
+        /// Lock-out after a break turn, in seconds. Makes the manoeuvre an ABILITY with a cost rather
+        /// than a key to hold down: a SAM site can put a second round in the air inside this window,
+        /// so a break has to be spent on the shot that matters.
+        /// </summary>
+        private const float EvadeCooldownSeconds = 6f;
+
+        /// <summary>
+        /// Turn-rate multiplier while the break turn is flown — the "over-g" burst. The aircraft swings
+        /// onto the beam heading roughly three times faster than the pilot could yaw it by hand, which
+        /// is what generates the line-of-sight rate a guided round has to chase. It is deliberately a
+        /// fast but FINITE turn: the old implementation snapped the heading instantly, which read on
+        /// screen as nothing happening at all.
+        /// </summary>
+        private const float EvadeTurnRateMultiplier = 3f;
 
         /// <summary>The drone currently being flown by the player, or null.</summary>
         public IhaController Controlled { get; private set; }
@@ -93,6 +114,22 @@ namespace Sim.Runtime
 
         /// <summary>True while the one-shot evasive maneuver (X) is flying the drone instead of the pilot.</summary>
         public bool EvadeActive { get; private set; }
+
+        /// <summary>True when the break turn can be triggered right now (off cooldown).</summary>
+        public bool EvadeReady => _evadeCooldown <= 0f;
+
+        /// <summary>Seconds left on the break-turn cooldown, 0 when it is available.</summary>
+        public float EvadeCooldownRemaining => _evadeCooldown;
+
+        /// <summary>Cooldown progress as a 0..1 fraction: 1 = fully recharged, 0 = just spent.</summary>
+        public float EvadeReadyFraction =>
+            EvadeCooldownSeconds > 0f ? 1f - Mathf.Clamp01(_evadeCooldown / EvadeCooldownSeconds) : 1f;
+
+        /// <summary>
+        /// True while the inbound shot is inside <see cref="Sim.Core.EvasiveManeuver.BreakWindowSeconds"/>
+        /// — the window in which breaking actually defeats it. Drives the HUD cue.
+        /// </summary>
+        public bool BreakWindowOpen => EvasiveManeuver.InBreakWindow(TimeToImpact);
 
         /// <summary>True when a munition is homing on the piloted drone. False when nobody is piloting.</summary>
         public bool MissileIncoming => Controlled != null && Controlled.MissileIncoming;
@@ -121,8 +158,9 @@ namespace Sim.Runtime
         private float _yaw;
         private float _pitch;
 
-        // Remaining seconds of the one-shot evasive maneuver (X).
+        // Remaining seconds of the one-shot evasive maneuver (X), and of its lock-out afterwards.
         private float _evadeTimer;
+        private float _evadeCooldown;
 
         private void Update()
         {
@@ -252,8 +290,12 @@ namespace Sim.Runtime
             AfterburnerActive = false;
             EvadeActive = false;
             _evadeTimer = 0f;
+            _evadeCooldown = 0f;
 
             drone.ManualControl = false;
+            // The pilot is the only writer of Breaking while flying manually; clear it on the way out
+            // so the AI does not inherit a stale break state.
+            drone.Breaking = false;
             Transform t = drone.transform;
             drone.SyncFlightTo(t.position, t.forward, _speed);
         }
@@ -304,7 +346,7 @@ namespace Sim.Runtime
             if (forward.sqrMagnitude <= 1e-6f) forward = Controlled.transform.forward;
 
             // The evasive maneuver (X) flies the drone for its short duration, overriding raw input.
-            if (EvadeActive) forward = EvasiveForward(forward);
+            if (EvadeActive) forward = EvasiveForward(forward, dt);
 
             Vector3 pos = Controlled.transform.position + forward * (_speed * dt);
 
@@ -351,25 +393,45 @@ namespace Sim.Runtime
             // E (held): afterburner. A dry tank cannot light it.
             AfterburnerActive = Input.GetKey(KeyCode.E) && !Controlled.IsOutOfFuel;
 
-            // X: arm the one-shot evasive maneuver, then run its timer down.
-            if (Input.GetKeyDown(KeyCode.X)) _evadeTimer = EvadeDuration;
+            // X: arm the one-shot evasive break turn, then run its timer (and lock-out) down.
+            if (_evadeCooldown > 0f) _evadeCooldown = Mathf.Max(0f, _evadeCooldown - dt);
+            if (Input.GetKeyDown(KeyCode.X) && EvadeReady)
+            {
+                _evadeTimer = EvadeDuration;
+                _evadeCooldown = EvadeCooldownSeconds;
+            }
             if (_evadeTimer > 0f) _evadeTimer = Mathf.Max(0f, _evadeTimer - dt);
             EvadeActive = _evadeTimer > 0f;
+
+            // Publish the break state on the airframe: a flare/chaff salvo thrown DURING a break is
+            // worth more than one thrown flying straight (see Sim.Core.MissileThreat). The AI branch
+            // in IhaController is skipped under ManualControl, so the pilot is the only writer here.
+            Controlled.Breaking = EvadeActive;
         }
 
         /// <summary>
-        /// Heading for the automatic evasive maneuver: an altitude-aware maneuver against the nearest
-        /// incoming munition, or a plain break turn off the current heading when nothing is inbound.
-        /// Keeps the pilot's yaw/pitch state in step so manual control resumes smoothly afterwards.
+        /// Heading for the evasive break turn: an altitude-aware manoeuvre against the nearest incoming
+        /// munition, or a plain break off the current heading when nothing is inbound.
+        ///
+        /// <para>
+        /// The commanded heading puts the missile on the BEAM (see
+        /// <see cref="Sim.Core.EvasionSteering.BreakTurn"/>), which maximises the line-of-sight rate the
+        /// round's guidance law has to null; the round is now load-limited
+        /// (<see cref="Sim.Core.MissileAgility"/>) and cannot always follow. The aircraft SWINGS onto
+        /// that heading at <see cref="EvadeTurnRateMultiplier"/> times the pilot's normal rate — an
+        /// over-g burst — instead of snapping to it: a snap was both physically free and invisible on
+        /// screen. Yaw/pitch stay the pilot's own state throughout, so releasing the ability does not
+        /// jerk the aircraft.
+        /// </para>
         /// </summary>
-        private Vector3 EvasiveForward(Vector3 forward)
+        private Vector3 EvasiveForward(Vector3 forward, float dt)
         {
             if (Controlled == null) return forward;
 
             Vector3 pos = Controlled.transform.position;
 
             // Threat bearing: toward the missile when there is one, otherwise straight ahead (which
-            // makes EvasionSteering jink off the current heading).
+            // makes the break turn jink off the current heading).
             Vector3 threatDir = forward;
             ManeuverType maneuver = ManeuverType.BreakTurn;
 
@@ -385,14 +447,18 @@ namespace Sim.Runtime
 
             evade = evade.normalized;
 
-            // Write the maneuver back into the pilot's own yaw/pitch state (respecting the pitch limit)
-            // and fly the CLAMPED heading, so releasing the maneuver does not snap the drone around.
+            // Over-g burst: drive the pilot's own yaw/pitch toward the break heading at a boosted but
+            // finite rate, honouring the pitch limit exactly as manual input does.
             Vector3 euler = Quaternion.LookRotation(evade, Vector3.up).eulerAngles;
-            _yaw = euler.y;
-            _pitch = Mathf.Clamp(NormalizeAngle(euler.x), -MaxPitchDeg, MaxPitchDeg);
+            float targetYaw = euler.y;
+            float targetPitch = Mathf.Clamp(NormalizeAngle(euler.x), -MaxPitchDeg, MaxPitchDeg);
 
-            Vector3 clamped = Quaternion.Euler(_pitch, _yaw, 0f) * Vector3.forward;
-            return clamped.sqrMagnitude > 1e-6f ? clamped.normalized : evade;
+            _yaw = Mathf.MoveTowardsAngle(_yaw, targetYaw, yawRateDeg * EvadeTurnRateMultiplier * dt);
+            _pitch = Mathf.MoveTowards(_pitch, targetPitch, pitchRateDeg * EvadeTurnRateMultiplier * dt);
+            _pitch = Mathf.Clamp(_pitch, -MaxPitchDeg, MaxPitchDeg);
+
+            Vector3 flown = Quaternion.Euler(_pitch, _yaw, 0f) * Vector3.forward;
+            return flown.sqrMagnitude > 1e-6f ? flown.normalized : forward;
         }
 
         /// <summary>Space fires the gun down the nose; F launches a guided munition from a SİHA.</summary>

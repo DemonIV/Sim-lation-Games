@@ -300,9 +300,14 @@ namespace Sim.Runtime
             go.AddComponent<RcsComponent>();
 
             var site = go.AddComponent<AirDefenseSite>();
-            // detectionRange, fireRange, lockTimeSeconds, magazineSize, roundsPerSecond, munitionSpeed, damage
+            // detectionRange, fireRange, lockTimeSeconds, magazineSize, roundsPerSecond, munitionSpeed,
+            // damage, munitionLoadG
             // munitionSpeed 150 -> 85: a long-range SAM shot must be evadable, not an instant hit.
-            site.Configure(160f, 120f, 1.2f, 6, 0.4f, 85f, 55f);
+            // munitionLoadG 6: a heavy long-range round. 6 g at 85 m/s is ~40 deg/s (121 m turn
+            // radius). It is launched on a lead course, so a drone flying straight is hit; a hard
+            // break inside ~2 s demands roughly 4 x 85 x 0.47 / t_go m/s^2, which crosses 6 g at about
+            // 2.3 s to impact — break late and it cannot recover, break early and it re-corrects.
+            site.Configure(160f, 120f, 1.2f, 6, 0.4f, 85f, 55f, 6f);
 
             // Cosmetic: sweeping radar dish and a turret that tracks the held contact.
             go.AddComponent<TurretVisual>();
@@ -336,9 +341,14 @@ namespace Sim.Runtime
             go.AddComponent<RcsComponent>();
 
             var site = go.AddComponent<AirDefenseSite>();
-            // detectionRange, fireRange, lockTimeSeconds, magazineSize, roundsPerSecond, munitionSpeed, damage
+            // detectionRange, fireRange, lockTimeSeconds, magazineSize, roundsPerSecond, munitionSpeed,
+            // damage, munitionLoadG
             // munitionSpeed 130 -> 95: still the faster of the two, but short-ranged, so it stays close.
-            site.Configure(80f, 60f, 0.8f, 20, 1.5f, 95f, 20f);
+            // munitionLoadG 9: a lighter, nimbler round than the SAM's (~55 deg/s at 95 m/s), but it
+            // only fires inside 60 m, so its whole flight lasts under a second. That means you cannot
+            // react to an AAA launch — you have to be ALREADY breaking. Its answer is to not fly
+            // straight over the gun; each round is only worth 20 damage.
+            site.Configure(80f, 60f, 0.8f, 20, 1.5f, 95f, 20f, 9f);
 
             // Cosmetic: turret tracking (this archetype has no radar dish part).
             go.AddComponent<TurretVisual>();

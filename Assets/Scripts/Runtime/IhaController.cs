@@ -166,6 +166,18 @@ namespace Sim.Runtime
         public bool MissileIncoming { get; private set; }
 
         /// <summary>
+        /// True while this drone is flying a hard break turn. Written by whoever is steering: the AI
+        /// evasion branch below, or <see cref="PlayerDroneController"/> while the pilot's evasive
+        /// manoeuvre is running (the AI branch is skipped entirely under
+        /// <see cref="ManualControl"/>, so there is only ever one writer).
+        /// <para>
+        /// Read by <see cref="GuidedMunition"/>: a flare/chaff salvo released DURING a break is worth
+        /// more than one thrown while flying straight (see <see cref="Sim.Core.MissileThreat"/>).
+        /// </para>
+        /// </summary>
+        public bool Breaking { get; set; }
+
+        /// <summary>
         /// Seconds until the nearest incoming munition arrives, or PositiveInfinity when nothing is
         /// closing on this drone. See <see cref="Sim.Core.MissileThreat"/>.
         /// </summary>
@@ -407,6 +419,11 @@ namespace Sim.Runtime
                 ? EvasiveManeuver.Choose(pos.y, minAltitude, TimeToImpact)
                 : ManeuverType.None;
 
+            // Published below, from whichever branch of the priority chain actually wins: only a
+            // FLOWN manoeuvre counts as breaking (a drone heading home outranks its own evasion).
+            // Only the AI path writes this; under ManualControl Update has already returned above.
+            Breaking = false;
+
             // Desired-direction selection, HIGHEST PRIORITY FIRST:
             //   1. ReturnToBase (bingo fuel/ammo) — getting home outranks everything else.
             //   2. Incoming missile — a named evasive maneuver (break/dive/climb) beats the assigned
@@ -444,6 +461,7 @@ namespace Sim.Runtime
                 // Defensive maneuver against the nearest incoming munition.
                 Vector3 dirToMissile = _missilePos - pos;
                 dir = EvasiveManeuver.Direction(evasive, _flight.Forward, dirToMissile, Vector3.up);
+                Breaking = true;
             }
             else if (IsThreatened)
             {
@@ -595,6 +613,9 @@ namespace Sim.Runtime
                 // A destroyed munition compares equal to null but member access still throws.
                 if (m == null) continue;
                 if (m.Target != _self) continue;
+                // A decoyed / lock-lost round is coasting ballistically: the shot has been DEFEATED,
+                // so it is no longer a threat to warn about or to keep manoeuvring against.
+                if (!m.IsGuiding) continue;
 
                 float d2 = (m.transform.position - pos).sqrMagnitude;
                 if (d2 < bestRangeSq)
