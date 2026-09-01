@@ -36,5 +36,22 @@ namespace Sim.Tests
         {
             Assert.AreEqual(0.3f, MissileThreat.DecoyChance(0.6f, 5f, 1f), 1e-3f);
         }
+
+        [Test]
+        public void BreakingWhileFlaring_BeatsFlaringAlone()
+        {
+            float alone = MissileThreat.DecoyChance(0.4f, 1.5f, 0f, false);
+            float breaking = MissileThreat.DecoyChance(0.4f, 1.5f, 0f, true);
+
+            Assert.AreEqual(MissileThreat.DecoyChance(0.4f, 1.5f, 0f), alone, 1e-4f);
+            Assert.AreEqual(alone * MissileThreat.BreakTurnDecoyBonus, breaking, 1e-4f);
+            Assert.Greater(breaking, alone);
+        }
+
+        [Test]
+        public void BreakBonus_StaysAProbability()
+        {
+            Assert.AreEqual(1f, MissileThreat.DecoyChance(1f, 10f, -1f, true), 1e-4f);
+        }
     }
 }
