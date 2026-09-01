@@ -20,6 +20,10 @@ namespace Sim.Runtime
         [SerializeField] private float maxTurnRateDeg = 80f;
         [Range(0f, 1f)]
         [SerializeField] private float throttle = 1f;
+        // Top speed the HUMAN pilot may command on this airframe (read by PlayerDroneController).
+        // The default is exactly the hard-coded cap the pilot used before aircraft profiles existed,
+        // so an AI-spawned drone flies the same as it always did.
+        [SerializeField] private float pilotMaxSpeed = 40f;
 
         [Header("Patrol")]
         [SerializeField] private List<Transform> patrolWaypoints = new List<Transform>();
@@ -175,6 +179,47 @@ namespace Sim.Runtime
 
         /// <summary>Current airspeed from the flight model (m/s), for HUD/telemetry.</summary>
         public float Speed => _flight != null ? _flight.Speed : 0f;
+
+        /// <summary>
+        /// Top speed a human pilot may command on this airframe (m/s). See
+        /// <see cref="PlayerDroneController"/>; the default matches the cap that component used before
+        /// aircraft profiles existed.
+        /// </summary>
+        public float PilotMaxSpeed => pilotMaxSpeed;
+
+        /// <summary>
+        /// Applies a selected <see cref="AircraftProfile"/> to this airframe: flight envelope, pilot
+        /// speed cap, targeting range and fuel tank.
+        ///
+        /// <para>
+        /// Spawners call this right after <c>AddComponent</c>, i.e. BEFORE <see cref="Start"/>, so the
+        /// pure-logic cores are built from the profile's values in the first place. The live cores are
+        /// updated too when they already exist, so a late call cannot leave the model and the
+        /// serialized fields disagreeing. A null profile is a no-op.
+        /// </para>
+        ///
+        /// <para>Overridden by <see cref="SihaController"/> to also size the missile magazine.</para>
+        /// </summary>
+        public virtual void ApplyProfile(AircraftProfile profile)
+        {
+            if (profile == null) return;
+
+            maxSpeed = profile.MaxSpeed;
+            maxTurnRateDeg = profile.TurnRateDeg;
+            pilotMaxSpeed = profile.PilotMaxSpeed;
+            detectionRange = profile.DetectionRange;
+            fuelCapacity = profile.FuelCapacity;
+            fuelBurnRate = profile.FuelBurnRate;
+
+            if (_flight != null)
+            {
+                _flight.MaxSpeed = maxSpeed;
+                _flight.MaxTurnRateDeg = maxTurnRateDeg;
+            }
+            if (_targeting != null) _targeting.DetectionRange = detectionRange;
+            // A rebuilt tank starts full, which is correct for a profile applied at spawn time.
+            if (_fuel != null) _fuel = new FuelTank(fuelCapacity, fuelBurnRate);
+        }
 
         /// <summary>
         /// Rewrites the drone's flight state from an external driver (the player pilot). Keeps the

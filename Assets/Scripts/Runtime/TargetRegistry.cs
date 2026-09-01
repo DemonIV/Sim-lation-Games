@@ -83,6 +83,23 @@ namespace Sim.Runtime
             TargetRegistry.Unregister(this);
         }
 
+        /// <summary>
+        /// Sets the hit-point pool after the fact.
+        ///
+        /// <para>
+        /// <see cref="Awake"/> runs INSIDE <c>AddComponent</c>, so assigning <see cref="MaxHealth"/>
+        /// from a spawner afterwards cannot reach the already-built <see cref="Health"/>; this rebuilds
+        /// it. Only used where a value other than the default is genuinely required (the player's
+        /// profiled aircraft) — existing spawns are left exactly as they were.
+        /// </para>
+        /// </summary>
+        public void SetMaxHealth(float maxHealth)
+        {
+            if (maxHealth <= 0f) return;
+            MaxHealth = maxHealth;
+            Health = new Health(maxHealth);
+        }
+
         /// <summary>Applies damage to this object's health pool and destroys the GameObject when depleted.</summary>
         public void TakeDamage(float amount)
         {

@@ -36,8 +36,27 @@ namespace Sim.Runtime
         // How far ahead of the nose the free-aim gun point is placed.
         [SerializeField] private float aimDistance = 80f;
 
-        /// <summary>Top speed the pilot can command, matching the drones' own flight envelope.</summary>
-        private const float MaxSpeed = 40f;
+        /// <summary>
+        /// Fallback top speed the pilot can command when no drone is being flown (or the airframe
+        /// reports none). This is the constant the pilot used before aircraft profiles existed.
+        /// </summary>
+        private const float DefaultMaxSpeed = 40f;
+
+        /// <summary>
+        /// Top speed the pilot can command on the CURRENT airframe. Each drone carries its own cap
+        /// (<see cref="IhaController.PilotMaxSpeed"/>), which the selected
+        /// <see cref="Sim.Core.AircraftProfile"/> sets on the player's aircraft; AI-spawned drones keep
+        /// the historical <see cref="DefaultMaxSpeed"/>.
+        /// </summary>
+        private float MaxSpeed
+        {
+            get
+            {
+                if (Controlled == null) return DefaultMaxSpeed;
+                float cap = Controlled.PilotMaxSpeed;
+                return cap > 0f ? cap : DefaultMaxSpeed;
+            }
+        }
 
         /// <summary>Hard altitude floor, mirroring <see cref="IhaController"/>'s own minimum.</summary>
         private const float MinAltitude = 5f;
@@ -84,6 +103,18 @@ namespace Sim.Runtime
         // The drone Tab has highlighted; C takes control of this one.
         private IhaController _selected;
         private int _selectionIndex = -1;
+
+        /// <summary>
+        /// Puts the player's chosen aircraft (the one <see cref="SimulationBootstrap"/> built from the
+        /// selected <see cref="Sim.Core.AircraftProfile"/>) at the front of the queue, so pressing
+        /// <c>C</c> without touching Tab first takes over exactly the aircraft picked in the menu.
+        /// Tab still cycles through the whole squad from there. Null / destroyed drones are ignored.
+        /// </summary>
+        public void SetPreferredAircraft(IhaController drone)
+        {
+            if (drone == null) return;
+            if (_selected == null) _selected = drone;
+        }
 
         // Pilot flight state.
         private float _speed;
@@ -152,6 +183,19 @@ namespace Sim.Runtime
                 _selected = null;
                 _selectionIndex = -1;
                 return;
+            }
+
+            // Resume cycling from whatever is highlighted right now (it may have been set from outside
+            // by SetPreferredAircraft), so the first Tab steps AWAY from it instead of jumping to the
+            // top of an unordered list.
+            if (_selected != null)
+            {
+                for (int i = 0; i < drones.Count; i++)
+                {
+                    if (!ReferenceEquals(drones[i], _selected)) continue;
+                    _selectionIndex = i;
+                    break;
+                }
             }
 
             _selectionIndex = (_selectionIndex + 1) % drones.Count;

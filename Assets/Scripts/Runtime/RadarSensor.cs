@@ -43,6 +43,19 @@ namespace Sim.Runtime
         }
 
         /// <summary>
+        /// Overrides the radar's reference range (the size of the radar picture, see
+        /// <see cref="Sim.Core.RadarSystem.ReferenceRange"/>). Spawners call this BEFORE
+        /// <see cref="Start"/>, so dropping the cached radar makes it rebuild from the new value; a
+        /// later call is handled too. Non-positive values are ignored.
+        /// </summary>
+        public void ConfigureRange(float range)
+        {
+            if (range <= 0f) return;
+            referenceRange = range;
+            _radar = null;
+        }
+
+        /// <summary>
         /// Builds the pure-logic radar and tracker on first use. These are plain C# objects that Unity
         /// does NOT serialize, so they are null whenever <see cref="Start"/> has not run for this
         /// component (or its managed state was dropped, e.g. by a play-mode domain reload) while

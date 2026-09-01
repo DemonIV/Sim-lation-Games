@@ -41,6 +41,22 @@ namespace Sim.Runtime
         }
 
         /// <summary>
+        /// Everything <see cref="IhaController.ApplyProfile"/> applies, plus the guided-munition
+        /// magazine and firing range. Dropping <c>_weapon</c> makes <see cref="EnsureWeapon"/> rebuild
+        /// the fire control from the new magazine size on next use (mirrors
+        /// <see cref="GunTurret.Configure"/>).
+        /// </summary>
+        public override void ApplyProfile(AircraftProfile profile)
+        {
+            base.ApplyProfile(profile);
+            if (profile == null) return;
+
+            magazineSize = Mathf.Max(0, profile.MissileCapacity);
+            weaponRange = profile.MissileRange;
+            _weapon = null;
+        }
+
+        /// <summary>
         /// Builds the pure-logic fire control on first use. Like the cores in
         /// <see cref="IhaController.EnsureInitialized"/> it is a plain C# object Unity does not
         /// serialize, so it can be null while Update is already running.

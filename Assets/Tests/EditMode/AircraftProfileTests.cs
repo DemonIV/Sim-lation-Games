@@ -182,13 +182,6 @@ namespace Sim.Tests
         }
 
         [Test]
-        public void Jet_IsBrightestOnRadar_IhaIsStealthiest()
-        {
-            Assert.Greater(Jet.RcsScale, Siha.RcsScale);
-            Assert.Greater(Siha.RcsScale, Iha.RcsScale);
-        }
-
-        [Test]
         public void Iha_IsTheMostFragile()
         {
             Assert.Greater(Siha.Health, Jet.Health);
@@ -216,7 +209,6 @@ namespace Sim.Tests
                 Assert.Greater(p.DetectionRange, 0f, p.Id);
                 Assert.Greater(p.RadarRange, 0f, p.Id);
                 Assert.Greater(p.Health, 0f, p.Id);
-                Assert.Greater(p.RcsScale, 0f, p.Id);
 
                 // A missile carrier must be able to shoot as far as it can see a target lock up.
                 if (p.MissileCapacity > 0) Assert.GreaterOrEqual(p.MissileRange, p.DetectionRange * 0.5f, p.Id);

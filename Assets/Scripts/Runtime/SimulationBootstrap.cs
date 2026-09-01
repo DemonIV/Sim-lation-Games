@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using Sim.Core;
 
 namespace Sim.Runtime
 {
@@ -118,8 +119,12 @@ namespace Sim.Runtime
             SpawnIha("IHA_1", new Vector3(-20f, 10f, -20f), RectangleRoute(new Vector3(-20f, 10f, -20f), 30f, 25f), Color.blue);
             SpawnIha("IHA_2", new Vector3(20f, 12f, 20f), RectangleRoute(new Vector3(20f, 12f, 20f), 25f, 30f), new Color(0.2f, 0.5f, 1f));
 
-            // One armed SİHA drone (red) with its own patrol route.
-            SpawnSiha("SIHA_1", new Vector3(0f, 14f, -30f), RectangleRoute(new Vector3(0f, 14f, -30f), 40f, 20f), new Color(1f, 0.35f, 0.2f));
+            // The PLAYER's aircraft slot, in the place the armed SİHA always held. WHICH airframe
+            // stands here — and every performance number on it — comes from the archetype picked on
+            // the mission-select screen (see ScenarioController.SelectedAircraft). With the default
+            // SİHA profile this spawns exactly the drone it always did. The two recon İHA above are
+            // untouched AI wingmen: no profile is ever applied to them.
+            IhaController playerAircraft = SpawnPlayerAircraft(ScenarioController.SelectedAircraft);
 
             // Wave-based scenario. The ScenarioController (created after the drones) now owns ALL enemy
             // spawning — escalating waves of three hostile archetypes (plain target / SAM / AAA) — and
@@ -146,8 +151,10 @@ namespace Sim.Runtime
             director.gameObject.AddComponent<ScenarioMenu>();
 
             // Pilot mode: lets the player take over one friendly drone (C) and fly it by hand.
-            // Lives on the manager object, never on a drone.
-            director.gameObject.AddComponent<PlayerDroneController>();
+            // Lives on the manager object, never on a drone. The aircraft built from the selected
+            // profile is offered first, so C puts the player in the aircraft they picked.
+            var playerPilot = director.gameObject.AddComponent<PlayerDroneController>();
+            playerPilot.SetPreferredAircraft(playerAircraft);
 
             // Attach a free-fly / drone-follow spectator camera to the main camera (created above in
             // EnsureCameraAndLight), if it doesn't already have one.
@@ -250,43 +257,118 @@ namespace Sim.Runtime
             go.AddComponent<BankingVisual>();
         }
 
-        /// <summary>Spawns an armed SİHA drone (red capsule) with a patrol route and friendly Targetable.</summary>
-        private void SpawnSiha(string name, Vector3 position, List<Transform> route, Color color)
+        /// <summary>
+        /// Spawns the PLAYER's aircraft from the archetype picked on the mission-select screen: flight
+        /// envelope, fuel, gun, missiles, sensors and hit points all come from the
+        /// <see cref="AircraftProfile"/>, applied through the same serialized fields / Configure calls
+        /// the fixed spawns always used.
+        ///
+        /// <para>
+        /// It stands in the slot (position, patrol route) the armed SİHA always occupied, so with the
+        /// default SİHA profile — 30 m/s, 100 fuel, 300-round gun, 6 missiles, 250 m radar, 100 HP —
+        /// this produces exactly the drone the simulation shipped. Nothing here touches the AI
+        /// wingmen, and nothing survives a <see cref="Rebuild"/>: the profile is re-read from the
+        /// (static) selection every time the world is built.
+        /// </para>
+        ///
+        /// <para>
+        /// MODEL CAVEAT: the fighter jet currently borrows the armed-UAV silhouette. A later turn
+        /// builds the real airframes; only the visual is provisional, the numbers are not.
+        /// </para>
+        /// </summary>
+        private IhaController SpawnPlayerAircraft(AircraftProfile profile)
         {
+            // Defensive: an unknown/empty stored id must never reach this method, but never fly a
+            // null profile either.
+            if (profile == null) profile = AircraftCatalog.Default;
+
+            Vector3 position = new Vector3(0f, profile.CruiseAltitude, -30f);
+            Color color = PlayerAircraftColor(profile.Kind);
+
             var go = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            go.name = name;
+            go.name = PlayerAircraftName(profile.Kind);
             go.transform.position = position;
             Parent(go);
             ApplyColor(go, color);
-            // Cosmetic: hide the placeholder capsule and build an armed-UAV silhouette in its place.
-            VehicleModelBuilder.HideRootMesh(go);
-            VehicleModelBuilder.BuildArmedUav(go.transform, color);
-            MarkFriendly(go);
 
-            // Stronger gun than the recon İHA, added before the controller so its Start() picks it up.
+            // Cosmetic: hide the placeholder capsule and build a silhouette in its place.
+            VehicleModelBuilder.HideRootMesh(go);
+            if (profile.Kind == AircraftKind.Iha)
+                VehicleModelBuilder.BuildReconUav(go.transform, color);
+            else
+                VehicleModelBuilder.BuildArmedUav(go.transform, color);
+
+            MarkFriendly(go, profile.Health);
+
+            // Gun, added before the controller so its Start() picks it up.
             // magazineSize, roundsPerSecond, effectiveRange, dispersionDeg, damagePerRound
-            go.AddComponent<GunTurret>().Configure(300, 10f, 60f, 2.5f, 4.5f);
+            go.AddComponent<GunTurret>().Configure(profile.GunMagazine, profile.GunRoundsPerSecond,
+                                                   profile.GunRange, profile.GunDispersionDeg,
+                                                   profile.GunDamage);
 
             // Flare/chaff dispenser, added before the controller so its Start() picks it up.
             go.AddComponent<CountermeasureDispenser>();
 
-            var ctrl = go.AddComponent<SihaController>();
-            AssignRoute(ctrl, route);
+            // A missile carrier needs the armed controller; the recon archetype flies gun-only.
+            IhaController ctrl;
+            if (profile.MissileCapacity > 0) ctrl = go.AddComponent<SihaController>();
+            else ctrl = go.AddComponent<IhaController>();
 
-            // Realistic radar sensor (hostileFaction defaults to 1).
-            go.AddComponent<RadarSensor>();
+            // ApplyProfile runs BEFORE Start, so every pure-logic core is built from these values.
+            ctrl.ApplyProfile(profile);
+            AssignRoute(ctrl, RectangleRoute(position, 40f, 20f));
+
+            // Realistic radar sensor (hostileFaction defaults to 1); the profile sizes its picture.
+            go.AddComponent<RadarSensor>().ConfigureRange(profile.RadarRange);
 
             // Cosmetic: spinning propeller and roll-into-the-turn on the "Model" child only.
             go.AddComponent<PropellerSpinner>();
             go.AddComponent<BankingVisual>();
+
+            return ctrl;
         }
 
-        /// <summary>Marks a drone GameObject as a friendly Targetable (Faction = 0).</summary>
+        /// <summary>Scene name of the player's aircraft, so the HUD reads sensibly per archetype.</summary>
+        private static string PlayerAircraftName(AircraftKind kind)
+        {
+            switch (kind)
+            {
+                case AircraftKind.FighterJet: return "JET_1";
+                case AircraftKind.Iha: return "IHA_3";
+                default: return "SIHA_1";
+            }
+        }
+
+        /// <summary>
+        /// Livery of the player's aircraft (cosmetic). The SİHA keeps the exact colour the fixed
+        /// armed drone always had.
+        /// </summary>
+        private static Color PlayerAircraftColor(AircraftKind kind)
+        {
+            switch (kind)
+            {
+                case AircraftKind.FighterJet: return new Color(0.75f, 0.8f, 0.9f);
+                case AircraftKind.Iha: return new Color(0.2f, 0.8f, 1f);
+                default: return new Color(1f, 0.35f, 0.2f);
+            }
+        }
+
+        /// <summary>Marks a drone GameObject as a friendly Targetable (Faction = 0) with 100 hit points.</summary>
         private void MarkFriendly(GameObject go)
+        {
+            MarkFriendly(go, 100f);
+        }
+
+        /// <summary>
+        /// Marks a drone GameObject as a friendly Targetable (Faction = 0) with an explicit hit-point
+        /// pool. <see cref="Targetable.SetMaxHealth"/> is used rather than the plain field because the
+        /// component's Awake — which builds the pool — already ran inside <c>AddComponent</c>.
+        /// </summary>
+        private void MarkFriendly(GameObject go, float maxHealth)
         {
             var targetable = go.AddComponent<Targetable>();
             targetable.Faction = 0;
-            targetable.MaxHealth = 100f;
+            targetable.SetMaxHealth(maxHealth);
 
             // Cosmetic: smoke/fire once the drone is badly damaged.
             go.AddComponent<DamageVisuals>();
