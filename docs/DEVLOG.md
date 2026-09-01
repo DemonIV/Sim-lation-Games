@@ -48,6 +48,15 @@ aslında PN değil takip (pursuit) rotasıydı. Artık füze **sınırlı bir ta
 yük sınırı, kilit kaybında balistik), hava savunması **lead'li** atıyor ve **X** gerçek bir over-g
 kırış yeteneği (2 sn, 6 sn soğuma) — HUD'da `KAÇIŞ MANEVRASI` penceresiyle. Ayrıntı ve ayarlanan
 oyun değerleri `## 9. Değişiklik günlüğü`'nün son maddesinde.
+En son tur oyuna **kampanya** geldi (kullanıcı isteği): artık görev seçmek yerine **SEVİYE 1…8**
+oynanıyor. Seviyeler mevcut `ScenarioLibrary`/`WavePlan` verisini kullanır (paralel senaryo sistemi
+yok), zorluk ve ödül index'ten formülle türer. Her sortiden **kredi** kazanılır — ilk başarılı
+geçişte tam, tekrar oynayışta ve başarısız sortide %25 (para musluğu yok). Kredi **hangar**da
+harcanır: yedi yükseltme hattı (motor/hız, namlu gücü, füze yuvası = yeni silah, çeviklik, gövde,
+yakıt, radar), maliyet `round(BaseCost·1.6^(L−1)/25)·25`. Yükseltmeler `AircraftUpgrades.Apply` ile
+taban profilin üstüne **çarpanla** uygulanır: sıfır yükseltmeyle uçak bugünkünün birebir aynısıdır.
+İlerleme/kredi/garaj `PlayerPrefs` + `JsonUtility` ile kaydedilir (bozuk kayıt istisna değil taze
+başlangıç üretir).
 
 ### Yeni oturum için okuma sırası
 1. Bu bölüm.
@@ -162,6 +171,14 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `AircraftProfile` | Bir arketipin değiştirilemez performans profili: hız/dönüş/pilot hız tavanı, seyir irtifası, yakıt, top (5 değer), füze (adet + menzil), tespit ve radar menzili, can + seçim ekranı için dört 0–1 gösterge puanı. Her alanın Runtime'da gerçek bir tüketicisi vardır. |
 | `AircraftCatalog` | Üç profilin kataloğu: `All`, `Default` (SİHA temel değerleri), `TryGet`/`GetOrDefault` (bilinmeyen id'de hata değil varsayılan) ve klavyeyle sağa/sola dönen `Cycle`. |
 | `MissileAgility` | Bir füzenin **yapısal çeviklik sınırı**: `maxTurnRate = maxG · 9.81 / hız` (hızlı füze daha az çevik), dönüş yarıçapı ve komut edilen yönü bu hıza göre bir adımda ulaşılabilir yöne kırpan saf `ClampTurn`. Sıfır/negatif girdilerde dönüş yetkisi yok — asla sıfıra bölme. |
+| `CampaignLevel` | Bir kampanya seviyesinin tanımı: 1 tabanlı index, Türkçe ad/brifing, hangi `ScenarioKind`'ı kaç dalga ve dalga rampasının kaçıncı adımından (`StartWaveOffset`) başlatarak uçtuğu, zorluk çarpanı ve ödül parametreleri. `Composition(w)` doğrudan `ScenarioLibrary.Composition`'a iner — paralel senaryo sistemi yok. |
+| `CampaignLibrary` | Elle yazılmış 8 seviyelik sıralı rampa. Yalnız "şekil" elle (senaryo, dalga sayısı, ofset, ad/brifing); her sayı index'ten formülle: zorluk `1 + 0.25·(n−1)`, taban ödül `200·zorluk` (10'a yuvarlı), kill başı `25·zorluk`, kayıp cezası sabit 60. Geçersiz index'te `null`/`First`, asla istisna. |
+| `CampaignProgress` | Kilit/tamamlanma/en iyi derece. Seviye 1 hep açık, N biterse N+1 açılır, tamamlanan tekrar oynanabilir, derece yalnız yükselir, geçersiz index reddedilir. `Restore` kilitleri kayıttan güvenmez, tamamlanmalardan yeniden türetir. |
+| `CampaignReward` | Görev sonu parası: `(taban·yıldızÇarpanı + imha·killÖdülü − kayıp·ceza)·zorluk`, negatife düşmez. `IsFullRate(won, alreadyCompleted)` — tam ödeme yalnız ilk BAŞARILI geçişte; tekrar oynayış ve başarısız sorti `ReplayFactor` (%25) ile ödenir (para musluğu engeli). |
+| `Wallet` | Kredi kesesi: `Earn` (pozitif olmayanı yok sayar), `TrySpend` (negatif/yetersizde `false` döner ve bakiyeyi HİÇ değiştirmez), `CanAfford`, `LifetimeEarned`. |
+| `UpgradeCatalog` | Yedi yükseltme hattı (Motor/hız, Namlu Gücü/hasar, Füze Yuvası/yeni silah, Kanat-Çeviklik, Gövde Zırhı, Yakıt Tankı, Radar). Maliyet tablo değil FORMÜL: `round(BaseCost·1.6^(L−1)/25)·25`; etki de formül: `1 + L·PerLevelGain`. Her hat için Türkçe ad/açıklama ve `EffectSummary`. |
+| `UpgradeState` | Hangi hat kaçıncı seviyede. `TryPurchase` önce tavanı ve bakiyeyi kontrol eder, sonra ATOMİK olarak harcayıp seviye atlatır — reddedilen alışveriş ne cüzdanı ne durumu kıpırdatır. `Restore`/`Snapshot` kayıt katmanı için, bozuk diziye karşı kırpmalı. |
+| `AircraftUpgrades` | `Apply(baseProfile, upgradeState) → AircraftProfile`: yükseltmeleri taban profilin üstüne ÇARPANLA uygular (taban profiller otoriter kalır), sıfır yükseltmede taban profile birebir eşit döner, tabanı asla mutasyona uğratmaz. Tek sayısal istisna füze yuvası (adet); topu olup füzesi olmayan gövdede yeni yuvanın menzili tespit menzilinden türer. `AffectedFields` hangi hattın hangi alanı oynattığını söyler. |
 
 ### Sim.Runtime (ince MonoBehaviour'lar)
 | Bileşen | Görevi |
@@ -187,7 +204,9 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `EnemyDroneController` | Düşman avcı drone'u: uçar, dost drone'ları tespit eder ve topla taramaya alır (hava muharebesi). |
 | `PlayerDroneController` | Pilot modu: oyuncu dost bir drone'u devralıp elle uçurur (C/Tab/W/S/A/D/↑↓/Space/F + Q/E/X). |
 | `CountermeasureDispenser` | `CountermeasureSystem` sarmalayıcısı: flare/chaff salvosu, salvo sayacı (füzeler bunu izler), kısa görsel puf. |
-| `ScenarioMenu` | Kurulum gerektirmeyen IMGUI görev seçim/brifing ekranı: açılışta çıkar, sim'i duraklatır, `M` ile tekrar açılır. |
+| `ScenarioMenu` | Kurulum gerektirmeyen IMGUI kampanya ekranı: SEVİYE kartları ızgarası (ad, brifing, en iyi derece, kilit durumu — kilitli kart tıklanamaz), kalıcı KREDİ göstergesi, `H` ile açılan HANGAR sayfası (hat başına satır, seviye pipleri, bedel, devre dışıyken de nedenini söyleyen SATIN AL butonu), iki adımlı kampanya sıfırlama ve korunan uçak seçim satırı. Açılışta çıkar, sim'i duraklatır, `M` ile tekrar açılır. |
+| `CampaignSave` / `CampaignSaveData` | Kampanya kaydı: düz `[Serializable]` DTO + `JsonUtility` + `PlayerPrefs`. Eksik/boş/bozuk/farklı sürümlü kayıt istisna fırlatmaz, "kayıt yok" sayılır; `Clear()` açık sıfırlama yolu. Core tipleri Unity serileştirme özniteliğiyle kirletilmez, eşleme burada. |
+| `CampaignSession` | Statik kampanya sahibi (ilerleme + cüzdan + garaj); `Rebuild()` bileşenleri yok ettiği için statik. Tembel yükler, yalnız gerçek kayıt noktalarında yazar (görev bitti / satın alındı). `PlayerProfile` = seçili arketip + yükseltmeler; `CompleteMission` ödülü hesaplar, seviyeyi tamamlar ve kaydeder. |
 | `MaterialLibrary` | Standard/URP uyumlu, önbelleklenmiş materyal fabrikası (renk, metalik, pürüzsüzlük, emisyon). |
 | `VehicleModelBuilder` | Primitive'lerden araç siluetleri kurar (keşif İHA 19, SİHA 27, savaş uçağı 37, **Patriot tipi SAM bataryası 37**, **AAA topu 14** parça; ayrıca düşman avcısı, yer hedefi); parçaların collider'ları silinir, fizik etkilenmez. `"Model"` çocuğu kökün ölçeğini tersler; `"Fuselage"`/`"Propeller"`/`"Radar"`/`"EngineGlow"`/`"Turret"`+`"TurretBody"` adları animasyon ve kamera kodunun sözleşmesidir. Açılı alt gruplar (SAM rampası, faz dizisi paneli) ölçeksiz **döndürülmüş pivot** üzerinde durur. |
 | `EnvironmentBuilder` | Prosedürel arazi mesh'i, üs pisti, gökyüzü/sis/ortam ışığı/güneş ayarı ve prop dağılımı (tamamı görsel, hiçbirinde collider yok). Dağılımda **üç ağaç türü** (kozalaklı 5 / geniş yapraklı 6 / çalı 3 parça) ve **üç bina arketipi** (depo 9 / orta katlı blok 9–11 / kule 11 parça); boy, taç yarıçapı, eğim, arketip ve renk seçimi hep aynı **sabit tohumlu** akıştan çekilir. Yaprak/duvar renkleri 6 + 5 tonluk **kuantalanmış palete** bağlıdır (materyal sayısı ~240 → 17). |
@@ -296,6 +315,12 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
 | `27da260` | `MissileAgility` (yapısal dönüş sınırı) + `EvasionSteering.BreakTurn` + kırış penceresi sabitleri + flare/kırış birleşimi; hepsi EditMode testli. |
 | `136690f` | Füze artık **sınırlı bir takipçi**: yük sınırı, arayıcı başlığın güdümü gerçekten kapıya alması, gerçek PN, hava savunmasında lead'li atış, oyuncuda over-g kırış + soğuma. |
 | `f1a2858` | HUD `KAÇIŞ MANEVRASI` ipucu, soğuma/hazır göstergesi ve yenilen atışın tehdit tablosundan düşmesi. |
+| `0e36521` | Kampanya çekirdeği: `CampaignLevel`/`CampaignLibrary` (8 seviyelik rampa), `CampaignProgress`, `CampaignReward` — hepsi EditMode testli. |
+| `9a8eb3d` | `Wallet`, `UpgradeCatalog`/`UpgradeState` (yedi hat, formül maliyet eğrisi) ve `AircraftUpgrades.Apply` (profil üstüne çarpan) + testleri. |
+| `10c310d` | Kampanya kaydı (`CampaignSave`, PlayerPrefs + JsonUtility) ve statik `CampaignSession`; `CampaignReward.IsFullRate` ile tekrar/başarısız sortide %25 ödeme. |
+| `60213f9` | Görev artık seçilen kampanya seviyesini uçuyor; oyuncunun uçağı `CampaignSession.PlayerProfile` (arketip + yükseltmeler) ile spawn ediliyor. |
+| `14717f4` | Seviye listesi, kalıcı kredi göstergesi ve hangar/yükseltme ekranı (yalnız mevcut `HudTheme` paleti). |
+| `b94bc2a` | Görev sonu: sonucun bir kez işlenmesi (para + seviye açma + kayıt) ve raporda kazanılan/toplam kredi ile "SEVİYE N AÇILDI" bildirimi. |
 
 ---
 
@@ -838,3 +863,38 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
   **HUD:** `KAÇIŞ MANEVRASI` ipucu (BEKLE / ŞİMDİ! [X] / UYGULANIYOR / DOLUYOR n.n sn) + şarj
   çubuğu, pilot panelindeki `KAÇIŞ` çipi durum ve soğuma gösteriyor, kontrol şeridi
   `X: KAÇIŞ MANEVRASI (SERT KIRIŞ)`. Eşik HUD'da sabit yazılmadı — `EvasiveManeuver`'dan okunuyor.
+
+- **Seviye seviye kampanya + uçak yükseltme (kullanıcı isteği: "bir de seviye seviye bölüm ekleyelim
+  lvl1 lvl2 gibi ve savaş uçağımızı geliştirelim, her seviyeden para kazanma açık olsun, yeni
+  silahlar ve hız güç gibi"):** Dört dilim, her biri ayrı commit.
+  **(1) Kampanya çekirdeği (Core, testli).** `CampaignLevel` bir seviyeyi tanımlar; düşman
+  kompozisyonu `ScenarioLibrary.Composition`'a devredilir, paralel senaryo sistemi kurulmaz.
+  `CampaignLibrary` 8 seviyelik elle yazılmış rampa: **1** Recon 1 dalga (hava savunması yok) →
+  **2** Recon 2 dalga (ilk hafif AAA) → **3** Hava muharebesi 2 dalga (ilk avcılar) → **4** SEAD
+  3 dalga (SAM/AAA) → **5** Karma 3 dalga, ofset 1 → **6** Karma 4 dalga, ofset 2 → **7** Hava
+  muharebesi 4 dalga, ofset 2 → **8** Karma 5 dalga, ofset 3. Elle yazılan yalnız bu şekildir;
+  her sayı index'ten formülle türer (zorluk `1+0.25·(n−1)`, taban ödül `200·zorluk`, kill başı
+  `25·zorluk`, kayıp cezası 60). `CampaignProgress` kilit/tamamlanma/en iyi derece kurallarını
+  tutar. `CampaignReward` parayı hesaplar ve **tekrar oynayışı para musluğu olmaktan çıkarır**:
+  tam ödeme yalnız ilk BAŞARILI geçişte, sonraki her deneme (ve her başarısız sorti) `ReplayFactor`
+  %25 ile ödenir.
+  **(2) Cüzdan + yükseltmeler (Core, testli).** `Wallet.TrySpend` yetersiz bakiyede `false` döner ve
+  hiçbir şeyi değiştirmez. `UpgradeCatalog` yedi hat: **Motor** (hız ×`1+0.08L`, 5 sv),
+  **Namlu Gücü** (top hasarı ×`1+0.12L`, 5 sv), **Füze Yuvası** (seviye başına +1 füze ve menzil
+  ×`1+0.10L`, 3 sv), **Kanat/Çeviklik** (dönüş ×`1+0.07L`, 5 sv), **Gövde Zırhı**
+  (can ×`1+0.10L`, 5 sv), **Yakıt Tankı** (depo ×`1+0.15L`, 4 sv), **Radar** (radar + tespit
+  ×`1+0.12L`, 4 sv). Maliyet eğrisi formül: `round(BaseCost·1.6^(L−1)/25)·25` — her seviye bir
+  öncekinden ~%60 pahalı. `AircraftUpgrades.Apply` yükseltmeleri taban profilin üstüne **çarpanla**
+  uygular; **sıfır yükseltmeyle sonuç taban profile birebir eşittir**, yani yeni oyuncu bugünkü
+  uçağın aynısını uçar.
+  **(3) Kalıcılık (Runtime).** `CampaignSave` düz DTO + `JsonUtility` + `PlayerPrefs`; eksik ya da
+  bozuk kayıt istisna değil taze durum üretir, `Clear()` açık sıfırlama yolu. `CampaignSession`
+  statik sahiptir (Rebuild bileşenleri yok ettiği için) ve yalnız kayıt noktalarında yazar.
+  **(4) Döngü + arayüz (Runtime).** `ScenarioController` dalga sayısını ve kompozisyonu seçilen
+  seviyeden alır, `SelectedKind`'ı seviyeden türetir. `SimulationBootstrap` oyuncunun uçağını
+  `CampaignSession.PlayerProfile` ile spawn eder; `Apply` katalog profilinin saf fonksiyonu olduğu
+  için `Rebuild()` yükseltmeleri üst üste bindirmez. `ScenarioMenu` artık seviye ızgarası + kredi
+  göstergesi + `H` ile hangar (devre dışı satın alma butonu bile nedenini yazar). `Hud`
+  `TryBookMissionResult()` ile görev biter bitmez sonucu **bir kez** işler: ödül → `Wallet.Earn` →
+  seviye tamamlandı (bir sonraki açılır) → kayıt; rapor ekranında kazanılan/toplam kredi ve
+  "SEVİYE N AÇILDI" bildirimi.
