@@ -57,8 +57,36 @@ namespace Sim.Runtime
         /// <summary>Height of the threat readout row drawn under the scope.</summary>
         private const float ScopeInfoH = 18f;
 
-        // Camera rig, only read for the cockpit-view hint in the control strip.
+        // ---- gun pipper (the reticle is projected from the bore, not welded to screen centre) ----
+
+        /// <summary>Full arm-to-arm span of the pipper in screen pixels (~1.7x the old reticle).</summary>
+        private const float PipperSize = 110f;
+
+        /// <summary>
+        /// Muzzle speed used ONLY to draw the pipper's ballistic drop, in m/s. The gun in this sim is a
+        /// HITSCAN abstraction — <see cref="GunTurret.TryFireAtPoint"/> spends a round and rolls the hit
+        /// straight off the aim ray, no projectile is ever simulated — so there is no gameplay muzzle
+        /// speed to read. 0 keeps the pipper honest: it marks the boresight, exactly where rounds go.
+        /// </summary>
+        [SerializeField] private float pipperMuzzleSpeed = 0f;
+
+        /// <summary>
+        /// Gravity magnitude (m/s², positive) used for the pipper's drop. 0 while the gun is hitscan;
+        /// raising it only moves the RETICLE, never a gameplay value.
+        /// </summary>
+        [SerializeField] private float pipperGravity = 0f;
+
+        // Camera rig, read for the cockpit-view hint in the control strip and for the camera the
+        // pipper is projected through.
         private CameraRig _cameraRig;
+
+        // The camera the rig drives (falls back to the tagged main camera).
+        private Camera _camera;
+
+        // Cached "Model" child of the piloted aircraft — BankingVisual rolls that child, never the
+        // root, so the pipper's lean has to be read off it. Re-resolved when the aircraft changes.
+        private Transform _bankOwner;
+        private Transform _bankSource;
 
         // Radar contact rows, rebuilt each frame into reused lists so OnGUI allocates nothing extra.
         private readonly List<string> _contactId = new List<string>();
@@ -108,13 +136,17 @@ namespace Sim.Runtime
 
             bool piloting = _pilot != null && _pilot.IsActive && _pilot.Controlled != null;
 
+            // The fleet panel is optional (G). Visible whenever there is no GameControls to ask, so
+            // the default behaviour is unchanged.
+            bool fleetVisible = _controls == null || _controls.FleetPanelVisible;
+
             float leftBottom = DrawMissionPanel(Margin, Margin);
             DrawRadarPanel(Margin, leftBottom + 12f);
 
             float rightX = Screen.width - Margin - ColWidth;
             float rightY = Margin;
             if (piloting) rightY = DrawPilotIdentity(rightX, rightY) + 12f;
-            DrawFleetPanel(rightX, rightY);
+            if (fleetVisible) DrawFleetPanel(rightX, rightY);
 
             if (piloting)
             {
@@ -123,7 +155,7 @@ namespace Sim.Runtime
             }
 
             DrawMissileWarning();
-            DrawControlStrip(piloting);
+            DrawControlStrip(piloting, fleetVisible);
             DrawEndScreen();
         }
 
@@ -444,7 +476,7 @@ namespace Sim.Runtime
             float cx = Screen.width * 0.5f;
             float cy = Screen.height * 0.5f;
 
-            HudTheme.Crosshair(new Vector2(cx, cy), 64f, HudTheme.Amber);
+            DrawGunPipper(drone);
 
             // HIZ (left of the crosshair) + the fuel gauge under it.
             var speedBox = new Rect(cx - 250f, cy - 24f, 130f, 46f);
@@ -511,6 +543,118 @@ namespace Sim.Runtime
                           HudTheme.Verdict24(), HudTheme.Text);
             DrawRight(new Rect(r.x + 8f, r.y + 22f, r.width - 16f, 18f), unit,
                       HudTheme.Small, HudTheme.TextDim);
+        }
+
+        // ------------------------------------------------------------------ gun pipper
+
+        /// <summary>
+        /// Draws the gun pipper where the rounds actually go: <see cref="Sim.Core.GunPipper"/> gives the
+        /// world point the bore reaches at the gun's own effective range, that point is projected through
+        /// the camera the <see cref="CameraRig"/> drives, and the reticle is drawn there. Because it is a
+        /// WORLD point, pitching the nose up or down slides the pipper across the screen instead of
+        /// leaving it welded to the centre; the reticle is additionally rolled with the airframe's bank.
+        ///
+        /// Nothing is drawn when the aim point falls behind the camera or off the viewport.
+        /// Presentation only: no gameplay value is read for anything but display.
+        /// </summary>
+        private void DrawGunPipper(IhaController drone)
+        {
+            if (drone == null) return;
+
+            Camera cam = ResolveCamera();
+            if (cam == null) return;
+
+            Transform t = drone.transform;
+
+            // Range: the gun's OWN effective range when the aircraft carries one, otherwise the pilot's
+            // advisory figure. Both already exist — no gameplay number is introduced or changed here.
+            GunTurret turret = drone.Gun;
+            float range = turret != null ? turret.Gun.EffectiveRange
+                                         : (_pilot != null ? _pilot.GunRange : 60f);
+            if (range <= 1f) range = 60f;
+
+            Vector3 aim = GunPipper.AimPoint(t.position, t.forward, pipperMuzzleSpeed, range, pipperGravity);
+
+            Vector3 sp = cam.WorldToScreenPoint(aim);
+            if (sp.z <= 0f) return;                                  // behind the camera
+            if (sp.x < 0f || sp.x > Screen.width) return;            // outside the viewport
+            if (sp.y < 0f || sp.y > Screen.height) return;
+
+            // IMGUI's Y axis grows downward, the camera's upward.
+            var p = new Vector2(sp.x, Screen.height - sp.y);
+
+            Color c = TargetInGunRange(drone, range) ? HudTheme.Critical : HudTheme.Amber;
+            float bank = BankAngle(t, cam);
+
+            // Roll the reticle graphic with the airframe. The matrix is restored in a finally block so
+            // an exception inside the drawing can never leave the whole GUI rotated.
+            Matrix4x4 previous = GUI.matrix;
+            try
+            {
+                GUIUtility.RotateAroundPivot(bank, p);
+                HudTheme.Crosshair(p, PipperSize, c);
+                Ring(p, PipperSize * 0.34f, c, 48);
+            }
+            finally
+            {
+                GUI.matrix = previous;
+            }
+        }
+
+        /// <summary>
+        /// The camera the <see cref="CameraRig"/> drives, falling back to the tagged main camera when
+        /// there is no rig (hand-authored scenes). Cached; re-resolved whenever the cache goes null.
+        /// </summary>
+        private Camera ResolveCamera()
+        {
+            if (_camera != null) return _camera;
+            if (_cameraRig != null) _camera = _cameraRig.GetComponent<Camera>();
+            if (_camera == null) _camera = Camera.main;
+            return _camera;
+        }
+
+        /// <summary>
+        /// How far the airframe is banked as seen by the camera, in degrees, positive clockwise on
+        /// screen (the direction IMGUI rotates for a positive angle). Read off the "Model" child,
+        /// because <see cref="BankingVisual"/> rolls that child and never the root transform.
+        /// </summary>
+        private float BankAngle(Transform aircraft, Camera cam)
+        {
+            if (aircraft == null || cam == null) return 0f;
+
+            // Unity's overloaded == is what makes this safe: a destroyed owner compares equal to null
+            // and therefore never matches a live aircraft, so the stale cache is dropped.
+            if (_bankOwner != aircraft)
+            {
+                _bankOwner = aircraft;
+                Transform model = aircraft.Find("Model");
+                _bankSource = model != null ? model : aircraft;
+            }
+
+            Transform banked = _bankSource != null ? _bankSource : aircraft;
+
+            Transform camT = cam.transform;
+            float right = Vector3.Dot(banked.up, camT.right);
+            float up = Vector3.Dot(banked.up, camT.up);
+            if (Mathf.Abs(right) < 1e-5f && Mathf.Abs(up) < 1e-5f) return 0f;
+
+            return Mathf.Atan2(right, up) * Mathf.Rad2Deg;
+        }
+
+        /// <summary>
+        /// True when the drone's currently detected target is a live hostile inside the given gun
+        /// range — the pipper turns to the critical colour then. Read-only.
+        /// </summary>
+        private static bool TargetInGunRange(IhaController drone, float range)
+        {
+            if (drone == null || !drone.HasTarget) return false;
+
+            Targetable t = TargetRegistry.FindById(drone.DetectedId);
+            if (t == null) return false;
+            if (t.Faction == 0) return false;
+            if (t.Health != null && t.Health.IsDestroyed) return false;
+
+            return Vector3.Distance(drone.transform.position, t.transform.position) <= range;
         }
 
         // ------------------------------------------------------------------ pilot radar scope
@@ -763,7 +907,7 @@ namespace Sim.Runtime
         /// Bottom control strip: every control hint the HUD used to list (camera, pilot, weapons,
         /// pause / time scale / restart / mission menu) plus the design's bar colour-code legend.
         /// </summary>
-        private void DrawControlStrip(bool piloting)
+        private void DrawControlStrip(bool piloting, bool fleetVisible)
         {
             var strip = new Rect(0f, Screen.height - StripH, Screen.width, StripH);
             HudTheme.Fill(strip, new Color(HudTheme.Bg.r, HudTheme.Bg.g, HudTheme.Bg.b, 0.94f));
@@ -786,7 +930,9 @@ namespace Sim.Runtime
             HudTheme.Draw(l2, "W/S: GAZ · A/D: DÖNÜŞ · ↑/↓: YUNUSLAMA · SPACE: TOP · F: FÜZE · "
                               + "Q: FLARE · E: ART YAKICI · X: KAÇIŞ",
                           HudTheme.Centered, HudTheme.TextFaint);
-            HudTheme.Draw(l3, $"P: {pauseText} · +/−: HIZ (x{scale:0.00}) · R: YENİDEN · M: GÖREV MENÜSÜ",
+            string fleetHint = fleetVisible ? "GİZLE" : "GÖSTER";
+            HudTheme.Draw(l3, $"P: {pauseText} · +/−: HIZ (x{scale:0.00}) · R: YENİDEN · "
+                              + $"M: GÖREV MENÜSÜ · G: FİLO PANELİ ({fleetHint})",
                           HudTheme.Centered, HudTheme.TextFaint);
 
             // Bar colour-code legend (design: green >50, amber 20–50, red <20).

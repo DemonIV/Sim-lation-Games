@@ -7,7 +7,8 @@ namespace Sim.Runtime
     /// Thin glue only — it manipulates <see cref="Time.timeScale"/> and asks
     /// <see cref="SimulationBootstrap"/> to rebuild the generated world.
     ///
-    /// Keys: R = restart · P = pause/resume · +/- (top row or keypad) = faster/slower.
+    /// Keys: R = restart · P = pause/resume · +/- (top row or keypad) = faster/slower ·
+    /// G = show/hide the fleet status panel.
     /// </summary>
     public class GameControls : MonoBehaviour
     {
@@ -22,6 +23,13 @@ namespace Sim.Runtime
 
         /// <summary>True while the game is paused (time scale frozen at zero).</summary>
         public bool IsPaused => Time.timeScale == 0f;
+
+        /// <summary>
+        /// Whether the HUD's side fleet-status panel (the İHA/SİHA blocks) should be drawn. Toggled
+        /// with <c>G</c> ("gizle/göster") and VISIBLE by default, so a player who never presses the key
+        /// sees exactly what they saw before. Presentation only — no gameplay state is touched.
+        /// </summary>
+        public bool FleetPanelVisible { get; private set; } = true;
 
         private void Update()
         {
@@ -49,6 +57,14 @@ namespace Sim.Runtime
                     _lastNonZeroScale = Time.timeScale;
                     Time.timeScale = 0f;
                 }
+                return;
+            }
+
+            // G: show/hide the fleet status panel. F would read better ("filo") but it is already the
+            // pilot's guided-munition key AND the camera's free-fly key, so G is used instead.
+            if (Input.GetKeyDown(KeyCode.G))
+            {
+                FleetPanelVisible = !FleetPanelVisible;
                 return;
             }
 
