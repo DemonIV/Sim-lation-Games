@@ -312,8 +312,9 @@ namespace Sim.Core
     /// </para>
     ///
     /// <para>
-    /// The four 0..1 display ratings are passed through untouched: they compare ARCHETYPES on the
-    /// selection screen and are not a readout of the player's garage.
+    /// The five 0..1 display ratings are passed through untouched: they compare ARCHETYPES on the
+    /// selection screen and are not a readout of the player's garage. So is the airframe's radar
+    /// signature — no upgrade track makes an aircraft physically smaller.
     /// </para>
     ///
     /// Pure logic; no Unity scene dependency.
@@ -367,11 +368,15 @@ namespace Sim.Core
                 missileRange: missileRange,
                 detectionRange: b.DetectionRange * radar,
                 radarRange: b.RadarRange * radar,
+                // The garage sells SENSORS, not stealth: no track shrinks the airframe's own radar
+                // signature, so it is passed through untouched (like the display ratings below).
+                radarSignature: b.RadarSignature,
                 health: b.Health * hull,
                 speedRating: b.SpeedRating,
                 agilityRating: b.AgilityRating,
                 firepowerRating: b.FirepowerRating,
-                enduranceRating: b.EnduranceRating);
+                enduranceRating: b.EnduranceRating,
+                stealthRating: b.StealthRating);
         }
 
         /// <summary>

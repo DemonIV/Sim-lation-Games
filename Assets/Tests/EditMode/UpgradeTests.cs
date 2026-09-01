@@ -366,11 +366,13 @@ namespace Sim.Tests
             Cmp(diff, "MissileRange", a.MissileRange, b.MissileRange);
             Cmp(diff, "DetectionRange", a.DetectionRange, b.DetectionRange);
             Cmp(diff, "RadarRange", a.RadarRange, b.RadarRange);
+            Cmp(diff, "RadarSignature", a.RadarSignature, b.RadarSignature);
             Cmp(diff, "Health", a.Health, b.Health);
             Cmp(diff, "SpeedRating", a.SpeedRating, b.SpeedRating);
             Cmp(diff, "AgilityRating", a.AgilityRating, b.AgilityRating);
             Cmp(diff, "FirepowerRating", a.FirepowerRating, b.FirepowerRating);
             Cmp(diff, "EnduranceRating", a.EnduranceRating, b.EnduranceRating);
+            Cmp(diff, "StealthRating", a.StealthRating, b.StealthRating);
 
             if (a.GunMagazine != b.GunMagazine) diff.Add("GunMagazine");
             if (a.MissileCapacity != b.MissileCapacity) diff.Add("MissileCapacity");

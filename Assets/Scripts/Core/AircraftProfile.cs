@@ -29,18 +29,21 @@ namespace Sim.Core
     /// <see cref="GunSystem"/>), <c>MissileCapacity</c>/<c>MissileRange</c> size the SİHA's
     /// <see cref="WeaponSystem"/> magazine and firing range, <c>DetectionRange</c> is the
     /// <see cref="TargetingSystem"/> range, <c>RadarRange</c> is the radar sensor's reference range
-    /// (see <see cref="RadarSystem"/>) and <c>Health</c> is the hit-point pool.
+    /// (see <see cref="RadarSystem"/>), <c>RadarSignature</c> is the radar cross section the airframe
+    /// presents to HOSTILE sensors and <c>Health</c> is the hit-point pool.
     /// </para>
     ///
     /// <para>
-    /// NOT MODELLED YET: the archetypes also differ in radar signature, but nothing in the simulation
-    /// reads a FRIENDLY aircraft's <see cref="RadarCrossSection"/> — hostile sensors detect by plain
-    /// range/FOV — so an RCS field would be dead weight. Making hostile sensors signature-aware is a
-    /// separate change to enemy behaviour.
+    /// <c>RadarSignature</c> is the newest of these and the one that makes the electronic-warfare
+    /// layer matter to the player: the spawner hangs an <c>RcsComponent</c> carrying it on the
+    /// aircraft, hostile sensors read it out of the detection snapshot, and
+    /// <see cref="SignatureDetection"/> turns it into the distance at which that hostile actually
+    /// picks the aircraft up. It is expressed in the same m² units
+    /// <see cref="RadarCrossSection"/> already models, around its 1 m² nominal value.
     /// </para>
     ///
     /// <para>
-    /// The four 0..1 ratings exist purely so the selection UI can draw comparative bars without ever
+    /// The five 0..1 ratings exist purely so the selection UI can draw comparative bars without ever
     /// knowing the raw units.
     /// </para>
     ///
@@ -110,6 +113,14 @@ namespace Sim.Core
         /// <summary>Radar reference range (m) against a 1 m² target — the size of the radar picture.</summary>
         public float RadarRange { get; }
 
+        /// <summary>
+        /// Nominal radar cross section (m²) this airframe presents to hostile sensors. The SİHA
+        /// baseline is <see cref="SignatureDetection.BaselineRcs"/> (1 m²), which is exactly what
+        /// every hostile detection range in the project is quoted against; a bigger value is picked
+        /// up further out and a smaller one closer in, as the fourth root of the ratio.
+        /// </summary>
+        public float RadarSignature { get; }
+
         /// <summary>Hit points.</summary>
         public float Health { get; }
 
@@ -126,15 +137,22 @@ namespace Sim.Core
         /// <summary>Comparative endurance rating for the selection screen (0..1).</summary>
         public float EnduranceRating { get; }
 
+        /// <summary>
+        /// Comparative STEALTH rating for the selection screen (0..1) — the inverse reading of
+        /// <see cref="RadarSignature"/>, so that (like every other rating) MORE is better for the
+        /// player: 1 is the hardest airframe to see, 0 the easiest.
+        /// </summary>
+        public float StealthRating { get; }
+
         public AircraftProfile(string id, string displayName, string description, AircraftKind kind,
                                float maxSpeed, float pilotMaxSpeed, float turnRateDeg, float cruiseAltitude,
                                float fuelCapacity, float fuelBurnRate,
                                int gunMagazine, float gunRoundsPerSecond, float gunRange,
                                float gunDispersionDeg, float gunDamage,
                                int missileCapacity, float missileRange,
-                               float detectionRange, float radarRange, float health,
+                               float detectionRange, float radarRange, float radarSignature, float health,
                                float speedRating, float agilityRating,
-                               float firepowerRating, float enduranceRating)
+                               float firepowerRating, float enduranceRating, float stealthRating)
         {
             Id = id;
             DisplayName = displayName;
@@ -160,12 +178,14 @@ namespace Sim.Core
 
             DetectionRange = detectionRange;
             RadarRange = radarRange;
+            RadarSignature = radarSignature;
             Health = health;
 
             SpeedRating = Mathf.Clamp01(speedRating);
             AgilityRating = Mathf.Clamp01(agilityRating);
             FirepowerRating = Mathf.Clamp01(firepowerRating);
             EnduranceRating = Mathf.Clamp01(enduranceRating);
+            StealthRating = Mathf.Clamp01(stealthRating);
         }
     }
 
@@ -198,9 +218,16 @@ namespace Sim.Core
         // 18 m is FlightEnvelope.MinCruiseAltitude (14 m skyline + 4 m margin); the relative spacing
         // between the three archetypes is unchanged, and FlightEnvelopeTests asserts the floor holds.
 
+        // SIGNATURES: expressed in the m² units Sim.Core.RadarCrossSection already models, whose
+        // nominal BaseRcs is 1 m². The SİHA sits exactly on that 1 m² baseline, so every hostile
+        // detection range in the project keeps meaning literally what it says. The other two are one
+        // factor of FOUR either side (jet 4 m², recon İHA 0.25 m²), which the range equation's fourth
+        // root turns into a clean ±√2 in detection distance: the jet is picked up ~41 % further out
+        // than the SİHA, the recon İHA ~29 % closer in.
+
         // Baseline = today's armed SİHA: flight 30 m/s / 80 deg/s, pilot cap 40 m/s, cruise 20 m,
         // tank 100 @ 2/s, gun 300 rounds / 10 rps / 60 m / 2.5° / 4.5 dmg, 6 missiles at 120 m,
-        // targeting 120 m, radar reference 250 m, 100 HP, nominal radar signature.
+        // targeting 120 m, radar reference 250 m, 1 m² signature, 100 HP.
         private static readonly AircraftProfile _siha = new AircraftProfile(
             id: SihaId,
             displayName: "SİHA",
@@ -211,12 +238,14 @@ namespace Sim.Core
             gunMagazine: 300, gunRoundsPerSecond: 10f, gunRange: 60f,
             gunDispersionDeg: 2.5f, gunDamage: 4.5f,
             missileCapacity: 6, missileRange: 120f,
-            detectionRange: 120f, radarRange: 250f, health: 100f,
-            speedRating: 0.6f, agilityRating: 0.6f, firepowerRating: 0.9f, enduranceRating: 0.6f);
+            detectionRange: 120f, radarRange: 250f, radarSignature: 1f, health: 100f,
+            speedRating: 0.6f, agilityRating: 0.6f, firepowerRating: 0.9f, enduranceRating: 0.6f,
+            stealthRating: 0.55f);
 
         // Jet = baseline × (speed 1.5, pilot cap 1.5, turn 1.25, tank 0.7, burn 1.6, gun rate 1.6,
-        // gun damage ~1.33, gun range ~1.17, radar 0.8, detection ~0.83); 2 missiles instead of 6 and
-        // slightly fewer hit points. Fast and hard-hitting, but short-legged and short-sighted.
+        // gun damage ~1.33, gun range ~1.17, radar 0.8, detection ~0.83, SIGNATURE 4); 2 missiles
+        // instead of 6 and slightly fewer hit points. Fast and hard-hitting, but short-legged,
+        // short-sighted and by far the easiest of the three to see coming.
         private static readonly AircraftProfile _fighterJet = new AircraftProfile(
             id: FighterJetId,
             displayName: "Savaş Uçağı",
@@ -227,13 +256,14 @@ namespace Sim.Core
             gunMagazine: 400, gunRoundsPerSecond: 16f, gunRange: 70f,
             gunDispersionDeg: 2f, gunDamage: 6f,
             missileCapacity: 2, missileRange: 100f,
-            detectionRange: 100f, radarRange: 200f, health: 90f,
-            speedRating: 1f, agilityRating: 0.9f, firepowerRating: 0.6f, enduranceRating: 0.35f);
+            detectionRange: 100f, radarRange: 200f, radarSignature: 4f, health: 90f,
+            speedRating: 1f, agilityRating: 0.9f, firepowerRating: 0.6f, enduranceRating: 0.35f,
+            stealthRating: 0.2f);
 
-        // Recon İHA = baseline × (speed 0.7, turn ~0.81, tank 1.8, burn 0.7, radar 1.4, detection 1.25)
-        // with the recon drone's own existing light gun fit (200 rounds / 8 rps / 45 m / 3° / 3 dmg),
-        // no missiles at all and 70 hit points. Loiters forever and sees furthest, but is weak and
-        // fragile.
+        // Recon İHA = baseline × (speed 0.7, turn ~0.81, tank 1.8, burn 0.7, radar 1.4, detection
+        // 1.25, SIGNATURE 0.25) with the recon drone's own existing light gun fit (200 rounds / 8 rps
+        // / 45 m / 3° / 3 dmg), no missiles at all and 70 hit points. Loiters forever, sees furthest
+        // and is the hardest to see — but is weak and fragile.
         private static readonly AircraftProfile _iha = new AircraftProfile(
             id: IhaId,
             displayName: "Keşif İHA",
@@ -244,8 +274,9 @@ namespace Sim.Core
             gunMagazine: 200, gunRoundsPerSecond: 8f, gunRange: 45f,
             gunDispersionDeg: 3f, gunDamage: 3f,
             missileCapacity: 0, missileRange: 0f,
-            detectionRange: 150f, radarRange: 350f, health: 70f,
-            speedRating: 0.35f, agilityRating: 0.45f, firepowerRating: 0.25f, enduranceRating: 1f);
+            detectionRange: 150f, radarRange: 350f, radarSignature: 0.25f, health: 70f,
+            speedRating: 0.35f, agilityRating: 0.45f, firepowerRating: 0.25f, enduranceRating: 1f,
+            stealthRating: 0.9f);
 
         private static readonly AircraftProfile[] _all = { _fighterJet, _siha, _iha };
 

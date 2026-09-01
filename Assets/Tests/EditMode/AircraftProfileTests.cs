@@ -182,6 +182,55 @@ namespace Sim.Tests
         }
 
         [Test]
+        public void Jet_IsTheEasiestToSee_IhaTheHardest()
+        {
+            Assert.Greater(Jet.RadarSignature, Siha.RadarSignature);
+            Assert.Greater(Siha.RadarSignature, Iha.RadarSignature);
+
+            // The SİHA is the baseline every hostile detection range is quoted against, so its
+            // signature must stay exactly on it — that is what keeps those ranges meaning what
+            // they say.
+            Assert.AreEqual(SignatureDetection.BaselineRcs, Siha.RadarSignature, 1e-4f);
+        }
+
+        [Test]
+        public void SignatureOrdering_SurvivesTheRangeEquation()
+        {
+            // What the player actually feels: the distance at which one and the same hostile sensor
+            // picks each archetype up. Ratios, not absolutes, so the sensor can be retuned freely.
+            const float sensor = 100f;
+            float jet = Reach(sensor, Jet);
+            float siha = Reach(sensor, Siha);
+            float iha = Reach(sensor, Iha);
+
+            Assert.Greater(jet, siha);
+            Assert.Greater(siha, iha);
+
+            // The baseline is detected at exactly the sensor's stated range.
+            Assert.AreEqual(sensor, siha, 1e-3f);
+
+            // The İHA is SNEAKY, NOT INVISIBLE: still well over half the baseline reach.
+            Assert.Greater(iha / siha, 0.5f);
+
+            // ...and the jet is not detected absurdly far out either.
+            Assert.Less(jet / siha, 2f);
+        }
+
+        [Test]
+        public void StealthRating_MirrorsTheSignatureOrdering()
+        {
+            // More is better on every rating bar, so stealth runs OPPOSITE to raw signature.
+            Assert.Greater(Iha.StealthRating, Siha.StealthRating);
+            Assert.Greater(Siha.StealthRating, Jet.StealthRating);
+        }
+
+        private static float Reach(float sensorRange, AircraftProfile p)
+        {
+            return SignatureDetection.RangeForRcs(sensorRange, SignatureDetection.BaselineRcs,
+                                                  p.RadarSignature);
+        }
+
+        [Test]
         public void Iha_IsTheMostFragile()
         {
             Assert.Greater(Siha.Health, Jet.Health);
@@ -208,6 +257,8 @@ namespace Sim.Tests
                 Assert.GreaterOrEqual(p.MissileRange, 0f, p.Id);
                 Assert.Greater(p.DetectionRange, 0f, p.Id);
                 Assert.Greater(p.RadarRange, 0f, p.Id);
+                // A zero/negative signature would make the airframe literally undetectable.
+                Assert.Greater(p.RadarSignature, 0f, p.Id);
                 Assert.Greater(p.Health, 0f, p.Id);
 
                 // A missile carrier must be able to shoot as far as it can see a target lock up.
@@ -224,6 +275,7 @@ namespace Sim.Tests
                 AssertRating(p.AgilityRating, p.Id + ".Agility");
                 AssertRating(p.FirepowerRating, p.Id + ".Firepower");
                 AssertRating(p.EnduranceRating, p.Id + ".Endurance");
+                AssertRating(p.StealthRating, p.Id + ".Stealth");
             }
         }
 
