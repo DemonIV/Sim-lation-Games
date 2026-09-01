@@ -29,8 +29,11 @@ ekseninden dünyaya yansıtılıyor, uçak eğilince kayıyor/yatıyor ve ~1.7×
 sağdaki filo durumu panelini aç/kapat yapıyor. En son tur **üç uçulabilir arketip** geldi: görev
 seçim ekranında Savaş Uçağı / SİHA / Keşif İHA seçiliyor (`AircraftProfile` + `AircraftCatalog`,
 Core, testli) ve seçim yalnızca **oyuncunun uçağına** uygulanıyor; SİHA profili bugünkü değerlerin
-birebir aynısı olduğu için selektöre dokunmayan oyuncu için hiçbir şey değişmiyor. Savaş uçağının
-gerçek 3D modeli **bir sonraki turda** yapılacak (şimdilik silahlı İHA siluetini kullanıyor).
+birebir aynısı olduğu için selektöre dokunmayan oyuncu için hiçbir şey değişmiyor. En son tur
+**kozmetik** oldu: üç arketip artık kendi gövdesini kullanıyor — savaş uçağı için gerçek bir
+`BuildFighterJet` gövdesi (alan kuralına göndermeli beş segmentli gövde, saydam kabin, kırık delta
+kanat, çift dikey stabilizatör, yan hava alıkları, lüle + `"EngineGlow"`, dört pilon, karın sensörü)
+ve aynı detay seviyesine çekilmiş keşif İHA / SİHA gövdeleri. Hiçbir oyun değeri değişmedi.
 
 ### Yeni oturum için okuma sırası
 1. Bu bölüm.
@@ -171,7 +174,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `CountermeasureDispenser` | `CountermeasureSystem` sarmalayıcısı: flare/chaff salvosu, salvo sayacı (füzeler bunu izler), kısa görsel puf. |
 | `ScenarioMenu` | Kurulum gerektirmeyen IMGUI görev seçim/brifing ekranı: açılışta çıkar, sim'i duraklatır, `M` ile tekrar açılır. |
 | `MaterialLibrary` | Standard/URP uyumlu, önbelleklenmiş materyal fabrikası (renk, metalik, pürüzsüzlük, emisyon). |
-| `VehicleModelBuilder` | Primitive'lerden araç siluetleri kurar (İHA, SİHA, düşman avcısı, SAM, AAA, yer hedefi); parçaların collider'ları silinir, fizik etkilenmez. |
+| `VehicleModelBuilder` | Primitive'lerden araç siluetleri kurar (keşif İHA 19, SİHA 27, savaş uçağı 37 parça; ayrıca düşman avcısı, SAM, AAA, yer hedefi); parçaların collider'ları silinir, fizik etkilenmez. `"Model"` çocuğu kökün ölçeğini tersler; `"Fuselage"`/`"Propeller"`/`"Radar"`/`"EngineGlow"`/`"Turret"`+`"TurretBody"` adları animasyon ve kamera kodunun sözleşmesidir. |
 | `EnvironmentBuilder` | Prosedürel arazi mesh'i, üs pisti, ağaç/kaya/bina dağılımı ve gökyüzü/sis/ortam ışığı/güneş ayarı (tamamı görsel). |
 | `VfxLibrary` | Asset'siz efekt primitifleri (emisyonlu parlama, nokta ışığı patlaması, enkaz, saydam duman, şok dalgası halkası, kıvılcım); global efekt bütçesi ile sınırlı, hepsi kendini yok eder. |
 | `ScorchMark` | İmha edilen yer birimlerinin arazide bıraktığı, zamanla sönen yanık izi (en fazla 40 iz). |
@@ -267,6 +270,10 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
 | `de63482` | Seçilen uçak `ScenarioController.SelectedAircraftId` statiğinde taşınıyor (bilinmeyen id → varsayılan). |
 | `03fd331` | Görev seçim ekranına uçak seçim satırı (kartlar + 0–1 çubuk göstergeleri, ←/→). |
 | `9d6a8f7` | Seçilen profil oyuncunun uçağına uygulanıyor (uçuş, yakıt, top, füze, sensör, can). |
+| `590236f` | Üç uçulabilir arketip için DEVLOG maddesi. |
+| `4a612c6` | Gerçek savaş uçağı gövdesi (`BuildFighterJet`) + `Accent`/`Glow`/`CanopyGlass` materyal yardımcıları. |
+| `16ace38` | `SpawnPlayerAircraft` jet için gerçek gövdeyi kuruyor; ödünç silüet notu kaldırıldı. |
+| `1f56d83` | Keşif İHA ve SİHA gövdeleri detaylandırıldı (bağımsız SİHA gövdesi, ters V-kuyruk, satcom kubbesi, açık livre). |
 
 ---
 
@@ -692,5 +699,31 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
   **Kapsam dışı bırakılan:** arketiplerin radar kesit alanı (RCS) farkı. Sim'de **dost** bir uçağın
   RCS'ini okuyan hiçbir şey yok (düşman sensörleri düz menzil/FOV ile tespit ediyor), bu yüzden
   profile ölü bir alan eklenmedi; düşman sensörlerini imza duyarlı yapmak ayrı bir iş.
-  **Model notu:** savaş uçağı şimdilik silahlı İHA siluetini ödünç alıyor — gerçek gövdeler
-  sonraki turda.
+  **Model notu:** savaş uçağı bu turda silahlı İHA siluetini ödünç alıyordu; gerçek gövdeler
+  bir sonraki turda geldi (aşağıdaki "Uçak modelleri" maddesi).
+- **Uçak modelleri (kozmetik tur):** üç uçulabilir arketip artık **kendi gövdesini** kullanıyor;
+  hiçbir oyun değeri (hız, dönüş, yakıt, top, füze, radar, can, spawn) değişmedi.
+  **(1) Savaş uçağı — `VehicleModelBuilder.BuildFighterJet` (37 parça):** beş segmentli, bel veren
+  (alan kuralına göndermeli) gövde; sivri radome + pitot çubuğu; sırt omurgası; **saydam** kabin
+  camı (`MaterialLibrary.CreateTransparent`; materyal kurulamazsa cam **çizilmiyor**, asla opak
+  çizilmiyor); kırık delta kanat (LERX + dış panelde artan ok açısı + flaperon); iki dışa yatık
+  dikey stabilizatör + yatay kuyruk; yan hava alıkları (ağızları koyu, "delik" gibi okunsun diye);
+  merkez hattında lüle + geleneksel `"EngineGlow"` parçası; dört pilon + ince mühimmat; karın
+  altında `"Turret"`/`"TurretBody"` pivot konvansiyonunda sensör küresi. Ölçüler kokpit kamerasıyla
+  uyumlu: pilotun gözü model uzayında ~(0, 0.5, 1.6) olduğu için kabin o noktanın etrafına kuruldu.
+  Jette pervane **yok**; `PropellerSpinner` parçayı bulamayınca sessizce hiçbir şey yapmıyor.
+  **(2) Keşif İHA (19 parça):** yüksek en-boy oranlı (~7.1 m açıklık, AR ~10) üç parçalı planör
+  kanadı (dihedral + aileron + kanat ucu kanatçıkları), şişkin avyonik burnu, `"Radar"` satcom
+  kubbesi, `"Turret"` pivotuna taşınan çene sensör küresi, kuyruk kirişi + anten, yukarı yatık
+  V-kuyruk, itici pervane (`"Propeller"` adı korundu) ve **en açık livre** (kanat kaplaması koyu
+  trim yerine yeni `Accent` tonunda).
+  **(3) SİHA (27 parça):** artık keşif gövdesini süslemiyor, **bağımsız** kuruluyor: kademeli burun
+  bölümü, sırt satcom kubbesi, daha büyük çene küresi, flap ve uç kanatçıklı düz kanat, kirişin
+  **altında ters V-kuyruk**, itici pervane ve iç/dış pilonlarda dört mühimmat.
+  **Sözleşmeler korundu:** her parça `"Model"` çocuğu altında (kökün ölçeğinin tersiyle), collider'lar
+  siliniyor, `"Fuselage"` **doğrudan** `"Model"` çocuğu (`CameraRig.TryReadBodyColor` özyinelemesiz
+  `Find` kullanıyor), `CameraRig` kokpit görünümünde tüm yeni renderer'ları kapatıyor.
+  **Materyal:** yeni palet yok — `Accent` (birimin kendi renginden türetilen açık ton) ve `Glow`
+  (`BuildEnemyFighter` içinden çıkarılan, değeri değişmemiş egzoz materyali) yardımcıları eklendi;
+  kabin camı **önbelleğe alınıyor** (`CreateTransparent` önbelleksiz örnek döndürdüğü için, her
+  kurulumda bir cam materyali sızmasın diye — bkz. B-04).
