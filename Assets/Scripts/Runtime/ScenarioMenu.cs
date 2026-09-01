@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Sim.Core;
 
@@ -32,6 +33,15 @@ namespace Sim.Runtime
     /// in IMGUI, so the type only approximates the mockup.
     /// </para>
     ///
+    /// <para>
+    /// Beneath the missions sits the AIRCRAFT row: one card per <see cref="AircraftCatalog"/> profile
+    /// (name, one-line description and the profile's 0..1 ratings as <see cref="HudTheme.Bar"/>
+    /// gauges), drawn with the same card treatment as the missions so the screen reads as one design.
+    /// Clicking a card — or the ←/→ keys, which are bound nowhere else — writes
+    /// <see cref="ScenarioController.SelectedAircraftId"/>. The choice only reaches the field when the
+    /// world is (re)built, which is exactly what picking a mission does.
+    /// </para>
+    ///
     /// Because the menu runs at <c>timeScale == 0</c> it never reads <see cref="Time.deltaTime"/>.
     /// </summary>
     public class ScenarioMenu : MonoBehaviour
@@ -43,6 +53,14 @@ namespace Sim.Runtime
         private const float CardFooterH = 26f;
         private const float LegendH = 92f;
         private const float FooterH = 24f;
+
+        // Aircraft row: header (20) + description (26+4) + four 9px gauges with 5px gaps = ~106px of
+        // content, so 120 is the smallest height that never clips a card.
+        private const float AircraftRowH = 120f;
+        private const float AircraftLabelH = 16f;
+        private const float MinMissionCardH = 150f;
+        private const float RatingBarH = 9f;
+        private const float RatingBarGap = 5f;
 
         private ScenarioController _controller;
 
@@ -102,6 +120,7 @@ namespace Sim.Runtime
                 // Keep the sim frozen while the briefing is up, even if something else (e.g. the P
                 // key in GameControls) changed the time scale underneath us.
                 if (Time.timeScale != 0f) Time.timeScale = 0f;
+                HandleAircraftKeys();
                 return;
             }
 
@@ -112,6 +131,22 @@ namespace Sim.Runtime
                 IsOpen = true;
                 Time.timeScale = 0f;
             }
+        }
+
+        /// <summary>
+        /// ←/→ step through the aircraft catalogue while the briefing is up. Those two keys are used
+        /// nowhere else in the project (the pilot pitches with ↑/↓, the camera flies with WASD), so
+        /// this cannot collide with an existing binding.
+        /// </summary>
+        private static void HandleAircraftKeys()
+        {
+            int delta = 0;
+            if (Input.GetKeyDown(KeyCode.RightArrow)) delta = 1;
+            else if (Input.GetKeyDown(KeyCode.LeftArrow)) delta = -1;
+            if (delta == 0) return;
+
+            ScenarioController.SelectedAircraftId =
+                AircraftCatalog.Cycle(ScenarioController.SelectedAircraftId, delta).Id;
         }
 
         /// <summary>Builds the one local style. Call from OnGUI, after <c>HudTheme.Ensure()</c>.</summary>
@@ -174,8 +209,13 @@ namespace Sim.Runtime
             ScenarioKind[] kinds = ScenarioLibrary.All;
             if (kinds == null || kinds.Length == 0) return;
 
+            // The space between the heading and the legend is shared by the mission cards (top) and
+            // the aircraft row (bottom); the aircraft row gets a bounded share of it.
             float cardsTop = headingBottom + 24f;
-            float cardsH = Mathf.Max(170f, legendY - 24f - cardsTop);
+            float available = Mathf.Max(MinMissionCardH + AircraftRowH + AircraftLabelH + 20f,
+                                        legendY - 24f - cardsTop);
+            float aircraftH = Mathf.Clamp(available * 0.42f, AircraftRowH, 160f);
+            float cardsH = Mathf.Max(MinMissionCardH, available - aircraftH - AircraftLabelH - 20f);
             float cardW = (contentW - CardGap * (kinds.Length - 1)) / kinds.Length;
 
             for (int i = 0; i < kinds.Length; i++)
@@ -184,10 +224,93 @@ namespace Sim.Runtime
                 if (DrawCard(r, kinds[i], i))
                 {
                     Choose(kinds[i]);
-                    // Choose may reload the scene; stop drawing this frame.
+                    // Choose may rebuild the world; stop drawing this frame.
                     return;
                 }
             }
+
+            // ---- aircraft selection
+            float aircraftLabelY = cardsTop + cardsH + 12f;
+            DrawEyebrow(new Rect(0f, aircraftLabelY, sw, 14f), "UÇAK SEÇ  ·  ←/→ İLE DEĞİŞTİR");
+            DrawAircraftRow(new Rect(margin, aircraftLabelY + AircraftLabelH + 4f, contentW, aircraftH));
+        }
+
+        /// <summary>
+        /// The row of aircraft cards, one per <see cref="AircraftCatalog"/> profile. Clicking a card
+        /// records the choice in <see cref="ScenarioController.SelectedAircraftId"/>; it is applied
+        /// when the world is next built.
+        /// </summary>
+        private void DrawAircraftRow(Rect r)
+        {
+            IReadOnlyList<AircraftProfile> profiles = AircraftCatalog.All;
+            if (profiles == null || profiles.Count == 0) return;
+
+            // Resolved defensively, so an unknown stored id still highlights a real card.
+            string selectedId = ScenarioController.SelectedAircraft.Id;
+
+            float w = (r.width - CardGap * (profiles.Count - 1)) / profiles.Count;
+            for (int i = 0; i < profiles.Count; i++)
+            {
+                AircraftProfile p = profiles[i];
+                var card = new Rect(r.x + i * (w + CardGap), r.y, w, r.height);
+                if (DrawAircraftCard(card, p, p.Id == selectedId))
+                    ScenarioController.SelectedAircraftId = p.Id;
+            }
+        }
+
+        /// <summary>
+        /// One aircraft card: header (name + SEÇİLİ marker), the one-line description and the four
+        /// 0..1 ratings as labelled gauges. The selected card gets the SAME amber treatment the
+        /// mission cards use for hover, so selection reads consistently across the screen. Returns
+        /// true when the card was clicked.
+        /// </summary>
+        private bool DrawAircraftCard(Rect r, AircraftProfile p, bool selected)
+        {
+            bool hover = r.Contains(Event.current.mousePosition);
+            bool lit = selected || hover;
+            Color accent = lit ? HudTheme.Amber : HudTheme.Line;
+
+            HudTheme.Fill(r, lit ? Tint(HudTheme.Amber, 0.12f, 0.96f) : HudTheme.PanelBg);
+            HudTheme.Border(r, accent);
+
+            // Header strip: aircraft name on the left, selection marker on the right.
+            var head = new Rect(r.x + 1f, r.y + 1f, r.width - 2f, CardHeaderH);
+            HudTheme.Fill(head, lit ? Tint(HudTheme.Amber, 0.20f, 1f) : HudTheme.PanelAlt);
+            HudTheme.Fill(new Rect(head.x, head.yMax - 1f, head.width, 1f), accent);
+
+            var headText = new Rect(head.x + 8f, head.y, Mathf.Max(20f, head.width - 16f), head.height);
+            HudTheme.Draw(headText, Upper(p.DisplayName), HudTheme.SectionLabel,
+                          lit ? HudTheme.Amber : HudTheme.Text);
+            if (selected)
+                HudTheme.Draw(headText, "SEÇİLİ", HudTheme.SmallRight, HudTheme.Amber);
+
+            float x = r.x + 12f;
+            float cw = Mathf.Max(20f, r.width - 24f);
+
+            // One-line description.
+            float y = head.yMax + 8f;
+            HudTheme.Draw(new Rect(x, y, cw, 26f), p.Description, _brief,
+                          lit ? HudTheme.Text : HudTheme.TextDim);
+
+            // Rating gauges (0..1, no raw units on screen).
+            y += 30f;
+            y = DrawRating(x, y, cw, "HIZ", p.SpeedRating);
+            y = DrawRating(x, y, cw, "ÇEVİK", p.AgilityRating);
+            y = DrawRating(x, y, cw, "ATEŞ", p.FirepowerRating);
+            DrawRating(x, y, cw, "SÜRE", p.EnduranceRating);
+
+            // Invisible hit area over the whole card, exactly like the mission cards.
+            return GUI.Button(r, GUIContent.none, GUIStyle.none);
+        }
+
+        /// <summary>
+        /// Draws one labelled rating gauge with the HUD's shared bar helper and returns the Y for the
+        /// next row.
+        /// </summary>
+        private static float DrawRating(float x, float y, float width, string label, float rating01)
+        {
+            HudTheme.Bar(new Rect(x, y, width, RatingBarH), rating01, label, string.Empty);
+            return y + RatingBarH + RatingBarGap;
         }
 
         /// <summary>
