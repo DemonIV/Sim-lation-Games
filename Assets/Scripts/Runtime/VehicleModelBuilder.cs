@@ -256,7 +256,30 @@ namespace Sim.Runtime
             return model;
         }
 
-        /// <summary>Long-range SAM battery: box hull, turret, four canted tubes and a radar dish.</summary>
+        /// <summary>
+        /// Long-range SAM battery, built to read like a real Patriot section rather than a single
+        /// launcher: an M901-style lowboy launcher trailer with an elevating four-canister rack, a
+        /// phased-array radar trailer parked off to one side, and an engagement-control shelter with
+        /// its own generator and antenna mast.
+        ///
+        /// <para>Layout notes (model space, +Z forward, +Y up, ~9 m by ~7 m of ground):</para>
+        /// <list type="bullet">
+        ///   <item>the launcher's chassis, bogies and outrigger beams stay on the model root — only
+        ///   the rack traverses;</item>
+        ///   <item>"Turret" is the EMPTY, unscaled pivot <see cref="TurretVisual"/> yaws. "Rack" is a
+        ///   second unscaled pivot under it carrying the +32° launch elevation, so the canisters can
+        ///   be laid out in plain un-rotated coordinates;</item>
+        ///   <item>the rack pivots near its REAR, the way an M901's does, so elevating swings the
+        ///   canister mouths UP and FORWARD instead of driving their tails through the trailer bed.
+        ///   With the geometry below the mouths end up roughly over the model origin — which is
+        ///   where <c>AirDefenseSite.LaunchMunition</c> spawns the round (it uses the SITE ROOT's
+        ///   position, no named muzzle transform), so the missile leaves from under the tubes;</item>
+        ///   <item>"Radar" is an unscaled pivot with an IDENTITY rotation, so the sweep TurretVisual
+        ///   applies to it is a clean azimuth turn about the vertical. The 30° rake lives on the
+        ///   "ArrayMount" child below it (finding B-19: the old dish carried the tilt itself and
+        ///   therefore wobbled instead of scanning).</item>
+        /// </list>
+        /// </summary>
         public static Transform BuildSamSite(Transform root, Color primary)
         {
             Transform model = CreateModelRoot(root);
@@ -264,28 +287,85 @@ namespace Sim.Runtime
 
             Material body = Body(primary);
             Material trim = Trim(primary);
+            Material accent = Accent(primary);
             Material dark = DarkMetal();
 
-            Part(model, PrimitiveType.Cube, "Base", new Vector3(0f, 0.45f, 0f), new Vector3(3.2f, 0.9f, 3.2f), Vector3.zero, body);
+            // ---- launcher trailer (M901-style): lowboy bed, gooseneck and hitch, two bogies a side,
+            // and the outrigger beams that jack the bed down for firing.
+            Part(model, PrimitiveType.Cube, "TrailerBed", new Vector3(0f, 0.72f, -1.60f), new Vector3(2.30f, 0.30f, 4.40f), Vector3.zero, trim);
+            Part(model, PrimitiveType.Cube, "Gooseneck", new Vector3(0f, 0.95f, 1.15f), new Vector3(1.30f, 0.26f, 1.20f), Vector3.zero, trim);
+            Part(model, PrimitiveType.Cylinder, "Hitch", new Vector3(0f, 1.02f, 2.20f), new Vector3(0.12f, 0.50f, 0.12f), new Vector3(90f, 0f, 0f), dark);
 
-            // "Turret" is an EMPTY, unscaled pivot animated by TurretVisual; the visible cylinder
-            // ("TurretBody") and the missile tubes hang off it so they slew together. The pivot has to
-            // stay scale-free — the body's non-uniform (0.9, 0.5, 0.9) would otherwise squash the tubes.
-            Transform turret = Pivot(model, "Turret", new Vector3(0f, 1.2f, 0f));
-            Part(turret, PrimitiveType.Cylinder, "TurretBody", Vector3.zero, new Vector3(0.9f, 0.5f, 0.9f), Vector3.zero, trim);
+            Part(model, PrimitiveType.Cylinder, "BogieLF", new Vector3(-1.20f, 0.39f, -1.70f), new Vector3(0.78f, 0.16f, 0.78f), new Vector3(0f, 0f, 90f), dark);
+            Part(model, PrimitiveType.Cylinder, "BogieRF", new Vector3(1.20f, 0.39f, -1.70f), new Vector3(0.78f, 0.16f, 0.78f), new Vector3(0f, 0f, 90f), dark);
+            Part(model, PrimitiveType.Cylinder, "BogieLB", new Vector3(-1.20f, 0.39f, -2.70f), new Vector3(0.78f, 0.16f, 0.78f), new Vector3(0f, 0f, 90f), dark);
+            Part(model, PrimitiveType.Cylinder, "BogieRB", new Vector3(1.20f, 0.39f, -2.70f), new Vector3(0.78f, 0.16f, 0.78f), new Vector3(0f, 0f, 90f), dark);
 
-            Part(turret, PrimitiveType.Cube, "TubeLF", new Vector3(-0.35f, 0.7f, 0.25f), new Vector3(0.22f, 1.6f, 0.22f), new Vector3(-25f, 0f, 0f), dark);
-            Part(turret, PrimitiveType.Cube, "TubeRF", new Vector3(0.35f, 0.7f, 0.25f), new Vector3(0.22f, 1.6f, 0.22f), new Vector3(-25f, 0f, 0f), dark);
-            Part(turret, PrimitiveType.Cube, "TubeLB", new Vector3(-0.35f, 0.7f, -0.25f), new Vector3(0.22f, 1.6f, 0.22f), new Vector3(-25f, 0f, 0f), dark);
-            Part(turret, PrimitiveType.Cube, "TubeRB", new Vector3(0.35f, 0.7f, -0.25f), new Vector3(0.22f, 1.6f, 0.22f), new Vector3(-25f, 0f, 0f), dark);
+            // The front beam is kept back to z = -0.55 so it clears the round the site spawns at the
+            // model origin (a 0.6-wide sphere reaching z = +/-0.3).
+            Part(model, PrimitiveType.Cube, "OutriggerFront", new Vector3(0f, 0.20f, -0.55f), new Vector3(3.40f, 0.40f, 0.40f), Vector3.zero, dark);
+            Part(model, PrimitiveType.Cube, "OutriggerRear", new Vector3(0f, 0.20f, -3.30f), new Vector3(3.40f, 0.40f, 0.40f), Vector3.zero, dark);
 
-            // "Radar" stays on the model root — it sweeps independently of the turret.
-            Part(model, PrimitiveType.Cylinder, "Radar", new Vector3(0f, 2.1f, -1.0f), new Vector3(1.1f, 0.06f, 1.1f), new Vector3(60f, 0f, 0f), trim);
+            // ---- traverse ring + elevating canister rack. Both pivots are scale-free: the ring's
+            // non-uniform (1.30, 0.14, 1.30) would otherwise flatten every canister hanging below it.
+            Transform turret = Pivot(model, "Turret", new Vector3(0f, 0.88f, -1.60f));
+            Part(turret, PrimitiveType.Cylinder, "TurretBody", Vector3.zero, new Vector3(1.30f, 0.14f, 1.30f), Vector3.zero, trim);
+            Part(turret, PrimitiveType.Cube, "TrunnionL", new Vector3(-0.80f, 0.22f, -0.10f), new Vector3(0.18f, 0.60f, 0.36f), Vector3.zero, trim);
+            Part(turret, PrimitiveType.Cube, "TrunnionR", new Vector3(0.80f, 0.22f, -0.10f), new Vector3(0.18f, 0.60f, 0.36f), Vector3.zero, trim);
+
+            // A NEGATIVE X euler tips local +Z up (R_x(-32°) maps (0,0,1) to (0, 0.53, 0.85)), which
+            // is the same sign convention the aircraft's canted surfaces use.
+            Transform rack = Pivot(turret, "Rack", new Vector3(0f, 0.20f, 0f), new Vector3(-32f, 0f, 0f));
+
+            // Four square canisters in a 2x2 block, all forward of the rack pivot so elevating never
+            // buries their tails in the bed. 0.70 boxes on a 0.76 pitch leave a visible seam.
+            Part(rack, PrimitiveType.Cube, "CanisterLL", new Vector3(-0.38f, 0.38f, 1.45f), new Vector3(0.70f, 0.70f, 2.80f), Vector3.zero, body);
+            Part(rack, PrimitiveType.Cube, "CanisterRL", new Vector3(0.38f, 0.38f, 1.45f), new Vector3(0.70f, 0.70f, 2.80f), Vector3.zero, body);
+            Part(rack, PrimitiveType.Cube, "CanisterLU", new Vector3(-0.38f, 1.14f, 1.45f), new Vector3(0.70f, 0.70f, 2.80f), Vector3.zero, body);
+            Part(rack, PrimitiveType.Cube, "CanisterRU", new Vector3(0.38f, 1.14f, 1.45f), new Vector3(0.70f, 0.70f, 2.80f), Vector3.zero, body);
+
+            // Blow-out front caps, sitting just proud of the canister mouths (z = 1.45 + 1.40).
+            Part(rack, PrimitiveType.Cube, "CapLL", new Vector3(-0.38f, 0.38f, 2.88f), new Vector3(0.66f, 0.66f, 0.10f), Vector3.zero, accent);
+            Part(rack, PrimitiveType.Cube, "CapRL", new Vector3(0.38f, 0.38f, 2.88f), new Vector3(0.66f, 0.66f, 0.10f), Vector3.zero, accent);
+            Part(rack, PrimitiveType.Cube, "CapLU", new Vector3(-0.38f, 1.14f, 2.88f), new Vector3(0.66f, 0.66f, 0.10f), Vector3.zero, accent);
+            Part(rack, PrimitiveType.Cube, "CapRU", new Vector3(0.38f, 1.14f, 2.88f), new Vector3(0.66f, 0.66f, 0.10f), Vector3.zero, accent);
+
+            Part(rack, PrimitiveType.Cube, "RackRearPlate", new Vector3(0f, 0.76f, 0.10f), new Vector3(1.76f, 1.76f, 0.14f), Vector3.zero, trim);
+            Part(rack, PrimitiveType.Cube, "RackRailL", new Vector3(-0.86f, 0.76f, 1.45f), new Vector3(0.10f, 1.70f, 2.60f), Vector3.zero, trim);
+            Part(rack, PrimitiveType.Cube, "RackRailR", new Vector3(0.86f, 0.76f, 1.45f), new Vector3(0.10f, 1.70f, 2.60f), Vector3.zero, trim);
+
+            // ---- phased-array radar trailer, parked off the launcher's left quarter. It stands
+            // 3.8 m out so the array's sweep circle (~1.6 m) never crosses the rack's (~1.8 m).
+            Part(model, PrimitiveType.Cube, "RadarTrailerBed", new Vector3(-3.80f, 0.62f, -2.20f), new Vector3(1.90f, 0.28f, 3.20f), Vector3.zero, trim);
+            Part(model, PrimitiveType.Cylinder, "RadarBogieL", new Vector3(-4.80f, 0.31f, -2.80f), new Vector3(0.62f, 0.14f, 0.62f), new Vector3(0f, 0f, 90f), dark);
+            Part(model, PrimitiveType.Cylinder, "RadarBogieR", new Vector3(-2.80f, 0.31f, -2.80f), new Vector3(0.62f, 0.14f, 0.62f), new Vector3(0f, 0f, 90f), dark);
+            Part(model, PrimitiveType.Cube, "RadarJack", new Vector3(-3.80f, 0.24f, -0.95f), new Vector3(0.32f, 0.48f, 0.32f), Vector3.zero, dark);
+
+            Transform radar = Pivot(model, "Radar", new Vector3(-3.80f, 0.76f, -2.20f));
+            Transform arrayMount = Pivot(radar, "ArrayMount", new Vector3(0f, 0.10f, -0.10f), new Vector3(-30f, 0f, 0f));
+            // Frame first, panel a hair in front of it, so a thin border shows all round the array.
+            Part(arrayMount, PrimitiveType.Cube, "ArrayFrame", new Vector3(0f, 1.55f, -0.08f), new Vector3(2.70f, 3.10f, 0.12f), Vector3.zero, trim);
+            Part(arrayMount, PrimitiveType.Cube, "ArrayPanel", new Vector3(0f, 1.55f, 0.02f), new Vector3(2.42f, 2.78f, 0.14f), Vector3.zero, dark);
+            Part(arrayMount, PrimitiveType.Cube, "ArrayStrut", new Vector3(0f, 0.55f, -0.75f), new Vector3(0.24f, 0.24f, 1.40f), Vector3.zero, trim);
+
+            // ---- engagement-control shelter, generator set and antenna mast: what turns a lone
+            // launcher into a battery.
+            Part(model, PrimitiveType.Cube, "ShelterSkids", new Vector3(3.20f, 0.10f, -1.60f), new Vector3(2.70f, 0.20f, 3.70f), Vector3.zero, dark);
+            Part(model, PrimitiveType.Cube, "Shelter", new Vector3(3.20f, 1.25f, -1.60f), new Vector3(2.60f, 2.10f, 3.60f), Vector3.zero, body);
+            Part(model, PrimitiveType.Cube, "ShelterDoor", new Vector3(1.88f, 0.95f, -0.50f), new Vector3(0.10f, 1.40f, 1.00f), Vector3.zero, dark);
+            Part(model, PrimitiveType.Cube, "Generator", new Vector3(3.20f, 0.55f, 0.90f), new Vector3(1.10f, 0.90f, 1.60f), Vector3.zero, trim);
+            Part(model, PrimitiveType.Cylinder, "GeneratorExhaust", new Vector3(3.60f, 1.18f, 0.90f), new Vector3(0.12f, 0.30f, 0.12f), Vector3.zero, dark);
+            Part(model, PrimitiveType.Cylinder, "Mast", new Vector3(4.40f, 2.00f, -2.90f), new Vector3(0.10f, 1.90f, 0.10f), Vector3.zero, dark);
+            Part(model, PrimitiveType.Cube, "MastWhip", new Vector3(4.40f, 3.86f, -2.90f), new Vector3(0.70f, 0.06f, 0.06f), Vector3.zero, accent);
 
             return model;
         }
 
-        /// <summary>Short-range AAA piece: low hull, turret and twin elevated barrels.</summary>
+        /// <summary>
+        /// Short-range AAA piece: a towed twin-barrel gun mount. Deliberately still reads as a GUN —
+        /// wheels, outrigger skids, a gun shield, an ammunition box and twin muzzle brakes — so it
+        /// never gets mistaken for the missile battery above.
+        /// </summary>
         public static Transform BuildAaaSite(Transform root, Color primary)
         {
             Transform model = CreateModelRoot(root);
@@ -295,13 +375,25 @@ namespace Sim.Runtime
             Material trim = Trim(primary);
             Material dark = DarkMetal();
 
-            Part(model, PrimitiveType.Cube, "Base", new Vector3(0f, 0.35f, 0f), new Vector3(2.4f, 0.7f, 2.4f), Vector3.zero, body);
+            Part(model, PrimitiveType.Cube, "Base", new Vector3(0f, 0.45f, 0f), new Vector3(2.20f, 0.55f, 2.60f), Vector3.zero, body);
+            Part(model, PrimitiveType.Cube, "SkidFront", new Vector3(0f, 0.15f, 0.85f), new Vector3(3.00f, 0.30f, 0.35f), Vector3.zero, dark);
+            Part(model, PrimitiveType.Cube, "SkidRear", new Vector3(0f, 0.15f, -0.85f), new Vector3(3.00f, 0.30f, 0.35f), Vector3.zero, dark);
+            Part(model, PrimitiveType.Cylinder, "WheelL", new Vector3(-1.25f, 0.28f, -0.95f), new Vector3(0.55f, 0.14f, 0.55f), new Vector3(0f, 0f, 90f), dark);
+            Part(model, PrimitiveType.Cylinder, "WheelR", new Vector3(1.25f, 0.28f, -0.95f), new Vector3(0.55f, 0.14f, 0.55f), new Vector3(0f, 0f, 90f), dark);
+            Part(model, PrimitiveType.Cube, "AmmoBox", new Vector3(0f, 0.95f, -1.20f), new Vector3(1.20f, 0.45f, 0.55f), Vector3.zero, trim);
 
             // Same unscaled-pivot pattern as the SAM site: the barrels must slew with the turret.
             Transform turret = Pivot(model, "Turret", new Vector3(0f, 0.9f, 0f));
-            Part(turret, PrimitiveType.Cylinder, "TurretBody", Vector3.zero, new Vector3(0.8f, 0.4f, 0.8f), Vector3.zero, trim);
+            Part(turret, PrimitiveType.Cylinder, "TurretBody", Vector3.zero, new Vector3(0.85f, 0.4f, 0.85f), Vector3.zero, trim);
+            Part(turret, PrimitiveType.Cube, "GunShield", new Vector3(0f, 0.55f, 0.55f), new Vector3(1.40f, 0.90f, 0.12f), new Vector3(-15f, 0f, 0f), body);
+            Part(turret, PrimitiveType.Cube, "Cradle", new Vector3(0f, 0.50f, 0.30f), new Vector3(0.55f, 0.30f, 0.70f), Vector3.zero, trim);
+            Part(turret, PrimitiveType.Cube, "Sight", new Vector3(0.60f, 0.45f, 0.15f), new Vector3(0.30f, 0.25f, 0.30f), Vector3.zero, dark);
             Part(turret, PrimitiveType.Cylinder, "BarrelL", new Vector3(-0.18f, 0.35f, 0.6f), new Vector3(0.1f, 0.9f, 0.1f), new Vector3(75f, 0f, 0f), dark);
             Part(turret, PrimitiveType.Cylinder, "BarrelR", new Vector3(0.18f, 0.35f, 0.6f), new Vector3(0.1f, 0.9f, 0.1f), new Vector3(75f, 0f, 0f), dark);
+            // Muzzle brakes ride the barrel tips: the barrels are 1.8 long and canted 75°, so their
+            // ends sit 0.9 along (0, cos75°, sin75°) = (0, 0.259, 0.966) from each barrel centre.
+            Part(turret, PrimitiveType.Cylinder, "MuzzleL", new Vector3(-0.18f, 0.58f, 1.47f), new Vector3(0.16f, 0.10f, 0.16f), new Vector3(75f, 0f, 0f), trim);
+            Part(turret, PrimitiveType.Cylinder, "MuzzleR", new Vector3(0.18f, 0.58f, 1.47f), new Vector3(0.16f, 0.10f, 0.16f), new Vector3(75f, 0f, 0f), trim);
 
             return model;
         }
@@ -387,10 +479,21 @@ namespace Sim.Runtime
         /// </summary>
         private static Transform Pivot(Transform parent, string name, Vector3 localPosition)
         {
+            return Pivot(parent, name, localPosition, Vector3.zero);
+        }
+
+        /// <summary>
+        /// Same as <see cref="Pivot(Transform,string,Vector3)"/> but with a fixed local rotation, for
+        /// sub-assemblies mounted at an angle (the SAM rack's launch elevation, the phased array's
+        /// rake). Laying the angle on the PIVOT lets the parts below it be authored in plain
+        /// un-rotated coordinates, and keeps the animated parent ("Turret"/"Radar") rotation-free.
+        /// </summary>
+        private static Transform Pivot(Transform parent, string name, Vector3 localPosition, Vector3 localEuler)
+        {
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
             go.transform.localPosition = localPosition;
-            go.transform.localRotation = Quaternion.identity;
+            go.transform.localRotation = Quaternion.Euler(localEuler);
             go.transform.localScale = Vector3.one;
             return go.transform;
         }
