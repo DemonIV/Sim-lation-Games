@@ -243,6 +243,17 @@ namespace Sim.Core
         }
 
         /// <summary>
+        /// Whether an attempt is paid at the FULL rate: only a WON mission on a level that had not
+        /// been cleared before. Every other attempt — a replay of a cleared level, or a failed sortie
+        /// on any level — is paid at <see cref="ReplayFactor"/>, which is what stops a player from
+        /// farming kills by repeatedly bailing out of an easy mission.
+        /// </summary>
+        public static bool IsFullRate(bool missionWon, bool levelAlreadyCompleted)
+        {
+            return missionWon && !levelAlreadyCompleted;
+        }
+
+        /// <summary>
         /// Money earned for one attempt at <paramref name="level"/>.
         ///
         /// <para>

@@ -230,6 +230,29 @@ namespace Sim.Tests
         }
 
         [Test]
+        public void FullRate_IsOnlyAWonMissionOnAnUnclearedLevel()
+        {
+            Assert.IsTrue(CampaignReward.IsFullRate(true, false));
+
+            // A replay of a cleared level, and ANY failed sortie, drop to the reduced rate — so
+            // bailing out of an easy level over and over is not a way to farm kill money.
+            Assert.IsFalse(CampaignReward.IsFullRate(true, true));
+            Assert.IsFalse(CampaignReward.IsFullRate(false, false));
+            Assert.IsFalse(CampaignReward.IsFullRate(false, true));
+        }
+
+        [Test]
+        public void FailedSortie_PaysFarLessThanAClear()
+        {
+            // Same five kills: won-and-new pays the full formula, a loss pays kill money at 25%.
+            int cleared = CampaignReward.Money(L1, 5, 0, 3, CampaignReward.IsFullRate(true, false));
+            int failed = CampaignReward.Money(L1, 5, 0, 0, CampaignReward.IsFullRate(false, false));
+
+            Assert.Greater(failed, 0, "kills should still be worth something");
+            Assert.Less(failed * 4, cleared);
+        }
+
+        [Test]
         public void NullLevel_PaysZeroInsteadOfThrowing()
         {
             Assert.AreEqual(0, CampaignReward.Money(null, 10, 0, 3, true));
