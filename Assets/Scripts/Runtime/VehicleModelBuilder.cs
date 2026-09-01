@@ -15,7 +15,17 @@ namespace Sim.Runtime
     {
         // ---------------------------------------------------------------- public API
 
-        /// <summary>Slender high-aspect recon UAV (İHA). Returns the "Model" root transform.</summary>
+        /// <summary>
+        /// Unarmed recon UAV (Keşif İHA): a glider-like, high-aspect-ratio airframe — ~7.1 m span on
+        /// a 0.66..0.78 m chord — with a satcom dome, a chin sensor ball, an up-canted V-tail and a
+        /// pusher propeller. Returns the "Model" root transform.
+        ///
+        /// <para>Family cues shared with the SİHA and the jet: "Fuselage" is a DIRECT child of
+        /// "Model" (<c>CameraRig.TryReadBodyColor</c> uses a non-recursive <c>Find</c>), the sensor
+        /// ball hangs off the unscaled "Turret" pivot and the satcom dome is the "Radar" part. Its
+        /// livery is the LIGHTEST of the three: the wing skin uses the accent tint rather than the
+        /// darker trim, which is what makes the recon bird read as the unarmed one at a distance.</para>
+        /// </summary>
         public static Transform BuildReconUav(Transform root, Color primary)
         {
             Transform model = CreateModelRoot(root);
@@ -23,40 +33,104 @@ namespace Sim.Runtime
 
             Material body = Body(primary);
             Material trim = Trim(primary);
+            Material accent = Accent(primary);
             Material dark = DarkMetal();
 
-            Part(model, PrimitiveType.Cylinder, "Fuselage", new Vector3(0f, 0f, 0f), new Vector3(0.35f, 1.6f, 0.35f), new Vector3(90f, 0f, 0f), body);
-            Part(model, PrimitiveType.Sphere, "Nose", new Vector3(0f, 0f, 1.55f), new Vector3(0.6f, 0.5f, 0.8f), Vector3.zero, body);
-            Part(model, PrimitiveType.Sphere, "SensorTurret", new Vector3(0f, -0.35f, 1.25f), new Vector3(0.45f, 0.45f, 0.45f), Vector3.zero, dark);
+            // ---- slender fuselage pod with a bulbous avionics nose.
+            Part(model, PrimitiveType.Cylinder, "Fuselage", new Vector3(0f, 0f, 0.10f), new Vector3(0.34f, 1.50f, 0.34f), new Vector3(90f, 0f, 0f), body);
+            Part(model, PrimitiveType.Sphere, "NoseCone", new Vector3(0f, 0f, 1.60f), new Vector3(0.44f, 0.40f, 0.62f), Vector3.zero, body);
+            // "Radar" is the satcom dome. Nothing spins it on an aircraft — the name only matters
+            // where a TurretVisual is attached — but it keeps the naming convention intact.
+            Part(model, PrimitiveType.Sphere, "Radar", new Vector3(0f, 0.24f, 0.70f), new Vector3(0.46f, 0.40f, 0.46f), Vector3.zero, accent);
 
-            Part(model, PrimitiveType.Cube, "Wing", new Vector3(0f, 0.15f, -0.1f), new Vector3(7.0f, 0.10f, 0.75f), Vector3.zero, trim);
-            Part(model, PrimitiveType.Cube, "WingtipFinL", new Vector3(-3.5f, 0.35f, -0.1f), new Vector3(0.08f, 0.45f, 0.5f), Vector3.zero, trim);
-            Part(model, PrimitiveType.Cube, "WingtipFinR", new Vector3(3.5f, 0.35f, -0.1f), new Vector3(0.08f, 0.45f, 0.5f), Vector3.zero, trim);
+            // ---- chin sensor ball on the unscaled pivot convention (see the SAM site).
+            Transform turret = Pivot(model, "Turret", new Vector3(0f, -0.28f, 1.15f));
+            Part(turret, PrimitiveType.Sphere, "TurretBody", Vector3.zero, new Vector3(0.40f, 0.40f, 0.40f), Vector3.zero, dark);
 
-            Part(model, PrimitiveType.Cylinder, "TailBoom", new Vector3(0f, 0f, -2.0f), new Vector3(0.15f, 0.5f, 0.15f), new Vector3(90f, 0f, 0f), body);
-            Part(model, PrimitiveType.Cube, "VTailL", new Vector3(-0.35f, 0.45f, -2.3f), new Vector3(0.09f, 1.1f, 0.6f), new Vector3(0f, 0f, 35f), trim);
-            Part(model, PrimitiveType.Cube, "VTailR", new Vector3(0.35f, 0.45f, -2.3f), new Vector3(0.09f, 1.1f, 0.6f), new Vector3(0f, 0f, -35f), trim);
+            // ---- three-piece wing. The outer panels take a few degrees of dihedral: a +Z rotation
+            // lifts the RIGHT panel's tip, so the left one mirrors it with the opposite sign.
+            Part(model, PrimitiveType.Cube, "WingCenter", new Vector3(0f, 0.18f, -0.05f), new Vector3(2.20f, 0.10f, 0.78f), Vector3.zero, accent);
+            Part(model, PrimitiveType.Cube, "WingL", new Vector3(-2.30f, 0.24f, -0.05f), new Vector3(2.50f, 0.09f, 0.66f), new Vector3(0f, 0f, -5f), accent);
+            Part(model, PrimitiveType.Cube, "WingR", new Vector3(2.30f, 0.24f, -0.05f), new Vector3(2.50f, 0.09f, 0.66f), new Vector3(0f, 0f, 5f), accent);
+            Part(model, PrimitiveType.Cube, "AileronL", new Vector3(-2.35f, 0.24f, -0.44f), new Vector3(2.20f, 0.05f, 0.20f), new Vector3(0f, 0f, -5f), trim);
+            Part(model, PrimitiveType.Cube, "AileronR", new Vector3(2.35f, 0.24f, -0.44f), new Vector3(2.20f, 0.05f, 0.20f), new Vector3(0f, 0f, 5f), trim);
+            Part(model, PrimitiveType.Cube, "WingtipFinL", new Vector3(-3.50f, 0.55f, -0.05f), new Vector3(0.08f, 0.45f, 0.50f), new Vector3(0f, 0f, -5f), trim);
+            Part(model, PrimitiveType.Cube, "WingtipFinR", new Vector3(3.50f, 0.55f, -0.05f), new Vector3(0.08f, 0.45f, 0.50f), new Vector3(0f, 0f, 5f), trim);
 
-            Part(model, PrimitiveType.Cylinder, "PropHub", new Vector3(0f, 0f, -2.5f), new Vector3(0.18f, 0.08f, 0.18f), new Vector3(90f, 0f, 0f), dark);
-            // "Propeller" is spun around its local Z by the animation pass (part 2).
-            Part(model, PrimitiveType.Cube, "Propeller", new Vector3(0f, 0f, -2.55f), new Vector3(0.12f, 1.8f, 0.04f), Vector3.zero, dark);
+            // ---- tail boom, comms blade and the up-canted V-tail.
+            Part(model, PrimitiveType.Cylinder, "TailBoom", new Vector3(0f, 0.02f, -2.00f), new Vector3(0.16f, 0.62f, 0.16f), new Vector3(90f, 0f, 0f), body);
+            Part(model, PrimitiveType.Cube, "CommsAntenna", new Vector3(0f, 0.32f, -1.55f), new Vector3(0.04f, 0.34f, 0.04f), Vector3.zero, dark);
+            Part(model, PrimitiveType.Cube, "VTailL", new Vector3(-0.33f, 0.50f, -2.32f), new Vector3(0.08f, 1.05f, 0.55f), new Vector3(0f, 0f, 35f), trim);
+            Part(model, PrimitiveType.Cube, "VTailR", new Vector3(0.33f, 0.50f, -2.32f), new Vector3(0.08f, 1.05f, 0.55f), new Vector3(0f, 0f, -35f), trim);
+
+            // ---- pusher propeller. "Propeller" is the part PropellerSpinner rotates about local Z,
+            // so it stays a single blade-pair cube: a child would be sheared by its own scale.
+            Part(model, PrimitiveType.Cylinder, "PropHub", new Vector3(0f, 0.02f, -2.62f), new Vector3(0.18f, 0.08f, 0.18f), new Vector3(90f, 0f, 0f), dark);
+            Part(model, PrimitiveType.Cube, "Propeller", new Vector3(0f, 0.02f, -2.68f), new Vector3(0.10f, 1.90f, 0.04f), Vector3.zero, dark);
+            Part(model, PrimitiveType.Sphere, "SpinnerCone", new Vector3(0f, 0.02f, -2.76f), new Vector3(0.16f, 0.16f, 0.24f), Vector3.zero, trim);
 
             return model;
         }
 
-        /// <summary>Armed UAV (SİHA): the recon airframe plus underwing pylons and munitions.</summary>
+        /// <summary>
+        /// Armed UAV (SİHA): the same family as the recon bird, but heavier — a longer, fatter
+        /// fuselage with a stepped nose, a dorsal satcom bulge, a bigger chin sensor ball, a straight
+        /// wing with flaps and tip fins, an INVERTED-V tail on the boom, a pusher propeller and four
+        /// underwing munitions.
+        ///
+        /// <para>Built standalone (it no longer decorates the recon airframe) so the two silhouettes
+        /// can differ where a real armed UAV does: tail geometry, nose section and stores.</para>
+        /// </summary>
         public static Transform BuildArmedUav(Transform root, Color primary)
         {
-            Transform model = BuildReconUav(root, primary);
+            Transform model = CreateModelRoot(root);
             if (model == null) return null;
 
+            Material body = Body(primary);
             Material trim = Trim(primary);
+            Material accent = Accent(primary);
             Material dark = DarkMetal();
 
-            Part(model, PrimitiveType.Cube, "PylonL", new Vector3(-1.6f, -0.05f, -0.1f), new Vector3(0.1f, 0.3f, 0.15f), Vector3.zero, trim);
-            Part(model, PrimitiveType.Cube, "PylonR", new Vector3(1.6f, -0.05f, -0.1f), new Vector3(0.1f, 0.3f, 0.15f), Vector3.zero, trim);
-            Part(model, PrimitiveType.Capsule, "MunitionL", new Vector3(-1.6f, -0.35f, -0.1f), new Vector3(0.18f, 0.5f, 0.18f), new Vector3(90f, 0f, 0f), dark);
-            Part(model, PrimitiveType.Capsule, "MunitionR", new Vector3(1.6f, -0.35f, -0.1f), new Vector3(0.18f, 0.5f, 0.18f), new Vector3(90f, 0f, 0f), dark);
+            // ---- fuselage: main pod, stepped forward section, rounded nose.
+            Part(model, PrimitiveType.Cylinder, "Fuselage", new Vector3(0f, 0f, 0.15f), new Vector3(0.42f, 1.45f, 0.44f), new Vector3(90f, 0f, 0f), body);
+            Part(model, PrimitiveType.Cylinder, "NoseSection", new Vector3(0f, 0.02f, 1.80f), new Vector3(0.38f, 0.32f, 0.40f), new Vector3(90f, 0f, 0f), body);
+            Part(model, PrimitiveType.Sphere, "NoseCone", new Vector3(0f, 0.02f, 2.20f), new Vector3(0.38f, 0.34f, 0.48f), Vector3.zero, body);
+            Part(model, PrimitiveType.Sphere, "Radar", new Vector3(0f, 0.26f, 0.95f), new Vector3(0.42f, 0.36f, 0.42f), Vector3.zero, accent);
+
+            Transform turret = Pivot(model, "Turret", new Vector3(0f, -0.32f, 1.35f));
+            Part(turret, PrimitiveType.Sphere, "TurretBody", Vector3.zero, new Vector3(0.44f, 0.44f, 0.44f), Vector3.zero, dark);
+
+            // ---- straight wing with a few degrees of dihedral, flaps and upturned tip fins.
+            Part(model, PrimitiveType.Cube, "WingCenter", new Vector3(0f, 0.16f, -0.10f), new Vector3(2.00f, 0.11f, 0.95f), Vector3.zero, trim);
+            Part(model, PrimitiveType.Cube, "WingL", new Vector3(-2.25f, 0.20f, -0.12f), new Vector3(2.60f, 0.10f, 0.80f), new Vector3(0f, 0f, -4f), trim);
+            Part(model, PrimitiveType.Cube, "WingR", new Vector3(2.25f, 0.20f, -0.12f), new Vector3(2.60f, 0.10f, 0.80f), new Vector3(0f, 0f, 4f), trim);
+            Part(model, PrimitiveType.Cube, "FlapL", new Vector3(-2.30f, 0.20f, -0.60f), new Vector3(2.40f, 0.06f, 0.22f), new Vector3(0f, 0f, -4f), accent);
+            Part(model, PrimitiveType.Cube, "FlapR", new Vector3(2.30f, 0.20f, -0.60f), new Vector3(2.40f, 0.06f, 0.22f), new Vector3(0f, 0f, 4f), accent);
+            Part(model, PrimitiveType.Cube, "WingtipFinL", new Vector3(-3.50f, 0.45f, -0.12f), new Vector3(0.09f, 0.50f, 0.50f), new Vector3(0f, 0f, -4f), trim);
+            Part(model, PrimitiveType.Cube, "WingtipFinR", new Vector3(3.50f, 0.45f, -0.12f), new Vector3(0.09f, 0.50f, 0.50f), new Vector3(0f, 0f, 4f), trim);
+
+            // ---- INVERTED V-tail: each fin runs down AND outward from the boom, so the pair forms
+            // a V pointing down. That takes the mirror image of the recon V-tail's cant (a -35° Z
+            // rotation puts the left fin's lower end out at -X) with the fin centred BELOW the
+            // boom; its upper end then lands on the boom's surface at x = ±0.09.
+            Part(model, PrimitiveType.Cylinder, "TailBoom", new Vector3(0f, 0f, -1.90f), new Vector3(0.20f, 0.65f, 0.20f), new Vector3(90f, 0f, 0f), body);
+            Part(model, PrimitiveType.Cube, "VTailL", new Vector3(-0.38f, -0.41f, -2.30f), new Vector3(0.09f, 1.00f, 0.60f), new Vector3(0f, 0f, -35f), trim);
+            Part(model, PrimitiveType.Cube, "VTailR", new Vector3(0.38f, -0.41f, -2.30f), new Vector3(0.09f, 1.00f, 0.60f), new Vector3(0f, 0f, 35f), trim);
+
+            // ---- pusher propeller (same convention as the recon airframe).
+            Part(model, PrimitiveType.Cylinder, "PropHub", new Vector3(0f, 0f, -2.62f), new Vector3(0.20f, 0.08f, 0.20f), new Vector3(90f, 0f, 0f), dark);
+            Part(model, PrimitiveType.Cube, "Propeller", new Vector3(0f, 0f, -2.68f), new Vector3(0.11f, 1.80f, 0.045f), Vector3.zero, dark);
+            Part(model, PrimitiveType.Sphere, "SpinnerCone", new Vector3(0f, 0f, -2.78f), new Vector3(0.18f, 0.18f, 0.26f), Vector3.zero, trim);
+
+            // ---- four underwing stores: heavier inboard, lighter outboard.
+            Part(model, PrimitiveType.Cube, "PylonL", new Vector3(-1.30f, -0.05f, -0.12f), new Vector3(0.10f, 0.30f, 0.50f), Vector3.zero, trim);
+            Part(model, PrimitiveType.Cube, "PylonR", new Vector3(1.30f, -0.05f, -0.12f), new Vector3(0.10f, 0.30f, 0.50f), Vector3.zero, trim);
+            Part(model, PrimitiveType.Capsule, "MunitionL", new Vector3(-1.30f, -0.30f, -0.08f), new Vector3(0.18f, 0.55f, 0.18f), new Vector3(90f, 0f, 0f), dark);
+            Part(model, PrimitiveType.Capsule, "MunitionR", new Vector3(1.30f, -0.30f, -0.08f), new Vector3(0.18f, 0.55f, 0.18f), new Vector3(90f, 0f, 0f), dark);
+            Part(model, PrimitiveType.Cube, "PylonOuterL", new Vector3(-2.35f, 0.02f, -0.12f), new Vector3(0.09f, 0.26f, 0.42f), Vector3.zero, trim);
+            Part(model, PrimitiveType.Cube, "PylonOuterR", new Vector3(2.35f, 0.02f, -0.12f), new Vector3(0.09f, 0.26f, 0.42f), Vector3.zero, trim);
+            Part(model, PrimitiveType.Capsule, "MunitionOuterL", new Vector3(-2.35f, -0.19f, -0.08f), new Vector3(0.15f, 0.45f, 0.15f), new Vector3(90f, 0f, 0f), dark);
+            Part(model, PrimitiveType.Capsule, "MunitionOuterR", new Vector3(2.35f, -0.19f, -0.08f), new Vector3(0.15f, 0.45f, 0.15f), new Vector3(90f, 0f, 0f), dark);
 
             return model;
         }
