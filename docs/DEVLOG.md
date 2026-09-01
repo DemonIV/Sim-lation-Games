@@ -2,9 +2,66 @@
 
 > Bu dosya, projede yapılan tüm işleri ve kararları kaydeder; oturumlar arası bağlamı (context) korumak ve projeyi hızlı anlamak içindir.
 
-**Son güncelleme:** 2026-08-31
+**Son güncelleme:** 2026-09-01
 **Branch:** `claude/slack-session-f6uh9g`
 **Unity sürümü:** 6000.5.9f1
+
+---
+
+## Devam noktası (buradan devam et)
+
+> **Bu bölüm bir devir-teslim notudur.** Sohbet geçmişi olmayan yeni bir oturum projeye buradan
+> devam edebilir. Ayrıntılar aşağıdaki bölümlerde; burada tekrar edilmez.
+
+### Nerede kaldık
+Simülasyon **oynanabilir ve şimdilik özellik olarak tamam**: dalga tabanlı senaryolar (dört görev),
+pilot modu, top/füze/karşı tedbirler ve elektronik harp, görsel yenileme ve tasarım mockup'ından
+uygulanmış HUD hazır. Son yapılan iş **çalışma zamanı sahnesi analizi** (`docs/SCENE.md`) ve oradan
+çıkan iki bulgunun düzeltilmesi oldu: **B-01** (yerinde yeniden başlatma) ve **B-03** (skorun görev
+boyunca birikmesi).
+
+### Yeni oturum için okuma sırası
+1. Bu bölüm.
+2. `CLAUDE.md` → `## Worker kuralları`.
+3. `docs/SCENE.md` → `## 5. Bulgular` tablosu (B-01…B-19).
+4. Bu dosyanın devamı: `## 3. Sistemler`, `## 7. Mevcut durum & bilinen sınırlar`.
+
+**Sohbet geçmişine ihtiyaç yoktur** — gereken bağlamın tamamı bu iki belgededir.
+
+### Ortam gerçekleri
+- **Derleme yok.** Web ortamında `dotnet`/Unity kurulu değildir; kod burada derlenemez ve
+  çalıştırılamaz. Doğruluk dikkatli okumayla sağlanır; EditMode testlerini Editor'de **kullanıcı**
+  çalıştırır.
+- **Depoda `.unity` sahne varlığı yok.** Sahne çalışma zamanında `SimulationBootstrap.Awake` içinde
+  kurulur. Kullanıcının tek seferlik kurulumu: boş sahne → boş GameObject → `SimulationBootstrap`
+  ekle → Play.
+- **Build Settings sahne listesi boş** olduğu için yeniden başlatma `SceneManager.LoadScene`
+  **kullanamaz**; `SimulationBootstrap.Rebuild()` ile `Simulation` kökü yıkılıp yeniden kurulur.
+- **Render hattı Built-in**, URP değil. Koddaki URP shader yedekleri ölü koddur.
+- Claude'un kullanabildiği **Unity eklentisi yalnızca dokümantasyon/skill paketidir**: derleyici,
+  test koşucusu, Console okuyucu veya sahne köprüsü sağlamaz.
+- **`glTFast` bir bağımlılık değildir.** `Packages/manifest.json` veya `Library/PackageCache`
+  içinde görünürse yerel olarak eklenmiştir ve Built-in hatta derlemeyi bozar
+  (`LitMaterialExport` bulunamaz). GLB içe aktarımı bilinçli olarak kurulmuyorsa kaldır.
+
+### Açık işler (öncelik sırasıyla)
+| # | Bulgu | İş |
+|---|---|---|
+| 1 | **B-02** | `RadarSensor.Update` her kare aday başına `TargetRegistry.FindById` çağırıyor → O(n²) tarama; ayrıca hiçbir nesneye `Jammer` eklenmediği için o `GetComponent` asla isabet etmiyor. |
+| 2 | **B-04** | `TracerEffect` mermi başına `Material` sızdırıyor (+ `ExplosionEffect._material` serbest bırakılmıyor); izli mermiler VFX bütçesine de tabi değil. |
+| 3 | **B-06** | `GetSnapshot` + `UpdateAllocation` kaynaklı kare başına 15+ `List` tahsisi. |
+| 4 | **B-07** | Yer düşmanları pistin üstünde/hangarın içinde doğabiliyor: keep-out yarıçapı üssün ayak izinden küçük, spawn'lar arası ayrışma kontrolü yok. |
+| 5 | **B-08** | `ScatterProps` içindeki `Random.InitState(12345)` geri yüklenmiyor → her koşu birebir aynı. |
+| 6 | **B-09** | Avcılar aynı irtifada doğup aynı loiter yörüngesini paylaşıyor → üst üste biniyorlar. |
+| 7 | **B-05** | Proje hiç fizik kullanmadığı hâlde drone/düşman/mühimmat köklerinde collider duruyor; ayrıca kalan düşük öncelikli bulgular. |
+| 8 | — | **Bilinen küçük hata:** görev kazanıldıktan sonra `MissionState.ElapsedTime` saymaya devam ediyor (director'ın örneği bilerek hiç bitmiyor); debrief saati director tarafında durdurulmalı. |
+| 9 | — | **Henüz karar verilmedi:** gerçek 3D modeller (render hattı kararı + çalışan bir glTF içe aktarıcı gerekir), ses, zorluk seviyeleri. |
+
+### Çalışma yöntemi
+- Küçük dilimler hâlinde çalış; her dilim kendi başına derlenebilir olmalı.
+- Her dilimden sonra commit + push et ve bu DEVLOG'u aynı turda güncelle.
+- Not: geçmişte büyük bir refactor, yarım uygulanan bir dilim derlenmediği için **geri alınmak
+  zorunda kaldı** — bu yüzden dilimler küçük tutulur.
 
 ---
 
@@ -166,7 +223,8 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `110ab11` | Üretilen sahne tek bir `Simulation` kökü altına taşındı; `Build()` ayrıldı, statik `Instance`/`Root` eklendi. |
 | `88e787b` | Dalga düşmanları da `Simulation` kökünün altında spawn ediliyor. |
 | `ffbdadc` | **B-01:** yeniden başlatma artık sahne yüklemiyor, `SimulationBootstrap.Rebuild()` ile yerinde yeniden kuruluyor. |
-| `bu tur` | **B-03:** görev skoru artık tüm görev boyunca birikiyor (`MissionState` saf sayaç). |
+| `7a0921b` | **B-03:** görev skoru artık tüm görev boyunca birikiyor (`MissionState` saf sayaç). |
+| `bu tur` | DEVLOG'a devir-teslim bölümü: sıfırdan başlayan bir oturum sohbet geçmişi olmadan devam edebilir. |
 
 ---
 
