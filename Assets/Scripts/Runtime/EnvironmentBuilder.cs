@@ -113,13 +113,17 @@ namespace Sim.Runtime
         }
 
         /// <summary>
-        /// Scatters trees, rocks and small buildings across the terrain, skipping the airbase area.
+        /// Scatters trees, rocks and buildings across the terrain, skipping the airbase area.
         /// Uses a fixed random seed so the world looks the same on every run.
+        ///
+        /// <para>Trees come in three species (conifer / broadleaf / scrub) and buildings in three
+        /// archetypes (warehouse / mid-rise block / tower). Every size, tilt, colour and archetype
+        /// choice is drawn from THIS seeded stream, so the whole layout stays reproducible.</para>
         /// </summary>
         /// <param name="halfExtent">Scatter area half-extent on X and Z.</param>
         /// <param name="treeCount">Number of trees.</param>
         /// <param name="rockCount">Number of rocks.</param>
-        /// <param name="buildingCount">Number of small buildings.</param>
+        /// <param name="buildingCount">Number of buildings.</param>
         /// <returns>The "Props" root GameObject that parents every scattered prop.</returns>
         public static GameObject ScatterProps(float halfExtent, int treeCount = 220, int rockCount = 70, int buildingCount = 18)
         {
@@ -133,7 +137,14 @@ namespace Sim.Runtime
             root.transform.position = Vector3.zero;
 
             Material trunkMat = MaterialLibrary.Create(new Color(0.30f, 0.21f, 0.13f), 0f, 0.1f);
+            Material branchMat = MaterialLibrary.Create(new Color(0.35f, 0.25f, 0.16f), 0f, 0.1f);
             Material rockMat = MaterialLibrary.Create(new Color(0.45f, 0.45f, 0.47f), 0.1f, 0.15f);
+            Material[] foliageMats = FoliagePalette();
+            Material[] wallMats = WallPalette();
+            Material glassMat = MaterialLibrary.Create(new Color(0.13f, 0.16f, 0.20f), 0.2f, 0.55f);
+            Material concreteMat = MaterialLibrary.Create(new Color(0.58f, 0.57f, 0.54f), 0f, 0.12f);
+            Material roofMat = MaterialLibrary.Create(new Color(0.31f, 0.31f, 0.32f), 0.1f, 0.2f);
+            Material metalMat = MaterialLibrary.Create(new Color(0.42f, 0.43f, 0.44f), 0.5f, 0.4f);
 
             float keepOut = TerrainField.FlatRadius + 10f;
 
@@ -145,16 +156,35 @@ namespace Sim.Runtime
                 var tree = new GameObject("Tree_" + i);
                 tree.transform.SetParent(root.transform, false);
                 tree.transform.position = p;
-                tree.transform.rotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+                // Random yaw plus a couple of degrees of lean. A stand of perfectly upright,
+                // identically oriented trees is the single biggest tell that a field is procedural.
+                tree.transform.rotation = Quaternion.Euler(
+                    Random.Range(-4f, 4f), Random.Range(0f, 360f), Random.Range(-4f, 4f));
+
+                float species = Random.value;
                 float s = Random.Range(0.8f, 1.4f);
-                tree.transform.localScale = new Vector3(s, s * Random.Range(0.9f, 1.3f), s);
+                float heightFactor = Random.Range(0.9f, 1.3f);
+                float crown = Random.Range(0.85f, 1.2f);
 
-                Material foliage = MaterialLibrary.Create(
-                    new Color(Random.Range(0.10f, 0.20f), Random.Range(0.30f, 0.45f), Random.Range(0.10f, 0.18f)), 0f, 0.08f);
-
-                Prop(tree.transform, PrimitiveType.Cylinder, "Trunk", new Vector3(0f, 1.2f, 0f), new Vector3(0.25f, 1.2f, 0.25f), Vector3.zero, trunkMat);
-                Prop(tree.transform, PrimitiveType.Sphere, "Foliage_0", new Vector3(0f, 2.6f, 0f), new Vector3(2.2f, 2.2f, 2.2f), Vector3.zero, foliage);
-                Prop(tree.transform, PrimitiveType.Sphere, "Foliage_1", new Vector3(0f, 3.9f, 0f), new Vector3(1.6f, 1.6f, 1.6f), Vector3.zero, foliage);
+                if (species < 0.40f)
+                {
+                    tree.transform.localScale = new Vector3(s, s * heightFactor, s);
+                    // Conifers take the three DARK tones, broadleaves the three light ones: species
+                    // then reads by colour as well as by silhouette.
+                    BuildConifer(tree.transform, trunkMat, foliageMats[Random.Range(0, 3)], crown);
+                }
+                else if (species < 0.75f)
+                {
+                    tree.transform.localScale = new Vector3(s, s * heightFactor, s);
+                    BuildBroadleaf(tree.transform, trunkMat, branchMat, foliageMats[Random.Range(3, 6)], crown);
+                }
+                else
+                {
+                    // Scrub is bush-sized: same draw, scaled down, and no trunk at all.
+                    float b = s * 0.72f;
+                    tree.transform.localScale = new Vector3(b, b * heightFactor, b);
+                    BuildScrub(tree.transform, foliageMats[Random.Range(2, 5)], crown);
+                }
             }
 
             for (int i = 0; i < rockCount; i++)
@@ -174,15 +204,20 @@ namespace Sim.Runtime
                 Vector3 p;
                 if (!TryPickSpot(halfExtent, keepOut, out p)) continue;
 
-                float w = Random.Range(4f, 9f);
-                float h = Random.Range(3f, 8f);
-                float d = Random.Range(4f, 9f);
-                Material wall = MaterialLibrary.Create(
-                    new Color(Random.Range(0.45f, 0.66f), Random.Range(0.42f, 0.60f), Random.Range(0.36f, 0.52f)), 0f, 0.12f);
+                var building = new GameObject("Building_" + i);
+                building.transform.SetParent(root.transform, false);
+                building.transform.position = p;
+                building.transform.rotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
 
-                var building = Prop(root.transform, PrimitiveType.Cube, "Building_" + i, Vector3.zero,
-                    new Vector3(w, h, d), new Vector3(0f, Random.Range(0f, 360f), 0f), wall);
-                building.transform.position = p + new Vector3(0f, h * 0.5f, 0f);
+                Material wall = wallMats[Random.Range(0, wallMats.Length)];
+                float archetype = Random.value;
+
+                if (archetype < 0.36f)
+                    BuildWarehouse(building.transform, wall, glassMat, concreteMat, roofMat, metalMat);
+                else if (archetype < 0.74f)
+                    BuildBlock(building.transform, wall, glassMat, concreteMat, metalMat);
+                else
+                    BuildTower(building.transform, wall, glassMat, concreteMat, metalMat);
             }
 
             Random.state = previousRandomState;
@@ -233,6 +268,178 @@ namespace Sim.Runtime
             }
 
             if (cam != null) cam.farClipPlane = 1200f;
+        }
+
+        // ---------------------------------------------------------------- palettes
+
+        /// <summary>
+        /// Six cached foliage tones: indices 0..2 are the dark conifer greens, 3..5 the lighter
+        /// broadleaf ones.
+        ///
+        /// <para>QUANTISING the per-tree colour to a small palette is the point.
+        /// <see cref="MaterialLibrary.Create"/> caches by colour, so the old continuous random tint
+        /// defeated the cache and minted one material per tree — ~220 unique foliage materials, none
+        /// of which could ever batch (finding B-16). Six shared materials cost six.</para>
+        /// </summary>
+        private static Material[] FoliagePalette()
+        {
+            return new[]
+            {
+                MaterialLibrary.Create(new Color(0.10f, 0.25f, 0.14f), 0f, 0.08f),
+                MaterialLibrary.Create(new Color(0.12f, 0.30f, 0.16f), 0f, 0.08f),
+                MaterialLibrary.Create(new Color(0.16f, 0.34f, 0.14f), 0f, 0.08f),
+                MaterialLibrary.Create(new Color(0.19f, 0.40f, 0.16f), 0f, 0.08f),
+                MaterialLibrary.Create(new Color(0.24f, 0.44f, 0.19f), 0f, 0.08f),
+                MaterialLibrary.Create(new Color(0.29f, 0.48f, 0.23f), 0f, 0.08f),
+            };
+        }
+
+        /// <summary>Five cached wall tones, quantised for the same reason as the foliage palette.</summary>
+        private static Material[] WallPalette()
+        {
+            return new[]
+            {
+                MaterialLibrary.Create(new Color(0.62f, 0.59f, 0.52f), 0f, 0.12f),
+                MaterialLibrary.Create(new Color(0.54f, 0.52f, 0.48f), 0f, 0.12f),
+                MaterialLibrary.Create(new Color(0.66f, 0.60f, 0.50f), 0f, 0.12f),
+                MaterialLibrary.Create(new Color(0.48f, 0.47f, 0.45f), 0f, 0.12f),
+                MaterialLibrary.Create(new Color(0.58f, 0.54f, 0.50f), 0f, 0.12f),
+            };
+        }
+
+        // ---------------------------------------------------------------- tree species
+
+        /// <summary>
+        /// Conifer: a slim trunk under three stacked, narrowing tiers and a spike. Unity has no cone
+        /// primitive, so the classic stepped-cylinder fir is used — the tiers overlap in Y, which is
+        /// what stops the steps reading as separate discs. 5 parts.
+        /// </summary>
+        private static void BuildConifer(Transform tree, Material trunk, Material foliage, float crown)
+        {
+            Prop(tree, PrimitiveType.Cylinder, "Trunk", new Vector3(0f, 1.00f, 0f), new Vector3(0.22f, 1.00f, 0.22f), Vector3.zero, trunk);
+            Prop(tree, PrimitiveType.Cylinder, "Tier_0", new Vector3(0f, 1.60f, 0f), new Vector3(1.90f * crown, 0.55f, 1.90f * crown), Vector3.zero, foliage);
+            Prop(tree, PrimitiveType.Cylinder, "Tier_1", new Vector3(0f, 2.60f, 0f), new Vector3(1.35f * crown, 0.50f, 1.35f * crown), Vector3.zero, foliage);
+            Prop(tree, PrimitiveType.Cylinder, "Tier_2", new Vector3(0f, 3.50f, 0f), new Vector3(0.85f * crown, 0.45f, 0.85f * crown), Vector3.zero, foliage);
+            Prop(tree, PrimitiveType.Cylinder, "Apex", new Vector3(0f, 4.30f, 0f), new Vector3(0.34f * crown, 0.45f, 0.34f * crown), Vector3.zero, foliage);
+        }
+
+        /// <summary>
+        /// Broadleaf: trunk, two angled branch stubs and three overlapping, non-uniformly scaled
+        /// crown spheres offset off the axis so the canopy is lopsided rather than a ball. 6 parts.
+        ///
+        /// <para>A +Z euler rotates a cylinder's local up toward -X, so the LEFT stub takes the
+        /// positive angle — the same mirror convention the airframes' canted surfaces use.</para>
+        /// </summary>
+        private static void BuildBroadleaf(Transform tree, Material trunk, Material branch, Material foliage, float crown)
+        {
+            Prop(tree, PrimitiveType.Cylinder, "Trunk", new Vector3(0f, 1.10f, 0f), new Vector3(0.26f, 1.10f, 0.26f), Vector3.zero, trunk);
+            Prop(tree, PrimitiveType.Cylinder, "BranchL", new Vector3(-0.42f, 1.95f, 0.10f), new Vector3(0.13f, 0.55f, 0.13f), new Vector3(0f, 0f, 32f), branch);
+            Prop(tree, PrimitiveType.Cylinder, "BranchR", new Vector3(0.42f, 1.90f, -0.12f), new Vector3(0.13f, 0.50f, 0.13f), new Vector3(0f, 0f, -32f), branch);
+            Prop(tree, PrimitiveType.Sphere, "Crown_0", new Vector3(0f, 2.85f, 0f), new Vector3(2.50f * crown, 2.05f * crown, 2.40f * crown), Vector3.zero, foliage);
+            Prop(tree, PrimitiveType.Sphere, "Crown_1", new Vector3(-0.72f, 3.35f, 0.32f), new Vector3(1.70f * crown, 1.50f * crown, 1.65f * crown), Vector3.zero, foliage);
+            Prop(tree, PrimitiveType.Sphere, "Crown_2", new Vector3(0.64f, 3.20f, -0.44f), new Vector3(1.60f * crown, 1.40f * crown, 1.72f * crown), Vector3.zero, foliage);
+        }
+
+        /// <summary>Scrub: three low, clustered spheres, no visible trunk. 3 parts.</summary>
+        private static void BuildScrub(Transform tree, Material foliage, float crown)
+        {
+            Prop(tree, PrimitiveType.Sphere, "Bush_0", new Vector3(0f, 0.62f, 0f), new Vector3(1.75f * crown, 1.25f * crown, 1.65f * crown), Vector3.zero, foliage);
+            Prop(tree, PrimitiveType.Sphere, "Bush_1", new Vector3(-0.62f, 0.48f, 0.34f), new Vector3(1.25f * crown, 0.95f * crown, 1.20f * crown), Vector3.zero, foliage);
+            Prop(tree, PrimitiveType.Sphere, "Bush_2", new Vector3(0.55f, 0.52f, -0.42f), new Vector3(1.15f * crown, 1.00f * crown, 1.30f * crown), Vector3.zero, foliage);
+        }
+
+        // ---------------------------------------------------------------- building archetypes
+
+        // Every archetype below draws its own footprint and height from the SEEDED scatter stream, so
+        // the skyline varies but stays reproducible. Heights are deliberately held near the old
+        // 3..8 m envelope — only thin clutter (aerials, masts) reaches higher, so the buildings do
+        // not start swallowing the drones' 10..14 m cruise band.
+        //
+        // Window rows are "banding" boxes a few centimetres wider than the wall block: one part then
+        // paints a dark glazing strip onto ALL FOUR faces at once. Four separate per-face panels per
+        // storey would quadruple the cost for no visible gain at this scale — no textures exist, so
+        // the strip is the window row.
+
+        /// <summary>Low warehouse: plinth, long hall, clerestory band, roller door, ridged saw-tooth roof and roof vents. 9 parts.</summary>
+        private static void BuildWarehouse(Transform b, Material wall, Material glass, Material concrete, Material roof, Material metal)
+        {
+            float w = Random.Range(7f, 11f);
+            float d = Random.Range(9f, 15f);
+            float h = Random.Range(3.2f, 4.4f);
+
+            Prop(b, PrimitiveType.Cube, "Plinth", new Vector3(0f, 0.15f, 0f), new Vector3(w + 0.70f, 0.30f, d + 0.70f), Vector3.zero, concrete);
+            Prop(b, PrimitiveType.Cube, "Walls", new Vector3(0f, 0.30f + h * 0.5f, 0f), new Vector3(w, h, d), Vector3.zero, wall);
+            Prop(b, PrimitiveType.Cube, "WindowBand", new Vector3(0f, 0.30f + h * 0.76f, 0f), new Vector3(w + 0.10f, h * 0.20f, d + 0.10f), Vector3.zero, glass);
+            Prop(b, PrimitiveType.Cube, "DoorBay", new Vector3(0f, 0.30f + h * 0.34f, d * 0.5f + 0.06f), new Vector3(w * 0.34f, h * 0.62f, 0.12f), Vector3.zero, metal);
+
+            // Three strips across the width, each tilted 20°, spaced so the gaps between them read
+            // as valleys: a saw-tooth ridge line rather than a flat lid. Raised enough that a
+            // strip's low end only just kisses the wall head instead of cutting the window band.
+            for (int r = 0; r < 3; r++)
+            {
+                Prop(b, PrimitiveType.Cube, "RoofRidge_" + r,
+                    new Vector3(0f, 0.30f + h + 0.45f, (r - 1) * d * 0.30f),
+                    new Vector3(w + 0.25f, 0.20f, d * 0.26f), new Vector3(20f, 0f, 0f), roof);
+            }
+
+            // Vents sit OUTSIDE the outermost ridge (which reaches |z| = 0.43d) so they stay visible.
+            Prop(b, PrimitiveType.Cube, "RoofVent_0", new Vector3(w * 0.22f, 0.30f + h + 0.28f, -d * 0.45f), new Vector3(0.70f, 0.55f, 0.70f), Vector3.zero, metal);
+            Prop(b, PrimitiveType.Cylinder, "RoofVent_1", new Vector3(-w * 0.20f, 0.30f + h + 0.35f, d * 0.45f), new Vector3(0.45f, 0.35f, 0.45f), Vector3.zero, metal);
+        }
+
+        /// <summary>Mid-rise block: plinth, 2-3 storeys of glazing banding over concrete spandrels, parapet, stair head and an aerial. 9-11 parts.</summary>
+        private static void BuildBlock(Transform b, Material wall, Material glass, Material concrete, Material metal)
+        {
+            int storeys = Random.Range(2, 4);           // 2 or 3
+            float storeyH = Random.Range(2.3f, 2.7f);
+            float h = storeys * storeyH;
+            float w = Random.Range(6f, 9f);
+            float d = Random.Range(6f, 10f);
+
+            Prop(b, PrimitiveType.Cube, "Plinth", new Vector3(0f, 0.22f, 0f), new Vector3(w + 0.80f, 0.44f, d + 0.80f), Vector3.zero, concrete);
+            Prop(b, PrimitiveType.Cube, "Shaft", new Vector3(0f, 0.44f + h * 0.5f, 0f), new Vector3(w, h, d), Vector3.zero, wall);
+
+            for (int s = 0; s < storeys; s++)
+            {
+                float floorY = 0.44f + s * storeyH;
+                Prop(b, PrimitiveType.Cube, "StoreyBand_" + s, new Vector3(0f, floorY + storeyH * 0.06f, 0f),
+                    new Vector3(w + 0.16f, storeyH * 0.10f, d + 0.16f), Vector3.zero, concrete);
+                Prop(b, PrimitiveType.Cube, "WindowBand_" + s, new Vector3(0f, floorY + storeyH * 0.60f, 0f),
+                    new Vector3(w + 0.10f, storeyH * 0.38f, d + 0.10f), Vector3.zero, glass);
+            }
+
+            Prop(b, PrimitiveType.Cube, "Parapet", new Vector3(0f, 0.44f + h + 0.26f, 0f), new Vector3(w + 0.36f, 0.52f, d + 0.36f), Vector3.zero, concrete);
+            // Stair head and aerial both start ON the roof deck (0.44 + h), not floating above it.
+            Prop(b, PrimitiveType.Cube, "StairHead", new Vector3(w * 0.18f, 0.44f + h + 0.60f, -d * 0.16f), new Vector3(w * 0.32f, 1.20f, d * 0.30f), Vector3.zero, wall);
+            Prop(b, PrimitiveType.Cylinder, "Aerial", new Vector3(-w * 0.30f, 0.44f + h + 1.00f, d * 0.24f), new Vector3(0.07f, 1.00f, 0.07f), Vector3.zero, metal);
+        }
+
+        /// <summary>Tower: plinth, slim shaft with corner piers and three glazing bands, parapet, a setback top box, a roof vent and a mast. 11 parts.</summary>
+        private static void BuildTower(Transform b, Material wall, Material glass, Material concrete, Material metal)
+        {
+            float w = Random.Range(4.5f, 6.0f);
+            float d = w * Random.Range(0.85f, 1.15f);
+            float h = Random.Range(6.0f, 7.2f);
+
+            Prop(b, PrimitiveType.Cube, "Plinth", new Vector3(0f, 0.25f, 0f), new Vector3(w + 0.90f, 0.50f, d + 0.90f), Vector3.zero, concrete);
+            Prop(b, PrimitiveType.Cube, "Shaft", new Vector3(0f, 0.50f + h * 0.5f, 0f), new Vector3(w, h, d), Vector3.zero, wall);
+
+            for (int s = 0; s < 3; s++)
+            {
+                Prop(b, PrimitiveType.Cube, "WindowBand_" + s, new Vector3(0f, 0.50f + h * (0.22f + s * 0.26f), 0f),
+                    new Vector3(w + 0.10f, h * 0.13f, d + 0.10f), Vector3.zero, glass);
+            }
+
+            // Two diagonally opposite piers: enough to break the glazing bands vertically without
+            // paying for all four.
+            Prop(b, PrimitiveType.Cube, "CornerPierL", new Vector3(-w * 0.5f, 0.50f + h * 0.5f, -d * 0.5f), new Vector3(0.35f, h, 0.35f), Vector3.zero, concrete);
+            Prop(b, PrimitiveType.Cube, "CornerPierR", new Vector3(w * 0.5f, 0.50f + h * 0.5f, d * 0.5f), new Vector3(0.35f, h, 0.35f), Vector3.zero, concrete);
+
+            Prop(b, PrimitiveType.Cube, "Parapet", new Vector3(0f, 0.50f + h + 0.18f, 0f), new Vector3(w + 0.32f, 0.36f, d + 0.32f), Vector3.zero, concrete);
+            Prop(b, PrimitiveType.Cube, "Setback", new Vector3(0f, 0.50f + h + 0.85f, 0f), new Vector3(w * 0.60f, 1.40f, d * 0.60f), Vector3.zero, wall);
+            // Clear of the setback's 0.60w x 0.60d footprint, otherwise the vent would be buried in it.
+            Prop(b, PrimitiveType.Cube, "RoofVent", new Vector3(w * 0.36f, 0.50f + h + 0.25f, -d * 0.34f), new Vector3(0.55f, 0.45f, 0.55f), Vector3.zero, metal);
+            Prop(b, PrimitiveType.Cylinder, "Mast", new Vector3(0f, 0.50f + h + 2.30f, 0f), new Vector3(0.09f, 0.90f, 0.09f), Vector3.zero, metal);
         }
 
         // ---------------------------------------------------------------- helpers
