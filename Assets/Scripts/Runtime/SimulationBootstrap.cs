@@ -117,9 +117,12 @@ namespace Sim.Runtime
             EnsureCameraAndLight();
             CreateGround();
 
-            // Two recon İHA drones (blue) with rectangular patrol routes.
-            SpawnIha("IHA_1", new Vector3(-20f, 10f, -20f), RectangleRoute(new Vector3(-20f, 10f, -20f), 30f, 25f), Color.blue);
-            SpawnIha("IHA_2", new Vector3(20f, 12f, 20f), RectangleRoute(new Vector3(20f, 12f, 20f), 25f, 30f), new Color(0.2f, 0.5f, 1f));
+            // Two recon İHA drones (blue) with rectangular patrol routes. Their spawn altitude IS
+            // their cruise altitude (IhaController holds BasePosition.y), so it has to clear the
+            // skyline: 18 / 20 m instead of the old 10 / 12 m, which sat inside the 14 m scenery
+            // ceiling. See Sim.Core.FlightEnvelope for where those numbers come from.
+            SpawnIha("IHA_1", new Vector3(-20f, 18f, -20f), RectangleRoute(new Vector3(-20f, 18f, -20f), 30f, 25f), Color.blue);
+            SpawnIha("IHA_2", new Vector3(20f, 20f, 20f), RectangleRoute(new Vector3(20f, 20f, 20f), 25f, 30f), new Color(0.2f, 0.5f, 1f));
 
             // The PLAYER's aircraft slot, in the place the armed SİHA always held. WHICH airframe
             // stands here — and every performance number on it — comes from the archetype picked on

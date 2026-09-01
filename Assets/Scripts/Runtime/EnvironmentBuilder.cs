@@ -351,9 +351,15 @@ namespace Sim.Runtime
         // ---------------------------------------------------------------- building archetypes
 
         // Every archetype below draws its own footprint and height from the SEEDED scatter stream, so
-        // the skyline varies but stays reproducible. Heights are deliberately held near the old
-        // 3..8 m envelope — only thin clutter (aerials, masts) reaches higher, so the buildings do
-        // not start swallowing the drones' 10..14 m cruise band.
+        // the skyline varies but stays reproducible.
+        //
+        // HEIGHT BUDGET — the tallest thing any of these can produce is the tower's mast at
+        // 0.50 (plinth) + 7.2 (shaft max) + 2.30 (mast offset) + 0.90 (mast half-height) = 10.90 m
+        // above its own footing; the block's aerial reaches 10.54 m and the warehouse only ~5.9 m.
+        // Sim.Core.FlightEnvelope.MaxStructureHeight states that as 11 m and the cruise band is set
+        // from it (11 m prop + 3 m terrain relief + 4 m margin = an 18 m cruise floor). RAISING ANY
+        // ARCHETYPE ABOVE 11 m MEANS RAISING THAT CONSTANT AND THE BAND WITH IT — an earlier pass
+        // grew these silhouettes without doing so and the drones ended up cruising through roofs.
         //
         // Window rows are "banding" boxes a few centimetres wider than the wall block: one part then
         // paints a dark glazing strip onto ALL FOUR faces at once. Four separate per-face panels per

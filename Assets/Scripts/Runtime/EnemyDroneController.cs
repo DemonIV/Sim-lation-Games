@@ -32,7 +32,13 @@ namespace Sim.Runtime
         [SerializeField] private int targetFaction = 0;
 
         [Header("Altitude")]
-        [SerializeField] private float cruiseAltitude = 14f;
+        // Held level with the player's SİHA (Sim.Core.AircraftCatalog) so dogfights stay co-altitude,
+        // and clear of the 14 m scenery ceiling by the Sim.Core.FlightEnvelope margin. Raised from
+        // 14 m with the rest of the cruise band — buildings reach into the old height.
+        [SerializeField] private float cruiseAltitude = 20f;
+        // Ground floor, NOT a structure-clearance floor: this is the deck the flight model is clamped
+        // to because there is no ground collision. A deliberate dive is still allowed below the
+        // scenery ceiling; only the cruise altitude is guaranteed to clear it.
         [SerializeField] private float minAltitude = 5f;
 
         [Header("Engagement")]

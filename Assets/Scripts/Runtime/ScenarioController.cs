@@ -29,7 +29,10 @@ namespace Sim.Runtime
         // Keep-out disc around the airbase. The base footprint reaches ~22 m (runway z ±22, hangars at
         // x −13), so anything smaller lets a SAM/AAA spawn on the runway or inside a hangar.
         [SerializeField] private float spawnMinRadius = 32f;
-        [SerializeField] private float fighterAltitude = 14f;  // hostile fighters spawn airborne, at cruise
+        // Hostile fighters spawn airborne, at the cruise altitude EnemyDroneController then holds.
+        // Raised 14 -> 20 m with the rest of the band so the spawn clears the 14 m scenery ceiling
+        // (see Sim.Core.FlightEnvelope).
+        [SerializeField] private float fighterAltitude = 20f;
 
         // Minimum planar spacing between two enemies placed in the same wave, and how many rejection
         // samples we are willing to draw before accepting the last candidate anyway.
@@ -200,13 +203,21 @@ namespace Sim.Runtime
 
         /// <summary>
         /// Scatter position lifted to the fighters' cruise altitude, so they spawn airborne. The
-        /// altitude is staggered a couple of metres per fighter (around the unchanged cruise value) so
-        /// a wave does not appear as one stack of overlapping silhouettes.
+        /// altitude is staggered a couple of metres per fighter (around the cruise value) so a wave
+        /// does not appear as one stack of overlapping silhouettes.
+        ///
+        /// <para>
+        /// The stagger's LOWEST slot (cruise − 2.4 m) would dip just under
+        /// <see cref="FlightEnvelope.MinCruiseAltitude"/>, so the result is clamped up to it: a
+        /// fighter never spawns inside the scenery-clearance margin, and the other three slots keep
+        /// their full spread.
+        /// </para>
         /// </summary>
         private Vector3 RandomAirbornePosition(int index)
         {
             Vector3 p = RandomScatterPosition();
-            p.y = fighterAltitude + ((index % 4) - 1.5f) * 1.6f;   // −2.4 … +2.4 m around cruise
+            // −2.4 … +2.4 m around cruise, then lifted to the structure-clearance floor.
+            p.y = FlightEnvelope.ClampToCruiseFloor(fighterAltitude + ((index % 4) - 1.5f) * 1.6f);
             return p;
         }
 

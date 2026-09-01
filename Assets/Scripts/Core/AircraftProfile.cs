@@ -192,7 +192,13 @@ namespace Sim.Core
         /// <summary>Stable id of the recon-İHA profile.</summary>
         public const string IhaId = "iha";
 
-        // Baseline = today's armed SİHA: flight 30 m/s / 80 deg/s, pilot cap 40 m/s, cruise 14 m,
+        // CRUISE ALTITUDES: the whole band was translated +6 m (12/14/18 -> 18/20/24) so it clears
+        // the scenery. The detailed buildings reach ~11 m above their own footing and the terrain adds
+        // up to another 3 m, so the skyline tops out at 14 m — the old band ran straight through it.
+        // 18 m is FlightEnvelope.MinCruiseAltitude (14 m skyline + 4 m margin); the relative spacing
+        // between the three archetypes is unchanged, and FlightEnvelopeTests asserts the floor holds.
+
+        // Baseline = today's armed SİHA: flight 30 m/s / 80 deg/s, pilot cap 40 m/s, cruise 20 m,
         // tank 100 @ 2/s, gun 300 rounds / 10 rps / 60 m / 2.5° / 4.5 dmg, 6 missiles at 120 m,
         // targeting 120 m, radar reference 250 m, 100 HP, nominal radar signature.
         private static readonly AircraftProfile _siha = new AircraftProfile(
@@ -200,7 +206,7 @@ namespace Sim.Core
             displayName: "SİHA",
             description: "Dengeli silahlı İHA: bol füze, uzun menzil, her işte iyi.",
             kind: AircraftKind.Siha,
-            maxSpeed: 30f, pilotMaxSpeed: 40f, turnRateDeg: 80f, cruiseAltitude: 14f,
+            maxSpeed: 30f, pilotMaxSpeed: 40f, turnRateDeg: 80f, cruiseAltitude: 20f,
             fuelCapacity: 100f, fuelBurnRate: 2f,
             gunMagazine: 300, gunRoundsPerSecond: 10f, gunRange: 60f,
             gunDispersionDeg: 2.5f, gunDamage: 4.5f,
@@ -216,7 +222,7 @@ namespace Sim.Core
             displayName: "Savaş Uçağı",
             description: "Hızlı ve çevik avcı: güçlü top, az füze, çok yakıt yakar.",
             kind: AircraftKind.FighterJet,
-            maxSpeed: 45f, pilotMaxSpeed: 60f, turnRateDeg: 100f, cruiseAltitude: 18f,
+            maxSpeed: 45f, pilotMaxSpeed: 60f, turnRateDeg: 100f, cruiseAltitude: 24f,
             fuelCapacity: 70f, fuelBurnRate: 3.2f,
             gunMagazine: 400, gunRoundsPerSecond: 16f, gunRange: 70f,
             gunDispersionDeg: 2f, gunDamage: 6f,
@@ -233,7 +239,7 @@ namespace Sim.Core
             displayName: "Keşif İHA",
             description: "Uzun havada kalış ve en geniş radar: zayıf top, ince zırh.",
             kind: AircraftKind.Iha,
-            maxSpeed: 21f, pilotMaxSpeed: 28f, turnRateDeg: 65f, cruiseAltitude: 12f,
+            maxSpeed: 21f, pilotMaxSpeed: 28f, turnRateDeg: 65f, cruiseAltitude: 18f,
             fuelCapacity: 180f, fuelBurnRate: 1.4f,
             gunMagazine: 200, gunRoundsPerSecond: 8f, gunRange: 45f,
             gunDispersionDeg: 3f, gunDamage: 3f,
