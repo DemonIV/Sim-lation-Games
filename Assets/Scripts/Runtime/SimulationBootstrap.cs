@@ -272,8 +272,9 @@ namespace Sim.Runtime
         /// </para>
         ///
         /// <para>
-        /// MODEL CAVEAT: the fighter jet currently borrows the armed-UAV silhouette. A later turn
-        /// builds the real airframes; only the visual is provisional, the numbers are not.
+        /// Each archetype also gets its OWN airframe from <see cref="VehicleModelBuilder"/> — the
+        /// jet no longer borrows the armed-UAV silhouette. The models are purely cosmetic: they hang
+        /// under the "Model" child, carry no colliders and never touch the numbers above.
         /// </para>
         /// </summary>
         private IhaController SpawnPlayerAircraft(AircraftProfile profile)
@@ -291,12 +292,22 @@ namespace Sim.Runtime
             Parent(go);
             ApplyColor(go, color);
 
-            // Cosmetic: hide the placeholder capsule and build a silhouette in its place.
+            // Cosmetic: hide the placeholder capsule and build this archetype's own silhouette in
+            // its place. The root keeps the primitive's unit scale, so the "Model" child's
+            // reciprocal scale is (1,1,1) and every airframe below is drawn at its designed size.
             VehicleModelBuilder.HideRootMesh(go);
-            if (profile.Kind == AircraftKind.Iha)
-                VehicleModelBuilder.BuildReconUav(go.transform, color);
-            else
-                VehicleModelBuilder.BuildArmedUav(go.transform, color);
+            switch (profile.Kind)
+            {
+                case AircraftKind.FighterJet:
+                    VehicleModelBuilder.BuildFighterJet(go.transform, color);
+                    break;
+                case AircraftKind.Iha:
+                    VehicleModelBuilder.BuildReconUav(go.transform, color);
+                    break;
+                default:
+                    VehicleModelBuilder.BuildArmedUav(go.transform, color);
+                    break;
+            }
 
             MarkFriendly(go, profile.Health);
 
@@ -321,7 +332,8 @@ namespace Sim.Runtime
             // Realistic radar sensor (hostileFaction defaults to 1); the profile sizes its picture.
             go.AddComponent<RadarSensor>().ConfigureRange(profile.RadarRange);
 
-            // Cosmetic: spinning propeller and roll-into-the-turn on the "Model" child only.
+            // Cosmetic: spinning propeller and roll-into-the-turn on the "Model" child only. The
+            // jet airframe has no "Propeller" part; the spinner then simply finds nothing and idles.
             go.AddComponent<PropellerSpinner>();
             go.AddComponent<BankingVisual>();
 
