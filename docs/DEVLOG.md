@@ -26,7 +26,11 @@ kaçınılabilir hava savunması füzeleri (SAM 85 / AAA 95), **V** ile açılı
 pilot HUD'ında gelen füzeleri de gösteren dairesel radar skopu. En son tur iki kullanıcı isteğini
 karşıladı: atış imleci artık ekran ortasına çakılı değil — `GunPipper` (Core, testli) ile namlu
 ekseninden dünyaya yansıtılıyor, uçak eğilince kayıyor/yatıyor ve ~1.7× büyütüldü; ayrıca **G**
-sağdaki filo durumu panelini aç/kapat yapıyor.
+sağdaki filo durumu panelini aç/kapat yapıyor. En son tur **üç uçulabilir arketip** geldi: görev
+seçim ekranında Savaş Uçağı / SİHA / Keşif İHA seçiliyor (`AircraftProfile` + `AircraftCatalog`,
+Core, testli) ve seçim yalnızca **oyuncunun uçağına** uygulanıyor; SİHA profili bugünkü değerlerin
+birebir aynısı olduğu için selektöre dokunmayan oyuncu için hiçbir şey değişmiyor. Savaş uçağının
+gerçek 3D modeli **bir sonraki turda** yapılacak (şimdilik silahlı İHA siluetini kullanıyor).
 
 ### Yeni oturum için okuma sırası
 1. Bu bölüm.
@@ -137,6 +141,9 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `TerrainField` | Deterministik prosedürel arazi yükseklik alanı (Perlin + üs çevresinde düz bölge); hem arazi mesh'i hem de yer birimlerinin yerleşimi bunu kullanır. |
 | `RadarScope` | Dünya konumunu burun-yukarı radar skopu koordinatına (−1..1, +Y burun, +X sağ) yansıtır; irtifayı yok sayar (PPI), menzil dışını reddeder. |
 | `GunPipper` | Namlu ekseninde belirli bir menzilde merminin vardığı dünya noktası (uçuş süresi = menzil/ağız hızı, düşüş = ½·g·t²); ağız hızı ≤ 0 veya menzil ≤ 0 ise hitscan gibi doğrudan namlu ekseni. |
+| `AircraftKind` | Uçulabilir arketipler: Savaş uçağı (`FighterJet`) / SİHA (`Siha`) / Keşif İHA (`Iha`). |
+| `AircraftProfile` | Bir arketipin değiştirilemez performans profili: hız/dönüş/pilot hız tavanı, seyir irtifası, yakıt, top (5 değer), füze (adet + menzil), tespit ve radar menzili, can + seçim ekranı için dört 0–1 gösterge puanı. Her alanın Runtime'da gerçek bir tüketicisi vardır. |
+| `AircraftCatalog` | Üç profilin kataloğu: `All`, `Default` (SİHA temel değerleri), `TryGet`/`GetOrDefault` (bilinmeyen id'de hata değil varsayılan) ve klavyeyle sağa/sola dönen `Cycle`. |
 
 ### Sim.Runtime (ince MonoBehaviour'lar)
 | Bileşen | Görevi |
@@ -186,7 +193,9 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
    sahne varlığı olarak kaydet** (ör. `Assets/Main.unity`; kaydedilmemiş "Untitled" sahne bu nesneyi
    kaybeder ve Play hiçbir şey yapmaz) → **Play**.
 4. Sahne kendini kurar ve **görev seçim menüsü** açılır (sim duraklatılmış olarak bekler).
-   Bir görev seç → görev başlar. HUD sol üstte görev/skor/temasları gösterir. **M** menüye döner.
+   Görev kartlarının altında **uçak seçimi** vardır (Savaş Uçağı / SİHA / Keşif İHA): fareyle tıkla
+   ya da **←/→** ile değiştir. Bir görev seç → görev başlar (uçak seçimi o anda sahaya uygulanır).
+   HUD sol üstte görev/skor/temasları gösterir. **M** menüye döner.
 
 **Kamera kontrolleri:** Sağ tık basılı + fare = bak · WASD = uç · Shift = hızlan · Tab = drone takip et · F = serbest mod.
 Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpit ↔ takip kamerası arasında geçiş yapar.
@@ -254,6 +263,10 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
 | `bu tur` | `CockpitFrame` kokpit görünümüne bağlandı (pilotluk sürerken görünür, burun uçağın rengini alır) + DEVLOG. |
 | `1ac88d2` | `GunPipper` Core nişan noktası geometrisi + EditMode testleri. |
 | `d5d9a55` | Namlu ekseninden yansıtılan büyütülmüş atış imleci + **G** ile filo panelini aç/kapat. |
+| `b0a9179` | `AircraftProfile`/`AircraftKind`/`AircraftCatalog` Core verisi + ilişki tabanlı EditMode testleri. |
+| `de63482` | Seçilen uçak `ScenarioController.SelectedAircraftId` statiğinde taşınıyor (bilinmeyen id → varsayılan). |
+| `03fd331` | Görev seçim ekranına uçak seçim satırı (kartlar + 0–1 çubuk göstergeleri, ←/→). |
+| `9d6a8f7` | Seçilen profil oyuncunun uçağına uygulanıyor (uçuş, yakıt, top, füze, sensör, can). |
 
 ---
 
@@ -637,3 +650,47 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
   **varsayılan olarak açık** (`GameControls` yoksa da açık), yani tuşa hiç basmayan oyuncu için
   hiçbir şey değişmiyor. Alt kontrol şeridine `G: FİLO PANELİ (GİZLE/GÖSTER)` ipucu eklendi.
   **Hiçbir oyun değeri (menzil, hasar, atış hızı, irtifa) değişmedi** — değişiklik sunum katmanında.
+
+- **Üç uçulabilir arketip + uçak seçimi (kullanıcı isteği):** Oyuncu artık görev seçim ekranında
+  hangi uçağı uçuracağını seçiyor. Dört dilim.
+  **(1) Core verisi:** Yeni `AircraftKind` (FighterJet / Siha / Iha), değiştirilemez
+  `AircraftProfile` ve `AircraftCatalog` (`All`, `Default`, `TryGet`, `GetOrDefault`, `Cycle`).
+  **SİHA profili 1.0× temel değerdir**: sim'in bugün kullandığı değerlerin birebir aynısı
+  (uçuş 30 m/s, dönüş 80°/s, pilot tavanı 40 m/s, seyir 14 m, yakıt 100 @ 2/s, top 300 fişek /
+  10 atış-s / 60 m / 2.5° / 4.5 hasar, 6 füze @ 120 m, tespit 120 m, radar 250 m, 100 can).
+  Savaş uçağı bu temelin çarpanı olarak yazıldı (hız ×1.5 → 45, pilot tavanı 60, dönüş ×1.25 → 100,
+  seyir 18 m, yakıt ×0.7 → 70 ve yakma ×1.6 → 3.2, top ×1.6 atış hızı → 16 / 400 fişek / 70 m /
+  2.0° / 6 hasar, **yalnız 2 füze** @ 100 m, tespit 100 m, radar ×0.8 → 200, 90 can); keşif İHA ise
+  ters yönde (hız ×0.7 → 21, pilot tavanı 28, dönüş 65, seyir 12 m, yakıt ×1.8 → 180 ve yakma
+  ×0.7 → 1.4, mevcut keşif topu 200/8/45 m/3°/3, **füze yok**, tespit 150 m, radar ×1.4 → 350,
+  70 can). Ayrıca her profilde seçim ekranı için dört **0–1 gösterge puanı** (hız / çeviklik /
+  ateş gücü / havada kalış) var, böylece UI ham birimleri hiç bilmiyor. `AircraftProfileTests`
+  sihirli sayı değil **ilişki** doğruluyor (jet > SİHA > İHA hız; İHA > SİHA > jet yakıt; en geniş
+  radar İHA'da; en yüksek atış hızı jette; en çok füze SİHA'da; puanlar 0..1 aralığında; `Cycle`
+  iki yönde de dönüyor; bilinmeyen/null id `TryGet`'te hata atmadan `false`).
+  **(2) Seçimin taşınması:** `ScenarioController` mevcut `SelectedKind` deseninin aynısıyla
+  statik `SelectedAircraftId` (varsayılan: SİHA) ve savunmacı `SelectedAircraft` kancasını sunuyor;
+  seçim `SimulationBootstrap.Rebuild()`'i sağ kalıyor, bilinmeyen/boş id hata atmadan varsayılana
+  düşüyor. Selektöre hiç dokunmayan oyuncu **bugünkü davranışın birebir aynısını** alıyor.
+  **(3) Seçim ekranı:** `ScenarioMenu` görev kartlarının altına uçak satırı çiziyor — her profil
+  için bir kart (ad, tek satır açıklama ve dört puanın `HudTheme.Bar` göstergesi). Yeni renk yok;
+  seçili kart görev kartlarının **aynı amber vurgusunu** alıyor. Fareyle tıklama veya **←/→**
+  (`AircraftCatalog.Cycle`) seçiyor; bu iki tuş projede başka hiçbir yerde bağlı değil (pilot ↑/↓
+  ile yunusluyor, kamera WASD ile uçuyor).
+  **(4) Sahaya uygulanması:** `SimulationBootstrap` sabit SİHA yuvasının yerine profilden
+  **oyuncunun uçağını** kuruyor (`SpawnPlayerAircraft`): füze taşıyan arketipler `SihaController`,
+  keşif arketipi `IhaController` alıyor; değerler mevcut yollarla giriyor — yeni
+  `IhaController.ApplyProfile` (hız/dönüş/pilot tavanı/tespit/yakıt) ve `SihaController.ApplyProfile`
+  (füze şarjörü + menzil), `GunTurret.Configure`, yeni `RadarSensor.ConfigureRange` ve yeni
+  `Targetable.SetMaxHealth`. Sonuncusu şart: `Awake` **`AddComponent` içinde** çalıştığı için
+  `MaxHealth` alanını sonradan yazmak zaten kurulmuş can havuzuna ulaşmıyordu. `PlayerDroneController`
+  artık sabit 40 m/s yerine uçtuğu uçağın kendi `PilotMaxSpeed` değerini okuyor (YZ'nin kurduğu
+  drone'larda bu değer 40 olarak kalıyor, yani davranış değişmiyor) ve `SetPreferredAircraft` ile
+  **C** doğrudan menüde seçilen uçağı devralıyor. İki keşif İHA'sı yapay zekâ kanadı olarak
+  **hiç dokunulmadan** kalıyor; profil `Rebuild()` sırasında sızmıyor, her kurulumda statik
+  seçimden yeniden okunuyor.
+  **Kapsam dışı bırakılan:** arketiplerin radar kesit alanı (RCS) farkı. Sim'de **dost** bir uçağın
+  RCS'ini okuyan hiçbir şey yok (düşman sensörleri düz menzil/FOV ile tespit ediyor), bu yüzden
+  profile ölü bir alan eklenmedi; düşman sensörlerini imza duyarlı yapmak ayrı bir iş.
+  **Model notu:** savaş uçağı şimdilik silahlı İHA siluetini ödünç alıyor — gerçek gövdeler
+  sonraki turda.
