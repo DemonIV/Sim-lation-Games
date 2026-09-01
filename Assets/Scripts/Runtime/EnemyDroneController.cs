@@ -57,6 +57,22 @@ namespace Sim.Runtime
         // Slowly advancing bearing used for the search orbit, in radians.
         private float _wanderAngle;
 
+        // Per-instance loiter offsets set by the spawner (see SetLoiterOffsets). Purely a placement
+        // spread: the configured standoff radius and cruise altitude themselves are untouched.
+        private float _loiterRadiusOffset;
+        private float _loiterPhaseOffset;
+
+        /// <summary>
+        /// Fans this fighter's search orbit out from its wave mates: <paramref name="radiusOffset"/>
+        /// metres are added to the loiter radius and <paramref name="phaseOffsetRad"/> radians to its
+        /// bearing on that orbit. Spacing only — no flight, sensor or weapon value changes.
+        /// </summary>
+        public void SetLoiterOffsets(float radiusOffset, float phaseOffsetRad)
+        {
+            _loiterRadiusOffset = radiusOffset;
+            _loiterPhaseOffset = phaseOffsetRad;
+        }
+
         /// <summary>True when a friendly drone is currently detected in range and FOV.</summary>
         public bool HasTarget { get; private set; }
 
@@ -135,9 +151,10 @@ namespace Sim.Runtime
             {
                 // Search: orbit the field centre on a slowly advancing bearing.
                 _wanderAngle += 0.35f * dt;
-                float radius = Mathf.Max(1f, standoff);
-                var loiter = new Vector3(Mathf.Cos(_wanderAngle) * radius, cruiseAltitude,
-                                         Mathf.Sin(_wanderAngle) * radius);
+                float radius = Mathf.Max(1f, standoff + _loiterRadiusOffset);
+                float bearing = _wanderAngle + _loiterPhaseOffset;
+                var loiter = new Vector3(Mathf.Cos(bearing) * radius, cruiseAltitude,
+                                         Mathf.Sin(bearing) * radius);
                 Vector3 toLoiter = loiter - pos;
                 dir = toLoiter.sqrMagnitude > 1e-6f ? toLoiter : _flight.Forward;
             }

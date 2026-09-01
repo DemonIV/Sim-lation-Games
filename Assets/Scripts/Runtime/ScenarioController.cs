@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Sim.Core;
 
@@ -25,8 +26,18 @@ namespace Sim.Runtime
         [Header("Spawn field")]
         [SerializeField] private float fieldHalfExtent = 40f;
         [SerializeField] private float groundY = 1f;
-        [SerializeField] private float spawnMinRadius = 15f;   // keep enemies away from the very centre
+        // Keep-out disc around the airbase. The base footprint reaches ~22 m (runway z ±22, hangars at
+        // x −13), so anything smaller lets a SAM/AAA spawn on the runway or inside a hangar.
+        [SerializeField] private float spawnMinRadius = 32f;
         [SerializeField] private float fighterAltitude = 14f;  // hostile fighters spawn airborne, at cruise
+
+        // Minimum planar spacing between two enemies placed in the same wave, and how many rejection
+        // samples we are willing to draw before accepting the last candidate anyway.
+        private const float SpawnSeparation = 12f;
+        private const int SpawnPlacementAttempts = 24;
+
+        // Planar (x,z) positions already handed out for the wave currently being spawned.
+        private readonly List<Vector2> _wavePlacements = new List<Vector2>();
 
         /// <summary>
         /// The mission the player picked in <see cref="ScenarioMenu"/>. STATIC on purpose: the restart
@@ -134,48 +145,72 @@ namespace Sim.Runtime
         {
             WaveComposition c = ScenarioLibrary.Composition(SelectedKind, waveIndex);
 
+            // Spacing is enforced per wave: everything placed below is kept clear of the units this
+            // wave has already put on the field.
+            _wavePlacements.Clear();
+
             int wave = waveIndex + 1;
             for (int i = 0; i < c.PlainHostiles; i++) SpawnPlainHostile(RandomScatterPosition(), $"Hostile_W{wave}_{i}");
             for (int i = 0; i < c.Sams; i++) SpawnSam(RandomScatterPosition(), $"SAM_W{wave}_{i}");
             for (int i = 0; i < c.Aaa; i++) SpawnAaa(RandomScatterPosition(), $"AAA_W{wave}_{i}");
-            for (int i = 0; i < c.Fighters; i++) SpawnFighter(RandomAirbornePosition(), $"Fighter_W{wave}_{i}");
+            for (int i = 0; i < c.Fighters; i++) SpawnFighter(RandomAirbornePosition(i), $"Fighter_W{wave}_{i}", i);
         }
 
-        /// <summary>Scatter position lifted to the fighters' cruise altitude, so they spawn airborne.</summary>
-        private Vector3 RandomAirbornePosition()
+        /// <summary>
+        /// Scatter position lifted to the fighters' cruise altitude, so they spawn airborne. The
+        /// altitude is staggered a couple of metres per fighter (around the unchanged cruise value) so
+        /// a wave does not appear as one stack of overlapping silhouettes.
+        /// </summary>
+        private Vector3 RandomAirbornePosition(int index)
         {
             Vector3 p = RandomScatterPosition();
-            p.y = fighterAltitude;
+            p.y = fighterAltitude + ((index % 4) - 1.5f) * 1.6f;   // −2.4 … +2.4 m around cruise
             return p;
         }
 
         /// <summary>
-        /// Picks a random ground position within ±fieldHalfExtent on X/Z whose planar distance from the
-        /// origin is at least spawnMinRadius, at height groundY.
+        /// Picks a random ground position within ±fieldHalfExtent on X/Z, at height groundY, that is
+        /// outside the airbase keep-out disc (spawnMinRadius) AND at least <see cref="SpawnSeparation"/>
+        /// metres from every unit already placed in this wave. Rejection sampling is capped at
+        /// <see cref="SpawnPlacementAttempts"/> draws, after which the last candidate is used (pushed
+        /// out of the keep-out disc if needed), so a crowded wave can never loop forever.
         /// </summary>
         private Vector3 RandomScatterPosition()
         {
             float extent = Mathf.Max(spawnMinRadius, fieldHalfExtent);
-            float x = 0f, z = 0f;
-            // A few tries to land outside the central keep-out radius; fall back defensively.
-            for (int attempt = 0; attempt < 8; attempt++)
+            var planar = Vector2.zero;
+            bool accepted = false;
+
+            for (int attempt = 0; attempt < SpawnPlacementAttempts && !accepted; attempt++)
             {
-                x = Random.Range(-extent, extent);
-                z = Random.Range(-extent, extent);
-                if (new Vector2(x, z).magnitude >= spawnMinRadius) break;
+                planar = new Vector2(Random.Range(-extent, extent), Random.Range(-extent, extent));
+                accepted = planar.magnitude >= spawnMinRadius && IsClearOfWavePlacements(planar);
             }
 
-            // Defensive: if still inside the keep-out disc, push out along the current bearing.
-            var planar = new Vector2(x, z);
+            // Defensive fallback: keep the last candidate but push it out along its bearing so it can
+            // never land on the runway or in a hangar.
             if (planar.magnitude < spawnMinRadius)
             {
                 if (planar.sqrMagnitude < 1e-6f) planar = Vector2.right;
                 planar = planar.normalized * spawnMinRadius;
-                x = planar.x;
-                z = planar.y;
             }
 
-            return new Vector3(x, groundY, z);
+            _wavePlacements.Add(planar);
+            return new Vector3(planar.x, groundY, planar.y);
+        }
+
+        /// <summary>
+        /// True when the candidate keeps at least <see cref="SpawnSeparation"/> metres from every
+        /// position already handed out for the current wave.
+        /// </summary>
+        private bool IsClearOfWavePlacements(Vector2 candidate)
+        {
+            float minSq = SpawnSeparation * SpawnSeparation;
+            for (int i = 0; i < _wavePlacements.Count; i++)
+            {
+                if ((_wavePlacements[i] - candidate).sqrMagnitude < minSq) return false;
+            }
+            return true;
         }
 
         /// <summary>
@@ -293,7 +328,7 @@ namespace Sim.Runtime
         /// strafes them with a gun (<see cref="EnemyDroneController"/> + <see cref="GunTurret"/>). Unlike
         /// the ground archetypes it is spawned AIRBORNE at its cruise altitude.
         /// </summary>
-        private void SpawnFighter(Vector3 pos, string name)
+        private void SpawnFighter(Vector3 pos, string name, int index)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Capsule);
             go.name = name;
@@ -324,7 +359,10 @@ namespace Sim.Runtime
             // leaner than the friendly fit so the player keeps an edge.
             go.AddComponent<CountermeasureDispenser>().Configure(6, 2.5f, 0.5f);
 
-            go.AddComponent<EnemyDroneController>();
+            // Fan the search orbits: without this every fighter of a wave flies the same 25 m circle.
+            // Spacing only — the controller's own standoff/cruise values are untouched.
+            var pilot = go.AddComponent<EnemyDroneController>();
+            pilot.SetLoiterOffsets(index * 4f, index * 0.9f);
 
             // Cosmetic: roll into turns; only the "Model" child is rotated.
             go.AddComponent<BankingVisual>();
