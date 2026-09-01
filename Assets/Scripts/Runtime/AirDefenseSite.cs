@@ -27,7 +27,9 @@ namespace Sim.Runtime
         [Header("Weapon")]
         [SerializeField] private int magazineSize = 6;
         [SerializeField] private float roundsPerSecond = 0.4f;
-        [SerializeField] private float munitionSpeed = 150f;
+        // Deliberately slow compared with the SİHA's own missile: an incoming air-defence round must be
+        // visible long enough for the player to react, flare and break away.
+        [SerializeField] private float munitionSpeed = 85f;
         [SerializeField] private float damage = 55f;
         [SerializeField] private int friendlyFaction = 0;
 
@@ -164,8 +166,10 @@ namespace Sim.Runtime
 
             var munition = go.AddComponent<GuidedMunition>();
 
-            // Launch with this site's damage passed explicitly (clean param, no reflection).
-            munition.Launch(target, dir * munitionSpeed, damage);
+            // Launch with this site's damage AND cruise speed passed explicitly. The cruise speed
+            // matters: without it the munition's motor would trim back up to its own default cruise
+            // speed and arrive just as fast as before, however slowly it left the rail.
+            munition.Launch(target, dir * munitionSpeed, damage, munitionSpeed);
         }
     }
 }

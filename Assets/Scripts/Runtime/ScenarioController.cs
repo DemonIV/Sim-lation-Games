@@ -282,7 +282,8 @@ namespace Sim.Runtime
 
             var site = go.AddComponent<AirDefenseSite>();
             // detectionRange, fireRange, lockTimeSeconds, magazineSize, roundsPerSecond, munitionSpeed, damage
-            site.Configure(160f, 120f, 1.2f, 6, 0.4f, 150f, 55f);
+            // munitionSpeed 150 -> 85: a long-range SAM shot must be evadable, not an instant hit.
+            site.Configure(160f, 120f, 1.2f, 6, 0.4f, 85f, 55f);
 
             // Cosmetic: sweeping radar dish and a turret that tracks the held contact.
             go.AddComponent<TurretVisual>();
@@ -317,7 +318,8 @@ namespace Sim.Runtime
 
             var site = go.AddComponent<AirDefenseSite>();
             // detectionRange, fireRange, lockTimeSeconds, magazineSize, roundsPerSecond, munitionSpeed, damage
-            site.Configure(80f, 60f, 0.8f, 20, 1.5f, 130f, 20f);
+            // munitionSpeed 130 -> 95: still the faster of the two, but short-ranged, so it stays close.
+            site.Configure(80f, 60f, 0.8f, 20, 1.5f, 95f, 20f);
 
             // Cosmetic: turret tracking (this archetype has no radar dish part).
             go.AddComponent<TurretVisual>();

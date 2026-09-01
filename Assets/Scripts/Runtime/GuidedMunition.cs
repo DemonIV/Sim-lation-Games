@@ -77,6 +77,17 @@ namespace Sim.Runtime
             Launch(target, initialVelocity);
         }
 
+        /// <summary>
+        /// As <see cref="Launch(Targetable, Vector3, float)"/>, but also overrides the cruise speed the
+        /// motor trims back toward. Without this the munition accelerates to its serialized cruise speed
+        /// no matter how slowly it left the rail, so a shooter that wants a slower missile must set both.
+        /// </summary>
+        public void Launch(Targetable target, Vector3 initialVelocity, float damage, float cruiseSpeed)
+        {
+            if (cruiseSpeed > 0f) this.cruiseSpeed = cruiseSpeed;
+            Launch(target, initialVelocity, damage);
+        }
+
         /// <summary>Arms and fires the munition toward the given target with an initial velocity.</summary>
         public void Launch(Targetable target, Vector3 initialVelocity)
         {
@@ -162,8 +173,10 @@ namespace Sim.Runtime
             if (trail == null)
             {
                 trail = gameObject.AddComponent<TrailRenderer>();
-                trail.time = 0.5f;
-                trail.startWidth = 0.3f;
+                // Longer-lived, slightly wider ribbon so an incoming missile reads clearly against
+                // the sky and its threat axis can be judged at a glance. Cosmetic only.
+                trail.time = 1.1f;
+                trail.startWidth = 0.38f;
                 trail.endWidth = 0f;
                 trail.startColor = glow;
                 trail.endColor = new Color(glow.r, glow.g, glow.b, 0f);
@@ -278,7 +291,7 @@ namespace Sim.Runtime
             // Cosmetic: leave a puffed exhaust trail alongside the TrailRenderer. Throttled so the
             // effect budget is not eaten by a single missile.
             _exhaustTimer += dt;
-            if (_exhaustTimer >= 0.08f)
+            if (_exhaustTimer >= 0.06f)
             {
                 _exhaustTimer = 0f;
                 VfxLibrary.Smoke(newPos - transform.forward * 0.8f, 0.35f, 1.2f, 0.7f,
