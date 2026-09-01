@@ -41,6 +41,13 @@ Dağılımdaki binalar tek kutu yerine **üç çok katlı arketip** (depo / blok
 **üç tür** (kozalaklı / geniş yapraklı / çalı) oldu; yaprak ve duvar renkleri kuantalanmış palete
 alındı. `docs/SCENE.md` bulgusu **B-19** kapandı, **B-16**'nın palet yarısı yapıldı. Hiçbir oyun
 değeri değişmedi.
+En son tur bir **oynanış hatası** düzeltildi (kullanıcı: "manevra hareketi ile kaçamıyorum
+roketlerden"). Kök neden X tuşunun uçuş modeline ulaşmaması **değil**, füzenin **tanımı gereği
+yenilemez** olmasıydı: PN komutu hiç kırpılmıyordu, arayıcı başlık güdümü kapıya almıyordu ve güdüm
+aslında PN değil takip (pursuit) rotasıydı. Artık füze **sınırlı bir takipçi** (`MissileAgility` ile
+yük sınırı, kilit kaybında balistik), hava savunması **lead'li** atıyor ve **X** gerçek bir over-g
+kırış yeteneği (2 sn, 6 sn soğuma) — HUD'da `KAÇIŞ MANEVRASI` penceresiyle. Ayrıntı ve ayarlanan
+oyun değerleri `## 9. Değişiklik günlüğü`'nün son maddesinde.
 
 ### Yeni oturum için okuma sırası
 1. Bu bölüm.
@@ -134,7 +141,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `TargetAllocation` | Atıcı-hedef paylaşımı (aynı hedefe boşa ateşi önler). |
 | `EngagementPolicy` | Angajman durum kararı (Devriye/Angaje/Üsse Dönüş). |
 | `FuelTank` | Yakıt/menzil modeli (gaz kesme oranına göre tüketim). |
-| `EvasionSteering` | Tehditten kaçınma yönü (yana kırma + uzaklaşma bileşeni). |
+| `EvasionSteering` | Tehditten kaçınma yönü: `Evade` (yana kırma + uzaklaşma bileşeni) ve `BreakTurn` (tehdit kerterizine **tam dik** — füzeyi traversa alan gerçek sert kırış; iki dik yönden mevcut başa yakın olanı seçer, asla füzeye dönmez). |
 | `WavePlan` | Dalga başına zorluk ölçekleme: her düşman tipinden kaç tane spawn edileceği (saf). |
 | `ScenarioState` | Çok dalgalı senaryo ilerleyişi + kazan/kaybet (dalga temizlenince sonraki, son dalgada zafer). |
 | `GunSystem` | Seri atışlı top/makineli: fişek bandı, atış hızı, etkili menzil, dağılma (saf). |
@@ -142,8 +149,8 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `ThrottleGovernor` | Yakıt durumuna göre kullanılabilir gaz: son %5 rezervde güç azalır, boş depoda sıfırlanır. |
 | `SquadStatus` | Filo muharebe kabiliyeti: hiç drone kalmadıysa veya kalanların hepsinin yakıtı bittiyse etkisiz. |
 | `CountermeasureSystem` | Flare/chaff atıcı: sınırlı hak, salvo arası soğuma, temel aldatma olasılığı. |
-| `MissileThreat` | Gelen füze geometrisi: çarpışmaya kalan süre ve zamanlama+açıya bağlı aldatma şansı. |
-| `EvasiveManeuver` | İsimli kaçış manevraları (Break/Dalış/Tırmanış/Makara) + irtifa duyarlı manevra seçici. |
+| `MissileThreat` | Gelen füze geometrisi: çarpışmaya kalan süre ve zamanlama+açıya bağlı aldatma şansı; sert kırış sırasında atılan salvo `BreakTurnDecoyBonus` (×1.5) ile ödüllendirilir. |
+| `EvasiveManeuver` | İsimli kaçış manevraları (Break/Dalış/Tırmanış/Makara — Break/Dalış/Tırmanış artık `EvasionSteering.BreakTurn` üzerine kurulu) + irtifa duyarlı manevra seçici; `MaxWarningSeconds` (6 sn) ve `BreakWindowSeconds` (2.5 sn) + `InBreakWindow` — kırışın gerçekten işe yaradığı pencere. |
 | `ResupplyPoint` | Üste ikmal döngüsü: üs yarıçapı içinde tam süre bekleyince tamamlanır, erken ayrılınca ilerleme sıfırlanır. |
 | `ScenarioLibrary` | Görev kütüphanesi: her senaryonun başlığı, brifingi, dalga sayısı ve dalga başına düşman kompozisyonu. |
 | `ScenarioKind` | Seçilebilir görev tipleri: Keşif / SEAD / Hava Muharebesi / Karma Savunma. |
@@ -154,6 +161,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `AircraftKind` | Uçulabilir arketipler: Savaş uçağı (`FighterJet`) / SİHA (`Siha`) / Keşif İHA (`Iha`). |
 | `AircraftProfile` | Bir arketipin değiştirilemez performans profili: hız/dönüş/pilot hız tavanı, seyir irtifası, yakıt, top (5 değer), füze (adet + menzil), tespit ve radar menzili, can + seçim ekranı için dört 0–1 gösterge puanı. Her alanın Runtime'da gerçek bir tüketicisi vardır. |
 | `AircraftCatalog` | Üç profilin kataloğu: `All`, `Default` (SİHA temel değerleri), `TryGet`/`GetOrDefault` (bilinmeyen id'de hata değil varsayılan) ve klavyeyle sağa/sola dönen `Cycle`. |
+| `MissileAgility` | Bir füzenin **yapısal çeviklik sınırı**: `maxTurnRate = maxG · 9.81 / hız` (hızlı füze daha az çevik), dönüş yarıçapı ve komut edilen yönü bu hıza göre bir adımda ulaşılabilir yöne kırpan saf `ClampTurn`. Sıfır/negatif girdilerde dönüş yetkisi yok — asla sıfıra bölme. |
 
 ### Sim.Runtime (ince MonoBehaviour'lar)
 | Bileşen | Görevi |
@@ -164,7 +172,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `RadarSensor` | RadarSystem + RCS + EW + TargetTracker ile gerçekçi tespit/izleme. |
 | `RcsComponent` | Hedefin açıya bağlı radar imzası. |
 | `Jammer` | Gemi üstü gürültü karıştırıcı (EW menzil düşürme). |
-| `GuidedMunition` | PN güdümü + arayıcı başlık + balistik ile güdümlü mühimmat, yakınlık tapası. |
+| `GuidedMunition` | PN güdümü + arayıcı başlık + balistik ile güdümlü mühimmat, yakınlık tapası. **Sınırlı takipçi:** güdüm komutu `MissileAgility` ile `maxLoadG`'ye kırpılır, arayıcı başlık güdümü gerçekten kapıya alır (koniden çıkan hedefte `lostLockGraceSeconds` sonra balistik), hedef hızı konum farkından kestirilip **gerçek** PN'e beslenir; `IsGuiding` kancası. |
 | `TargetRegistry` / `Targetable` | Canlı hedeflerin kaydı; controller'lar her kare sorgular. |
 | `SimulationBootstrap` | Play'de sahneyi primitive'lerden kurar (kamera, ışık, zemin, drone'lar, ScenarioController). Üretilen her şey tek bir `Simulation` kökünün altındadır; `Rebuild()` bu kökü yıkıp yeniden kurar (yerinde yeniden başlatma). |
 | `ScenarioController` | Dalga tabanlı senaryo: seçilen göreve göre (`ScenarioLibrary.Composition`) her dalganın düşman karışımını spawn eder ve kazan/kaybet'i yönetir; `BeginMission()` çağrılana kadar bekler. |
@@ -284,6 +292,10 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
 | `a1abae6` | Üç detaylı uçak gövdesi için DEVLOG maddesi. |
 | `eac02eb` | Patriot tipi SAM bataryası (M901 rampa treyleri + faz dizisi radar treyleri + atış kontrol sığınağı) ve detaylandırılmış AAA top kundağı. |
 | `c669709` | Çok katlı bina arketipleri ve üç ağaç türü; yaprak/duvar renkleri kuantalanmış palete alındı (B-16'nın palet yarısı). |
+| `71c7365` | Dünya detayı turu için DEVLOG + SCENE maddeleri. |
+| `27da260` | `MissileAgility` (yapısal dönüş sınırı) + `EvasionSteering.BreakTurn` + kırış penceresi sabitleri + flare/kırış birleşimi; hepsi EditMode testli. |
+| `136690f` | Füze artık **sınırlı bir takipçi**: yük sınırı, arayıcı başlığın güdümü gerçekten kapıya alması, gerçek PN, hava savunmasında lead'li atış, oyuncuda over-g kırış + soğuma. |
+| `f1a2858` | HUD `KAÇIŞ MANEVRASI` ipucu, soğuma/hazır göstergesi ve yenilen atışın tehdit tablosundan düşmesi. |
 
 ---
 
@@ -316,7 +328,11 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
 - **Füze kaçınması:** Gelen güdümlü mühimmatlar `GuidedMunition.Active` üzerinden görülüyor; drone'lar
   `MissileIncoming`/`TimeToImpact` üretiyor, `CountermeasureDispenser` ile flare/chaff atıyor
   (etkisi zamanlama + açıya bağlı, `MissileThreat`) ve `EvasiveManeuver` ile kaçış manevrası yapıyor.
-  Oyuncu aynı araçlara **Q** (flare), **E** (art yakıcı) ve **X** (otomatik kaçış) ile erişiyor.
+  Oyuncu aynı araçlara **Q** (flare), **E** (art yakıcı) ve **X** (sert kırış / kaçış manevrası,
+  2 sn + 6 sn soğuma) ile erişiyor. Füzeler **yenilebilir**: güdüm `maxLoadG`'ye kırpılıyor
+  (SAM 6 g, AAA 9 g, SİHA füzesi 18 g), arayıcı başlık koniden düşen hedefte kilidi bırakıyor ve
+  hava savunması lead'li ateş ettiği için **düz uçan** hedef kesin vuruluyor — kaçmak için
+  çarpışmaya ≤2.5 sn kala kırmak gerekiyor.
 - **Üste ikmal:** Üsse dönen drone `baseRadius` içinde `serviceSeconds` kadar bekleyince yakıt, top,
   füze ve flare ikmali alıp göreve dönüyor (`ResupplyPoint` + `IhaController.Resupply()`); servis
   sırasında üssün üzerinde yavaş tur atıyor. Mühimmatı biten filo yüzünden dalganın kilitlenmesi
@@ -781,3 +797,44 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
   yeni prop kökleri boş `GameObject`. `B-19` bu turda kapandı: `"Radar"` artık ölçeksiz ve
   **döndürülmemiş** bir pivot, 30°'lik yatıklık altındaki `"ArrayMount"` çocuğunda; tabak yalpalamak
   yerine düzgün azimut taraması yapıyor.
+- **Kaçış manevrası düzeltmesi (kullanıcı hata bildirimi: "manevra hareketi ile kaçamıyorum
+  roketlerden"):** Sorun **X tuşunun uçuş modeline ulaşmaması değildi** — `PlayerDroneController`
+  girdiyi zaten `FlyControlled` içinden `SyncFlightTo`'ya taşıyordu. Kök neden **füzenin tanımı
+  gereği yenilemez** olmasıydı; `GuidedMunition`'da üç ayrı kusur:
+  **(1) Dönüş sınırı yoktu.** PN ivmesi doğrudan hıza ekleniyor, ardından hız her adımda seyir
+  hızına yeniden normalize ediliyordu — yani her ivme komutu **bedava bir yön değişimine**
+  dönüşüyordu. Oyuncu ne kadar görüş hattı açısal hızı üretirse üretsin, füze bir karede eşliyordu.
+  **(2) Arayıcı başlık hiçbir şeyi kapıya almıyordu.** `SeekerGimbal.Track()`'in dönüş değeri
+  atılıyordu; `maxOffBoresightDeg`/`maxSlewRateDeg` süstü, füze kilidi hiç kaybetmiyordu.
+  **(3) Güdüm aslında PN değildi.** `relVel = Vector3.zero - _velocity` (hedef sabit varsayılmış)
+  yasayı bir **takip (pursuit)** rotasına indirgiyor; onun yük talebi hedef düz uçarken de sert
+  kırarken de `1/menzil` gibi büyüdüğü için hiçbir yük sınırı ikisini ayırt edemezdi.
+  **Core (testli):** yeni `MissileAgility` (`maxTurnRate = maxG·9.81/hız`, dönüş yarıçapı, saf
+  `ClampTurn`), `EvasionSteering.BreakTurn` (tehdit kerterizine tam dik gerçek kırış — PN'i yenen
+  geometri budur; `Evade` dokunulmadı), `EvasiveManeuver`'a `MaxWarningSeconds`/`BreakWindowSeconds`
+  + `InBreakWindow` ve Break/Dalış/Tırmanış'ın gerçek kırış üzerine kurulması,
+  `MissileThreat.DecoyChance(..., breaking)` + `BreakTurnDecoyBonus`.
+  **Runtime:** `GuidedMunition` artık **sınırlı bir takipçi** — güdüm `maxLoadG`'ye kırpılıyor,
+  arayıcı başlık `lostLockGraceSeconds` (0.4 sn) boyunca hedefi tutamazsa kilit kopuyor ve mühimmat
+  1.5 sn balistik süzülüp kendini imha ediyor (`IsGuiding`; yenilen atış HUD tehdit tablosundan ve
+  füze ikazından **anında** düşüyor), hedef hızı konum farkından kestirilip gerçek PN'e besleniyor.
+  `AirDefenseSite` artık **önleme (lead) noktasına** ateş ediyor (`Ballistics.ComputeInterceptPoint`)
+  ve kendi yük sınırını fırlatmada geçiriyor — lead olmadan yük sınırı **düz uçan** hedefi de
+  ıskalatırdı; lead ile düz-seyir garantili bir çarpışma rotası olur ve yalnız gerçek bir manevra
+  çözümü bozar. `PlayerDroneController`'da **X gerçek bir yetenek**: burun, traversa yönüne pilotun
+  normal dönüş hızının **3 katıyla** (over-g atağı) salınıyor (eski kod başı **anında** çeviriyordu —
+  hem bedavaydı hem de ekranda hiçbir şey olmuyormuş gibi görünüyordu), süre 1.5 → **2 sn**, üstüne
+  **6 sn soğuma**. Yeni `IhaController.Breaking` (kimi steer ediyorsa o yazar) ile kırış sırasında
+  atılan flare daha değerli.
+  **Ayarlanan oyun değerleri (bilinçli, yalnız bu düzeltmenin gerektirdikleri):** SAM mühimmatı
+  **6 g** @85 m/s (~40°/s), AAA mühimmatı **9 g** @95 m/s (~55°/s), SİHA'nın kendi havadan-yere
+  füzesi varsayılan **18 g** @180 m/s (~57°/s — sabit yer hedeflerine karşı fazlasıyla yeterli,
+  bugünkü öldürücülüğü korur); kaçış manevrası süresi 1.5 → 2 sn + 6 sn soğuma.
+  **Oyuncu artık ne yapmalı:** düz uçarsan lead'li atış seni **kesin** vurur. `FÜZE!` ikazı çıkınca
+  HUD'daki **KAÇIŞ MANEVRASI** satırını izle: `BEKLE` (amber) iken erken kırma — füze rahat bir
+  yükle rotasını düzeltir; satır **kırmızı `ŞİMDİ! [X]`** olduğunda (çarpışmaya ≤2.5 sn) **X**'e bas,
+  ideal olarak **Q** flare ile birlikte (kırış sırasındaki salvo ×1.5 değerinde). Uçak traversa
+  salınır, füzenin talep ettiği yük yapısal sınırını aşar ve arayıcı başlık koniden düşer.
+  **HUD:** `KAÇIŞ MANEVRASI` ipucu (BEKLE / ŞİMDİ! [X] / UYGULANIYOR / DOLUYOR n.n sn) + şarj
+  çubuğu, pilot panelindeki `KAÇIŞ` çipi durum ve soğuma gösteriyor, kontrol şeridi
+  `X: KAÇIŞ MANEVRASI (SERT KIRIŞ)`. Eşik HUD'da sabit yazılmadı — `EvasiveManeuver`'dan okunuyor.
