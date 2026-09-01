@@ -131,6 +131,11 @@ namespace Sim.Runtime
             if (_visualsBuilt) return;
             _visualsBuilt = true;
 
+            // The launchers spawn us from a primitive, so we arrive with a collider. Nothing in the
+            // simulation uses physics (hits are distance checks in FixedUpdate), and a moving collider
+            // with no Rigidbody makes PhysX rebuild its static broadphase every frame — drop it.
+            VehicleModelBuilder.StripCollider(gameObject);
+
             Color glow = new Color(1f, 0.85f, 0.2f);
 
             // Bright, self-lit body so the munition pops against the ground/sky.

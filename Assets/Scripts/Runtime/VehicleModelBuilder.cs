@@ -157,12 +157,26 @@ namespace Sim.Runtime
             return model;
         }
 
-        /// <summary>Disables the root primitive's MeshRenderer (its collider is deliberately kept).</summary>
+        /// <summary>
+        /// Disables the root primitive's MeshRenderer and destroys its collider. The simulation has no
+        /// Rigidbody, no raycasts and no collision callbacks — every hit is a distance check — so a
+        /// root collider would only cost PhysX a static-broadphase rebuild every frame the object
+        /// moves.
+        /// </summary>
         public static void HideRootMesh(GameObject root)
         {
             if (root == null) return;
             var renderer = root.GetComponent<MeshRenderer>();
             if (renderer != null) renderer.enabled = false;
+            StripCollider(root);
+        }
+
+        /// <summary>Destroys the GameObject's collider, if it has one. Null-safe.</summary>
+        public static void StripCollider(GameObject go)
+        {
+            if (go == null) return;
+            var c = go.GetComponent<Collider>();
+            if (c != null) UnityEngine.Object.Destroy(c);
         }
 
         // ---------------------------------------------------------------- helpers
