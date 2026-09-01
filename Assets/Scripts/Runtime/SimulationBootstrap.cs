@@ -244,6 +244,15 @@ namespace Sim.Runtime
             // Cosmetic: hide the placeholder capsule and build a recon-UAV silhouette in its place.
             VehicleModelBuilder.HideRootMesh(go);
             VehicleModelBuilder.BuildReconUav(go.transform, color);
+
+            // Radar signature, so hostile sensors see these wingmen for what they are: recon İHA
+            // airframes, i.e. the catalogue's smallest signature. Added BEFORE the Targetable so the
+            // registry's lazy component lookup finds it on the very first scan. Hostiles have carried
+            // an RcsComponent since the scenario system was written; this is the friendly half that
+            // was missing, and it makes the two sides symmetric.
+            go.AddComponent<RcsComponent>()
+              .Configure(AircraftCatalog.GetOrDefault(AircraftCatalog.IhaId).RadarSignature);
+
             MarkFriendly(go);
 
             // Light defensive gun, added before the controller so its Start() picks it up.
@@ -267,7 +276,7 @@ namespace Sim.Runtime
 
         /// <summary>
         /// Spawns the PLAYER's aircraft from the archetype picked on the mission-select screen: flight
-        /// envelope, fuel, gun, missiles, sensors and hit points all come from the
+        /// envelope, fuel, gun, missiles, sensors, RADAR SIGNATURE and hit points all come from the
         /// <see cref="AircraftProfile"/>, applied through the same serialized fields / Configure calls
         /// the fixed spawns always used.
         ///
@@ -316,6 +325,13 @@ namespace Sim.Runtime
                     VehicleModelBuilder.BuildArmedUav(go.transform, color);
                     break;
             }
+
+            // Radar signature of the CHOSEN archetype (jet 4 m², SİHA 1 m², recon İHA 0.25 m²).
+            // This is what makes the electronic-warfare layer matter to the player: hostile sensors
+            // read it out of the detection snapshot and scale their own detection range by its fourth
+            // root, so the jet is picked up further out than the SİHA and the recon İHA closer in.
+            // Added BEFORE the Targetable so the registry's lazy lookup finds it on the first scan.
+            go.AddComponent<RcsComponent>().Configure(profile.RadarSignature);
 
             MarkFriendly(go, profile.Health);
 

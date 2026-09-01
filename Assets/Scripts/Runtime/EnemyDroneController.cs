@@ -114,9 +114,16 @@ namespace Sim.Runtime
                 MaxTurnRateDeg = maxTurnRateDeg
             };
 
+            // SIGNATURE-AWARE: detectionRange is the reach against a 1 m² (SİHA-baseline) target.
+            // Each candidate in the snapshot carries its own RCS and jamming strength, which
+            // Sim.Core.SignatureDetection turns into that candidate's own detection range — so this
+            // fighter picks the player's jet up well before it sees a recon İHA, and loses the
+            // contact (HasTarget false, DetectedId -1, gunnery skipped below) as soon as the target
+            // slips back outside ITS range.
             _targeting = new TargetingSystem
             {
                 DetectionRange = detectionRange,
+                ReferenceRcs = SignatureDetection.BaselineRcs,
                 FieldOfViewDeg = fovDeg
             };
 

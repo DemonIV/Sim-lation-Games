@@ -96,7 +96,13 @@ namespace Sim.Runtime
             {
                 _targeting = new TargetingSystem
                 {
+                    // SIGNATURE-AWARE: this is the range against a 1 m² (SİHA-baseline) target. Each
+                    // candidate in the snapshot carries its own RCS and jamming strength, and
+                    // Sim.Core.SignatureDetection scales this range by the fourth root of the ratio —
+                    // so the jet is picked up ~41 % further out and the recon İHA ~29 % closer in,
+                    // while the SİHA is engaged at exactly the distance it always was.
                     DetectionRange = detectionRange,
+                    ReferenceRcs = SignatureDetection.BaselineRcs,
                     FieldOfViewDeg = 360f,      // omnidirectional scan: any bearing passes the FOV test
                     LockTimeSeconds = lockTimeSeconds
                 };
@@ -124,6 +130,13 @@ namespace Sim.Runtime
             _targeting.UpdateLock(found, detectedId, dt);
             CurrentTargetId = found ? detectedId : -1;
 
+            // LOSING the contact really drops the engagement: UpdateLock(false, ...) clears
+            // HasDetection and zeroes LockProgress, CurrentTargetId goes to -1 (so the turret visual
+            // stops tracking), and returning here skips the threat warning AND every firing path
+            // below. A stealthy drone that slips outside its own (signature-scaled) detection range
+            // therefore makes this site start its lock from scratch when it reappears, rather than
+            // latching on. Note this also caps the effective FIRE range: the site cannot shoot at
+            // something it cannot see, whatever fireRange says.
             if (!found) return;
 
             // Warn the engaged drone so it can begin evading (helps show two-sided behaviour).

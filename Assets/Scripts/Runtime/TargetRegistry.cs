@@ -57,8 +57,11 @@ namespace Sim.Runtime
         }
 
         /// <summary>
-        /// Cached <see cref="Jammer"/> on this object, or null when it has none. Nothing in the scene
-        /// currently mounts a jammer, so this stays null and the radar's jamming path costs nothing.
+        /// Cached <see cref="Jammer"/> on this object, or null when it has none. Read by BOTH sensor
+        /// paths — the friendly <see cref="RadarSensor"/> and the hostile detection snapshot
+        /// (<see cref="TargetRegistry.GetSnapshot(int, List{DetectableTarget})"/>) — so mounting a
+        /// jammer on any unit shortens every hostile and friendly radar's reach against it. Nothing
+        /// in the scene currently mounts one, so this stays null and the jamming path costs nothing.
         /// </summary>
         public Jammer Jammer
         {
@@ -203,6 +206,16 @@ namespace Sim.Runtime
         /// Allocation-free variant of <see cref="GetSnapshot(int)"/> for per-frame callers: fills the
         /// caller-owned <paramref name="buffer"/> (cleared first) instead of allocating a new list on
         /// every call. Same filtering, same order.
+        ///
+        /// <para>
+        /// Every entry carries the unit's RADAR SIGNATURE and jamming strength as well as its
+        /// position, so a <see cref="Sim.Core.TargetingSystem"/> scanning this snapshot detects a big
+        /// airframe further out than a small one (see <see cref="Sim.Core.SignatureDetection"/>). A
+        /// unit with no <see cref="RcsComponent"/> reports the 1 m² baseline, which is exactly the
+        /// range every sensor is configured against — so an un-tagged unit behaves as it always did.
+        /// Both component references are the ones <see cref="Targetable"/> already caches, so this
+        /// costs a field read per unit.
+        /// </para>
         /// </summary>
         public static void GetSnapshot(int factionFilter, List<DetectableTarget> buffer)
         {
@@ -217,7 +230,17 @@ namespace Sim.Runtime
                 if (t == null) continue;
                 if (t.Faction != factionFilter) continue;
                 if (t.Health != null && t.Health.IsDestroyed) continue;
-                buffer.Add(new DetectableTarget(t.Id, t.transform.position, Vector3.zero));
+
+                // Unity's overloaded == is what reports a destroyed/absent component here, so both
+                // checks are written out explicitly (never ?.).
+                RcsComponent rcs = t.Rcs;
+                float signature = rcs == null ? SignatureDetection.BaselineRcs : rcs.NominalRcs;
+
+                Jammer jammer = t.Jammer;
+                float jamming = jammer == null ? 0f : jammer.Strength;
+
+                buffer.Add(new DetectableTarget(t.Id, t.transform.position, Vector3.zero,
+                                                signature, jamming));
             }
         }
 
