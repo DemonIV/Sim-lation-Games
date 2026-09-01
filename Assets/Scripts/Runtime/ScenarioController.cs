@@ -107,7 +107,7 @@ namespace Sim.Runtime
             }
 
             // 2. Count live hostiles (Faction 1) and advance the scenario.
-            int live = TargetRegistry.GetSnapshot(1).Count;
+            int live = TargetRegistry.CountAlive(1);
             LiveEnemies = live;
             _state.UpdateEnemies(live);
 

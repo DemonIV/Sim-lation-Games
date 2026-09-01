@@ -16,6 +16,9 @@ namespace Sim.Runtime
     /// </summary>
     public class GunTurret : MonoBehaviour
     {
+        // Reusable target-scan buffer (see FindTargetNearRay): filled per call instead of allocating.
+        private readonly List<DetectableTarget> _scanBuffer = new List<DetectableTarget>();
+
         [Header("Gun")]
         [SerializeField] private int magazineSize = 300;
         [SerializeField] private float roundsPerSecond = 10f;
@@ -171,7 +174,9 @@ namespace Sim.Runtime
             Targetable best = null;
             float bestAlong = float.MaxValue;
 
-            List<DetectableTarget> snapshot = TargetRegistry.GetSnapshot(enemyFaction);
+            // Reused buffer: this runs on the player's aim ray every frame he holds fire.
+            List<DetectableTarget> snapshot = _scanBuffer;
+            TargetRegistry.GetSnapshot(enemyFaction, snapshot);
             for (int i = 0; i < snapshot.Count; i++)
             {
                 Vector3 to = snapshot[i].Position - origin;

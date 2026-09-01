@@ -54,6 +54,9 @@ namespace Sim.Runtime
         // One salvo per threat: latched while a munition is inbound, cleared when the sky is clear.
         private bool _flaredThisThreat;
 
+        // Reusable detection buffer, refilled every frame instead of allocating a new snapshot list.
+        private readonly List<DetectableTarget> _scanBuffer = new List<DetectableTarget>();
+
         // Slowly advancing bearing used for the search orbit, in radians.
         private float _wanderAngle;
 
@@ -131,9 +134,9 @@ namespace Sim.Runtime
             if (_gun != null) _gun.Tick(dt);
             if (_cm != null) _cm.Tick(dt);
 
-            // Sensing: nearest friendly drone within range and FOV.
-            List<DetectableTarget> snapshot = TargetRegistry.GetSnapshot(targetFaction);
-            bool found = _targeting.TryDetect(pos, _flight.Forward, snapshot, out DetectableTarget best);
+            // Sensing: nearest friendly drone within range and FOV (reused buffer, no per-frame alloc).
+            TargetRegistry.GetSnapshot(targetFaction, _scanBuffer);
+            bool found = _targeting.TryDetect(pos, _flight.Forward, _scanBuffer, out DetectableTarget best);
             HasTarget = found;
             DetectedId = found ? best.Id : -1;
             _targeting.UpdateLock(found, DetectedId, dt);

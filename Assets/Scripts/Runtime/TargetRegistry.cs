@@ -158,18 +158,51 @@ namespace Sim.Runtime
         /// </summary>
         public static List<DetectableTarget> GetSnapshot(int factionFilter)
         {
-            Prune();
-
             var result = new List<DetectableTarget>();
+            GetSnapshot(factionFilter, result);
+            return result;
+        }
+
+        /// <summary>
+        /// Allocation-free variant of <see cref="GetSnapshot(int)"/> for per-frame callers: fills the
+        /// caller-owned <paramref name="buffer"/> (cleared first) instead of allocating a new list on
+        /// every call. Same filtering, same order.
+        /// </summary>
+        public static void GetSnapshot(int factionFilter, List<DetectableTarget> buffer)
+        {
+            if (buffer == null) return;
+
+            Prune();
+            buffer.Clear();
+
             for (int i = 0; i < All.Count; i++)
             {
                 Targetable t = All[i];
                 if (t == null) continue;
                 if (t.Faction != factionFilter) continue;
                 if (t.Health != null && t.Health.IsDestroyed) continue;
-                result.Add(new DetectableTarget(t.Id, t.transform.position, Vector3.zero));
+                buffer.Add(new DetectableTarget(t.Id, t.transform.position, Vector3.zero));
             }
-            return result;
+        }
+
+        /// <summary>
+        /// Number of live targetables in the given faction, counted without building a snapshot.
+        /// Matches <c>GetSnapshot(faction).Count</c> exactly.
+        /// </summary>
+        public static int CountAlive(int factionFilter)
+        {
+            Prune();
+
+            int count = 0;
+            for (int i = 0; i < All.Count; i++)
+            {
+                Targetable t = All[i];
+                if (t == null) continue;
+                if (t.Faction != factionFilter) continue;
+                if (t.Health != null && t.Health.IsDestroyed) continue;
+                count++;
+            }
+            return count;
         }
 
         /// <summary>

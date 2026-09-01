@@ -11,6 +11,9 @@ namespace Sim.Runtime
     /// </summary>
     public class IhaController : MonoBehaviour
     {
+        // Reusable detection buffer (see RunSensing): refilled per frame instead of allocating.
+        private readonly List<DetectableTarget> _sensingBuffer = new List<DetectableTarget>();
+
         [Header("Flight")]
         [SerializeField] private float maxSpeed = 30f;
         [SerializeField] private float maxAccel = 8f;
@@ -581,8 +584,9 @@ namespace Sim.Runtime
             EnsureInitialized();
             if (_targeting == null || _flight == null) return;
 
-            List<DetectableTarget> snapshot = TargetRegistry.GetSnapshot(hostileFaction);
-            bool found = _targeting.TryDetect(transform.position, _flight.Forward, snapshot, out DetectableTarget best);
+            // Reused buffer: sensing runs every frame for every drone.
+            TargetRegistry.GetSnapshot(hostileFaction, _sensingBuffer);
+            bool found = _targeting.TryDetect(transform.position, _flight.Forward, _sensingBuffer, out DetectableTarget best);
 
             HasTarget = found;
             DetectedId = found ? best.Id : -1;

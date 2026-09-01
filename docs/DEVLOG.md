@@ -18,7 +18,9 @@ Simülasyon **oynanabilir ve şimdilik özellik olarak tamam**: dalga tabanlı s
 pilot modu, top/füze/karşı tedbirler ve elektronik harp, görsel yenileme ve tasarım mockup'ından
 uygulanmış HUD hazır. Son yapılan iş **çalışma zamanı sahnesi analizi** (`docs/SCENE.md`) ve oradan
 çıkan iki bulgunun düzeltilmesi oldu: **B-01** (yerinde yeniden başlatma) ve **B-03** (skorun görev
-boyunca birikmesi).
+boyunca birikmesi). Bu turda `docs/SCENE.md`'nin kalan yüksek/orta öncelikli bulguları kapatıldı:
+**B-08** (rastgelelik), **B-04** (materyal sızıntısı + izli mermi bütçesi), **B-02** (radar taraması),
+**B-07/B-09** (spawn yerleşimi), **B-05** (kullanılmayan collider'lar), **B-06** (kare başına tahsis).
 
 ### Yeni oturum için okuma sırası
 1. Bu bölüm.
@@ -35,6 +37,9 @@ boyunca birikmesi).
 - **Depoda `.unity` sahne varlığı yok.** Sahne çalışma zamanında `SimulationBootstrap.Awake` içinde
   kurulur. Kullanıcının tek seferlik kurulumu: boş sahne → boş GameObject → `SimulationBootstrap`
   ekle → Play.
+- **Sahne gerçek bir sahne varlığı olarak kaydedilmeli** (ör. `Assets/Main.unity`): kaydedilmemiş
+  "Untitled" sahne `SimulationBootstrap` nesnesini kaybeder ve Play tuşuna basıldığında hiçbir şey
+  olmaz.
 - **Build Settings sahne listesi boş** olduğu için yeniden başlatma `SceneManager.LoadScene`
   **kullanamaz**; `SimulationBootstrap.Rebuild()` ile `Simulation` kökü yıkılıp yeniden kurulur.
 - **Render hattı Built-in**, URP değil. Koddaki URP shader yedekleri ölü koddur.
@@ -47,15 +52,12 @@ boyunca birikmesi).
 ### Açık işler (öncelik sırasıyla)
 | # | Bulgu | İş |
 |---|---|---|
-| 1 | **B-02** | `RadarSensor.Update` her kare aday başına `TargetRegistry.FindById` çağırıyor → O(n²) tarama; ayrıca hiçbir nesneye `Jammer` eklenmediği için o `GetComponent` asla isabet etmiyor. |
-| 2 | **B-04** | `TracerEffect` mermi başına `Material` sızdırıyor (+ `ExplosionEffect._material` serbest bırakılmıyor); izli mermiler VFX bütçesine de tabi değil. |
-| 3 | **B-06** | `GetSnapshot` + `UpdateAllocation` kaynaklı kare başına 15+ `List` tahsisi. |
-| 4 | **B-07** | Yer düşmanları pistin üstünde/hangarın içinde doğabiliyor: keep-out yarıçapı üssün ayak izinden küçük, spawn'lar arası ayrışma kontrolü yok. |
-| 5 | **B-08** | `ScatterProps` içindeki `Random.InitState(12345)` geri yüklenmiyor → her koşu birebir aynı. |
-| 6 | **B-09** | Avcılar aynı irtifada doğup aynı loiter yörüngesini paylaşıyor → üst üste biniyorlar. |
-| 7 | **B-05** | Proje hiç fizik kullanmadığı hâlde drone/düşman/mühimmat köklerinde collider duruyor; ayrıca kalan düşük öncelikli bulgular. |
-| 8 | — | **Bilinen küçük hata:** görev kazanıldıktan sonra `MissionState.ElapsedTime` saymaya devam ediyor (director'ın örneği bilerek hiç bitmiyor); debrief saati director tarafında durdurulmalı. |
-| 9 | — | **Henüz karar verilmedi:** gerçek 3D modeller (render hattı kararı + çalışan bir glTF içe aktarıcı gerekir), ses, zorluk seviyeleri. |
+| 1 | **B-10…B-19** | `docs/SCENE.md`'deki kalan **düşük** öncelikli bulgular (ölü `ApplyColor`, üs konumu ile `BasePosition` uyumsuzluğu, ölü alanlar, waypoint GameObject'leri, sis/dünya sınırı, draw call/materyal birleştirme, skybox materyali, HUD string'leri, radar tabağı ekseni). |
+| 2 | — | **Bilinen küçük hata:** görev kazanıldıktan sonra `MissionState.ElapsedTime` saymaya devam ediyor (director'ın örneği bilerek hiç bitmiyor); debrief saati director tarafında durdurulmalı. |
+| 3 | — | **Henüz karar verilmedi:** gerçek 3D modeller (render hattı kararı + çalışan bir glTF içe aktarıcı gerekir), ses, zorluk seviyeleri. |
+
+> **B-01…B-09 kapandı.** Yüksek/orta öncelikli bulguların tamamı çözüldü; ayrıntı için
+> `docs/SCENE.md` → `## 5. Bulgular` (✅ işaretli satırlar).
 
 ### Çalışma yöntemi
 - Küçük dilimler hâlinde çalış; her dilim kendi başına derlenebilir olmalı.
@@ -171,7 +173,9 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 ## 4. Nasıl çalıştırılır
 1. Doğru klasörde: `git pull origin claude/slack-session-f6uh9g`
 2. Unity Hub → 6000.5.9f1 ile projeyi aç (Package Manager güncelleme sorarsa kabul et).
-3. Boş sahnede boş bir GameObject'e `SimulationBootstrap` bileşenini ekle → **Play**.
+3. Boş sahnede boş bir GameObject'e `SimulationBootstrap` bileşenini ekle → sahneyi **gerçek bir
+   sahne varlığı olarak kaydet** (ör. `Assets/Main.unity`; kaydedilmemiş "Untitled" sahne bu nesneyi
+   kaybeder ve Play hiçbir şey yapmaz) → **Play**.
 4. Sahne kendini kurar ve **görev seçim menüsü** açılır (sim duraklatılmış olarak bekler).
    Bir görev seç → görev başlar. HUD sol üstte görev/skor/temasları gösterir. **M** menüye döner.
 
@@ -225,6 +229,12 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `ffbdadc` | **B-01:** yeniden başlatma artık sahne yüklemiyor, `SimulationBootstrap.Rebuild()` ile yerinde yeniden kuruluyor. |
 | `7a0921b` | **B-03:** görev skoru artık tüm görev boyunca birikiyor (`MissionState` saf sayaç). |
 | `bu tur` | DEVLOG'a devir-teslim bölümü: sıfırdan başlayan bir oturum sohbet geçmişi olmadan devam edebilir. |
+| `535227b` | **B-08:** prop dağıtımından sonra global `Random.state` geri yükleniyor. |
+| `64a0a9e` | **B-04:** efekt materyalleri yok ediliyor (paylaşımlı izli mermi materyali) + izli mermiler VFX bütçesine tabi. |
+| `44abd2b` | **B-02:** radar adayları kare başına tek geçişte çözülüyor, `RcsComponent`/`Jammer` önbellekli. |
+| `42c1ee9` | **B-07 + B-09:** düşman spawn'ları üssün dışında ve birbirinden ayrık; avcılar farklı irtifa/loiter yörüngesi alıyor. |
+| `82bee03` | **B-05:** spawn edilen nesnelerden kullanılmayan collider'lar kaldırıldı. |
+| `bu tur` | **B-06:** kare başına snapshot tahsisleri yerine yeniden kullanılan tamponlar (+ DEVLOG/SCENE güncellemesi). |
 
 ---
 
@@ -490,3 +500,31 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   (B-03). `Core/MissionState.cs` ve testleri **değişmedi**; HUD'un `İMHA`/`KAYIP` hücreleri
   anlamsız paydaları (`/0`, `/2147483647`) göstermemek için yalnız sayacı yazıyor. **Oyun
   değerleri (menzil, hasar, can, irtifa, spawn konumları) değişmedi.**
+- **SCENE.md bulgu temizliği (B-02, B-04, B-05, B-06, B-07, B-08, B-09):** Altı ayrı dilim hâlinde,
+  her biri kendi başına derlenebilir şekilde:
+  **(B-08)** `EnvironmentBuilder.ScatterProps` sabit tohumu artık yereldir — `Random.state`
+  kaydedilip dağıtım sonunda geri yükleniyor, böylece proplar tekrarlanabilir kalırken düşman
+  yerleşimi/isabet zarları/radar gürültüsü her koşuda yeniden rastgele.
+  **(B-04)** İzli mermiler mermi başına `Material` sızdırmıyor: yeni `MaterialLibrary.CreateUnlit`
+  renk başına önbellekli bir materyal veriyor ve `LineRenderer.sharedMaterial`'a atanıyor; ayrıca
+  `TracerEffect` `VfxLibrary` bütçesine tabi (bütçe dolduğunda hiç spawn etmez, `OnDestroy`'da
+  slotu bırakır) ve `ExplosionEffect` kendi `_material`'ını `OnDestroy`'da yok ediyor.
+  **(B-02)** `RadarSensor.Update` snapshot + aday başına `FindById` yerine tek bir `Prune()` ve
+  `TargetRegistry.All` üzerinde tek geçiş yapıyor; `RcsComponent`/`Jammer` referansları
+  `Targetable.Rcs`/`Targetable.Jammer` önbellekli özelliklerinden okunuyor (jamming yolu duruyor,
+  jammer yokken maliyeti sıfır). Tespit davranışı ve tüm ayar değerleri aynı.
+  **(B-07 + B-09)** Yerleşim düzeltmesi: `spawnMinRadius` 15 → 32 m (üs ayak izi ~22 m) ve
+  `RandomScatterPosition` dalga içi ≥12 m ayrışma için reddetme örneklemesi yapıyor (24 deneme
+  sınırı + geri düşüş, sonsuz döngü yok); avcılar seyir irtifası çevresinde ±2.4 m kaydırılmış
+  irtifalarda doğuyor ve `EnemyDroneController.SetLoiterOffsets` ile her biri ayrı loiter
+  yarıçapı/fazı alıyor. Menzil/hasar/can/atış hızı/seyir-minimum irtifa değerlerine dokunulmadı.
+  **(B-05)** Projede `Rigidbody`, raycast ve çarpışma geri çağrısı bulunmadığı doğrulandıktan sonra
+  kök collider'lar da kaldırıldı: `VehicleModelBuilder.HideRootMesh` artık `StripCollider`'ı
+  çağırıyor ve `GuidedMunition.SetupVisuals` mühimmatın kendi collider'ını düşürüyor.
+  **(B-06)** Kare başına tahsisler: `TargetRegistry.GetSnapshot(faction, buffer)` ve tahsissiz
+  `CountAlive(faction)` eklendi; `IhaController`, `EnemyDroneController`, `AirDefenseSite`,
+  `GunTurret` birer yeniden kullanılan tampon tutuyor; `ScenarioController`/`SimulationDirector`
+  yalnız sayım gereken yerlerde `CountAlive` kullanıyor; `SimulationDirector.UpdateAllocation` dört
+  tamponunu ve yeni `TargetAllocation.Assign(shooters, targets, List<int> result)` aşırı yüklemesini
+  yeniden kullanıyor (Core tarafında paylaşılan scratch tamponlar + dört yeni EditMode testi).
+  Tahsis eden eski aşırı yüklemeler soğuk yollar için korundu; davranış birebir aynı.

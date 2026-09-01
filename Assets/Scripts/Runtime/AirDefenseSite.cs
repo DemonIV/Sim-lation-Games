@@ -16,6 +16,9 @@ namespace Sim.Runtime
     [RequireComponent(typeof(Targetable))]
     public class AirDefenseSite : MonoBehaviour
     {
+        // Reusable detection buffer, refilled every frame instead of allocating a new snapshot list.
+        private readonly List<DetectableTarget> _scanBuffer = new List<DetectableTarget>();
+
         [Header("Sensor / Engagement")]
         [SerializeField] private float detectionRange = 140f;
         [SerializeField] private float fireRange = 110f;
@@ -92,8 +95,9 @@ namespace Sim.Runtime
             _weapon.Tick(dt);
 
             // Scan for the nearest friendly drone. With a 360° FOV any boresight works.
-            List<DetectableTarget> snapshot = TargetRegistry.GetSnapshot(friendlyFaction);
-            bool found = _targeting.TryDetect(self, Vector3.up, snapshot, out DetectableTarget best);
+            // Reused buffer: every site scans every frame.
+            TargetRegistry.GetSnapshot(friendlyFaction, _scanBuffer);
+            bool found = _targeting.TryDetect(self, Vector3.up, _scanBuffer, out DetectableTarget best);
 
             int detectedId = found ? best.Id : -1;
             _targeting.UpdateLock(found, detectedId, dt);

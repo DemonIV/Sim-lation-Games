@@ -39,6 +39,14 @@ namespace Sim.Runtime
         /// <summary>All friendly drone controllers (İHA + SİHA), for HUD per-drone state.</summary>
         public IReadOnlyList<IhaController> Friendlies => _friendlies;
 
+        // Reusable per-frame buffers for UpdateAllocation: filled and cleared every frame instead of
+        // allocating four fresh collections per frame.
+        private readonly List<DetectableTarget> _hostileBuffer = new List<DetectableTarget>();
+        private readonly List<SihaController> _shooters = new List<SihaController>();
+        private readonly List<Vector3> _shooterPositions = new List<Vector3>();
+        private readonly List<Vector3> _targetPositions = new List<Vector3>();
+        private readonly List<int> _assignment = new List<int>();
+
         private void Start()
         {
             // This instance is a pure STAT/SCORE tracker: win/lose lives in ScenarioController, which
@@ -55,9 +63,10 @@ namespace Sim.Runtime
             // ScenarioController.Update, so the field is still empty at this point.
             Mission = new MissionState(0, int.MaxValue);
 
-            // Count starting populations. GetSnapshot already filters out destroyed targets.
-            HostilesAlive = TargetRegistry.GetSnapshot(1).Count;
-            FriendliesAlive = TargetRegistry.GetSnapshot(0).Count;
+            // Count starting populations. CountAlive applies the same filtering as GetSnapshot
+            // (destroyed targets excluded) without building a list.
+            HostilesAlive = TargetRegistry.CountAlive(1);
+            FriendliesAlive = TargetRegistry.CountAlive(0);
             _prevHostilesAlive = HostilesAlive;
             _prevFriendliesAlive = FriendliesAlive;
 
@@ -80,9 +89,9 @@ namespace Sim.Runtime
             float dt = Time.deltaTime;
             Mission.Tick(dt);
 
-            // Recompute current alive counts.
-            HostilesAlive = TargetRegistry.GetSnapshot(1).Count;
-            FriendliesAlive = TargetRegistry.GetSnapshot(0).Count;
+            // Recompute current alive counts (allocation-free: only the counts are needed here).
+            HostilesAlive = TargetRegistry.CountAlive(1);
+            FriendliesAlive = TargetRegistry.CountAlive(0);
 
             // Any DROP in hostile count is one or more kills. When a new wave spawns the count INCREASES,
             // so hostilesLost goes negative and the loop simply does not run — no negative kills are
@@ -120,36 +129,36 @@ namespace Sim.Runtime
         /// </summary>
         private void UpdateAllocation()
         {
-            List<DetectableTarget> hostiles = TargetRegistry.GetSnapshot(1);
+            TargetRegistry.GetSnapshot(1, _hostileBuffer);
 
             // Only armed drones (SİHA) receive attack assignments. Recon İHAs are left with
             // AssignedTargetId == -1 so they continue their patrol.
-            var shooters = new List<SihaController>(_friendlies.Count);
+            _shooters.Clear();
             for (int i = 0; i < _friendlies.Count; i++)
             {
                 // Unity's == first: the cached list can hold drones destroyed since the last refresh,
                 // and 'is' alone would happily match such a dead wrapper.
                 IhaController c = _friendlies[i];
                 if (c == null) continue;
-                if (c is SihaController siha) shooters.Add(siha);
+                if (c is SihaController siha) _shooters.Add(siha);
             }
 
-            var shooterPositions = new List<Vector3>(shooters.Count);
-            for (int i = 0; i < shooters.Count; i++)
-                shooterPositions.Add(shooters[i].transform.position);
+            _shooterPositions.Clear();
+            for (int i = 0; i < _shooters.Count; i++)
+                _shooterPositions.Add(_shooters[i].transform.position);
 
-            var targetPositions = new List<Vector3>(hostiles.Count);
-            for (int i = 0; i < hostiles.Count; i++)
-                targetPositions.Add(hostiles[i].Position);
+            _targetPositions.Clear();
+            for (int i = 0; i < _hostileBuffer.Count; i++)
+                _targetPositions.Add(_hostileBuffer[i].Position);
 
-            int[] assignment = TargetAllocation.Assign(shooterPositions, targetPositions);
+            TargetAllocation.Assign(_shooterPositions, _targetPositions, _assignment);
 
-            for (int i = 0; i < shooters.Count; i++)
+            for (int i = 0; i < _shooters.Count; i++)
             {
-                SihaController c = shooters[i];
+                SihaController c = _shooters[i];
                 if (c == null) continue;
-                int a = assignment[i];
-                c.AssignedTargetId = (a >= 0 && a < hostiles.Count) ? hostiles[a].Id : -1;
+                int a = _assignment[i];
+                c.AssignedTargetId = (a >= 0 && a < _hostileBuffer.Count) ? _hostileBuffer[a].Id : -1;
             }
         }
     }
