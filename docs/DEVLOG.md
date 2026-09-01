@@ -21,6 +21,9 @@ uygulanmış HUD hazır. Son yapılan iş **çalışma zamanı sahnesi analizi**
 boyunca birikmesi). Bu turda `docs/SCENE.md`'nin kalan yüksek/orta öncelikli bulguları kapatıldı:
 **B-08** (rastgelelik), **B-04** (materyal sızıntısı + izli mermi bütçesi), **B-02** (radar taraması),
 **B-07/B-09** (spawn yerleşimi), **B-05** (kullanılmayan collider'lar), **B-06** (kare başına tahsis).
+Son tur pilot modunu "uçağın içinde" hissettirmeye ayrıldı: `RadarScope` Core projeksiyonu (testli),
+kaçınılabilir hava savunması füzeleri (SAM 85 / AAA 95), **V** ile açılıp kapanan kokpit kamerası ve
+pilot HUD'ında gelen füzeleri de gösteren dairesel radar skopu.
 
 ### Yeni oturum için okuma sırası
 1. Bu bölüm.
@@ -129,6 +132,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `ScenarioKind` | Seçilebilir görev tipleri: Keşif / SEAD / Hava Muharebesi / Karma Savunma. |
 | `WaveComposition` | Bir dalganın düşman kompozisyonu (sabit hedef / SAM / AAA / avcı + toplam). |
 | `TerrainField` | Deterministik prosedürel arazi yükseklik alanı (Perlin + üs çevresinde düz bölge); hem arazi mesh'i hem de yer birimlerinin yerleşimi bunu kullanır. |
+| `RadarScope` | Dünya konumunu burun-yukarı radar skopu koordinatına (−1..1, +Y burun, +X sağ) yansıtır; irtifayı yok sayar (PPI), menzil dışını reddeder. |
 
 ### Sim.Runtime (ince MonoBehaviour'lar)
 | Bileşen | Görevi |
@@ -144,8 +148,8 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `SimulationBootstrap` | Play'de sahneyi primitive'lerden kurar (kamera, ışık, zemin, drone'lar, ScenarioController). Üretilen her şey tek bir `Simulation` kökünün altındadır; `Rebuild()` bu kökü yıkıp yeniden kurar (yerinde yeniden başlatma). |
 | `ScenarioController` | Dalga tabanlı senaryo: seçilen göreve göre (`ScenarioLibrary.Composition`) her dalganın düşman karışımını spawn eder ve kazan/kaybet'i yönetir; `BeginMission()` çağrılana kadar bekler. |
 | `SimulationDirector` | Görev takibi ve skorlama (dalga güvenli kill sayımı; kazan/kaybet ScenarioController'da, bu yüzden `MissionState` saf sayaç olarak kurulur ve kendi kendine bitmez). |
-| `Hud` | Ekran üstü (IMGUI) bilgi paneli: görev, skor, radar temasları. |
-| `CameraRig` | Serbest uçan kamera (WASD + fare) ve drone takip modu. |
+| `Hud` | Ekran üstü (IMGUI) bilgi paneli: görev, skor, radar temasları; pilot modunda dairesel radar skopu (temaslar + gelen füzeler). |
+| `CameraRig` | Serbest uçan kamera (WASD + fare), drone takip modu ve pilot modunda kokpit görünümü (**V** ile geçiş). |
 | `ExplosionEffect` | Asset'siz patlama işareti: büyüyüp sönen emisyonlu küre (mühimmat isabeti + imha). |
 | `GameControls` | Klavye kontrolleri: R yeniden başlat, P duraklat, +/- zaman ölçeği. |
 | `GunTurret` | `GunSystem` + `HitProbability` sarmalayıcısı: hedefe veya serbest nişan noktasına top atışı, izli mermi. |
@@ -180,6 +184,7 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
    Bir görev seç → görev başlar. HUD sol üstte görev/skor/temasları gösterir. **M** menüye döner.
 
 **Kamera kontrolleri:** Sağ tık basılı + fare = bak · WASD = uç · Shift = hızlan · Tab = drone takip et · F = serbest mod.
+Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpit ↔ takip kamerası arasında geçiş yapar.
 
 ---
 
@@ -234,7 +239,11 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 | `44abd2b` | **B-02:** radar adayları kare başına tek geçişte çözülüyor, `RcsComponent`/`Jammer` önbellekli. |
 | `42c1ee9` | **B-07 + B-09:** düşman spawn'ları üssün dışında ve birbirinden ayrık; avcılar farklı irtifa/loiter yörüngesi alıyor. |
 | `82bee03` | **B-05:** spawn edilen nesnelerden kullanılmayan collider'lar kaldırıldı. |
-| `bu tur` | **B-06:** kare başına snapshot tahsisleri yerine yeniden kullanılan tamponlar (+ DEVLOG/SCENE güncellemesi). |
+| `1f3cea1` | **B-06:** kare başına snapshot tahsisleri yerine yeniden kullanılan tamponlar (+ DEVLOG/SCENE güncellemesi). |
+| `2485d38` | `RadarScope` Core projeksiyonu + EditMode testleri (burun-yukarı PPI). |
+| `60dd15f` | Hava savunması füzeleri yavaşlatıldı (SAM 150→85, AAA 130→95) — kaçınılabilir hâle geldi. |
+| `76202c2` | Pilot modunda kokpit görünümü; **V** ile kokpit/takip kamerası arasında geçiş. |
+| `bu tur` | Pilot HUD'ına radar skopu: temaslar + gelen füzeler (+ DEVLOG güncellemesi). |
 
 ---
 
@@ -528,3 +537,34 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
   tamponunu ve yeni `TargetAllocation.Assign(shooters, targets, List<int> result)` aşırı yüklemesini
   yeniden kullanıyor (Core tarafında paylaşılan scratch tamponlar + dört yeni EditMode testi).
   Tahsis eden eski aşırı yüklemeler soğuk yollar için korundu; davranış birebir aynı.
+- **Kokpit görünümü + pilot radar skopu + kaçınılabilir SAM'ler:** Pilot modu artık "uçağın içinde"
+  hissettiriyor ve gelen füzeler hem skopta hem gökyüzünde okunuyor. Dört dilim:
+  **(1)** Test-driven `RadarScope` (Core): dünya konumunu burun-yukarı skop koordinatına yansıtır
+  (`TryProject`, −1..1, +Y burun, +X sağ, irtifa yok sayılır, menzil dışı `false`); el yönü (handedness)
+  testlerle sabitlendi (`Vector3.forward` burun → `(0, 0.5)`, `Vector3.right` → `(0.5, 0)`).
+  **(2)** **Oyun ayarı (kullanıcı isteği):** hava savunması füzeleri kaçınılabilir hâle getirildi —
+  SAM `munitionSpeed` 150 → **85**, AAA 130 → **95**. Hasar, atış hızı, kilitlenme süresi, menziller ve
+  şarjör boyutları **değişmedi**; SİHA'nın kendi füzesi (180) **değişmedi**. Kritik ayrıntı:
+  `GuidedMunition` her adımda hızı kendi `cruiseSpeed`'ine çektiği için yalnız fırlatma hızını düşürmek
+  yetmiyordu; yeni `Launch(target, velocity, damage, cruiseSpeed)` aşırı yüklemesiyle hava savunması
+  seyir hızını da veriyor. Ayrıca iz daha okunaklı (TrailRenderer `time` 0.5 → 1.1 s, genişlik 0.3 →
+  0.38, egzoz pufu aralığı 0.08 → 0.06 s; pufları VfxLibrary bütçesi sınırlamaya devam ediyor).
+  **(3)** `CameraRig` kokpit modu: **C** ile kontrol alındığında kamera doğrudan uçağın burnuna oturuyor
+  (kökün kendi eksenlerinde ileri 1.6 m + yukarı 0.5 m; `TransformPoint` değil, çünkü birim kökleri
+  ölçekli), gövdenin boresight'ına bakıyor ve takip kamerasından çok daha sert bir lerp ile bağlı
+  kalıyor. **V** kokpit/takip arasında geçiş yapıyor, kontrol bırakılınca eski kamera davranışı geri
+  geliyor. Kokpitteyken pilotun uçağının `"Model"` alt ağacındaki renderer'lar kapatılıyor (kokpitten
+  çıkarken, Tab ile uçak değiştirirken, kontrol bırakılırken ve rig kapatılırken/yok edilirken geri
+  açılıyor; her renderer ayrı ayrı null kontrolünden geçtiği için uçak düşürülse bile güvenli).
+  Kokpitte taban FOV 8° daralıyor, art yakıcı FOV artışı bu yeni tabana göre çalışmaya devam ediyor;
+  HUD için `CameraRig.CockpitView` açıldı.
+  **(4)** `Hud` sağ altta dairesel radar skopu çiziyor (yalnız pilot modunda, mevcut tek `OnGUI`
+  içinde): koyu disk + 1px çerçeve, üç menzil halkası, artı çizgileri, tepede burun işareti, `Time.time`
+  ile dönen (duraklatılınca donan) tarama çizgisi ve `MENZİL 250 m` etiketi (`scopeRange` serileştirilmiş).
+  Blipler `RadarScope.TryProject` ile pilotun konum/yönünden yansıtılıyor: düşman kırmızı kare, dost
+  yeşil küçük kare, tespit edilen/kilitlenen hedef daha büyük amber kare, **gelen füzeler** ise
+  `GuidedMunition.Active` içinden pilotun `Targetable`'ını hedefleyenler olarak süzülüp yanıp sönen
+  kırmızı üçgen + merkeze doğru kısa tehdit ekseni çizgisi olarak çiziliyor. Skopun altında füze sayısı
+  ve en kısa çarpma süresi yazıyor. IMGUI'de çizgi/daire primitifi olmadığı için disk satırlardan,
+  halkalar ve çizgiler noktalardan kuruluyor. Mevcut HUD öğelerinin hiçbiri kaldırılmadı; alt kontrol
+  şeridine yalnızca `V: KOKPİT / TAKİP KAMERASI` ipucu eklendi.

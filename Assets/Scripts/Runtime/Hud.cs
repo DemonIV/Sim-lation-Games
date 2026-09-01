@@ -46,6 +46,20 @@ namespace Sim.Runtime
         private const float BarH = 11f;
         private const float StripH = 54f;
 
+        // ---- pilot radar scope (plan-position indicator, bottom-right while flying) ----
+
+        /// <summary>Radius of the scope in METRES: contacts further out than this are not shown.</summary>
+        [SerializeField] private float scopeRange = 250f;
+
+        /// <summary>Scope diameter in screen pixels.</summary>
+        private const float ScopeSize = 200f;
+
+        /// <summary>Height of the threat readout row drawn under the scope.</summary>
+        private const float ScopeInfoH = 18f;
+
+        // Camera rig, only read for the cockpit-view hint in the control strip.
+        private CameraRig _cameraRig;
+
         // Radar contact rows, rebuilt each frame into reused lists so OnGUI allocates nothing extra.
         private readonly List<string> _contactId = new List<string>();
         private readonly List<string> _contactType = new List<string>();
@@ -59,6 +73,7 @@ namespace Sim.Runtime
             _controls = FindAnyObjectByType<GameControls>();
             _pilot = FindAnyObjectByType<PlayerDroneController>();
             _menu = FindAnyObjectByType<ScenarioMenu>();
+            _cameraRig = FindAnyObjectByType<CameraRig>();
             RefreshSensors();
         }
 
@@ -74,6 +89,7 @@ namespace Sim.Runtime
                 if (_controls == null) _controls = FindAnyObjectByType<GameControls>();
                 if (_pilot == null) _pilot = FindAnyObjectByType<PlayerDroneController>();
                 if (_menu == null) _menu = FindAnyObjectByType<ScenarioMenu>();
+                if (_cameraRig == null) _cameraRig = FindAnyObjectByType<CameraRig>();
             }
         }
 
@@ -100,7 +116,11 @@ namespace Sim.Runtime
             if (piloting) rightY = DrawPilotIdentity(rightX, rightY) + 12f;
             DrawFleetPanel(rightX, rightY);
 
-            if (piloting) DrawPilotOverlay();
+            if (piloting)
+            {
+                DrawPilotOverlay();
+                DrawRadarScope();
+            }
 
             DrawMissileWarning();
             DrawControlStrip(piloting);
@@ -493,6 +513,199 @@ namespace Sim.Runtime
                       HudTheme.Small, HudTheme.TextDim);
         }
 
+        // ------------------------------------------------------------------ pilot radar scope
+
+        /// <summary>
+        /// Nose-up radar scope (plan-position indicator) in the bottom-right corner, drawn only while
+        /// the player is flying. Every blip is projected with <see cref="Sim.Core.RadarScope"/> from the
+        /// piloted aircraft's position and heading: hostiles are red squares, friendlies teal squares,
+        /// the currently detected target is a larger amber square and munitions homing on the player are
+        /// blinking triangles with a threat-axis line drawn toward the centre.
+        /// </summary>
+        private void DrawRadarScope()
+        {
+            IhaController drone = _pilot != null ? _pilot.Controlled : null;
+            if (drone == null) return;
+
+            float range = Mathf.Max(1f, scopeRange);
+            Vector3 self = drone.transform.position;
+            Vector3 forward = drone.transform.forward;
+            Targetable selfTargetable = drone.GetComponent<Targetable>();
+
+            // Sit above the pilot overlay's ability tags, hugging the bottom-right corner.
+            float wpnH = HeaderH + 3f * (BarH + 5f) + 8f;
+            float blockBottom = Screen.height - StripH - 12f - wpnH - 12f;
+            var disc = new Rect(Screen.width - Margin - ScopeSize,
+                                blockBottom - ScopeInfoH - ScopeSize, ScopeSize, ScopeSize);
+
+            Vector2 c = disc.center;
+            float radius = ScopeSize * 0.5f - 2f;
+
+            // Face: dark disc, hairline rim, three range rings and a centre crosshair.
+            FillDisc(c, radius, new Color(0.02f, 0.04f, 0.045f, 0.92f));
+            Ring(c, radius, HudTheme.Line, 72);
+            Ring(c, radius * 0.66f, HudTheme.Line, 56);
+            Ring(c, radius * 0.33f, HudTheme.Line, 40);
+            HudTheme.Fill(new Rect(c.x - radius, c.y - 0.5f, radius * 2f, 1f), HudTheme.Line);
+            HudTheme.Fill(new Rect(c.x - 0.5f, c.y - radius, 1f, radius * 2f), HudTheme.Line);
+
+            // Nose marker at the top of the scope.
+            BlipTriangle(new Vector2(c.x, disc.y - 2f), 9f, HudTheme.Amber);
+
+            // Sweep line. Time.time is scaled, so the sweep freezes with the simulation when paused.
+            float sweep = Time.time * 90f * Mathf.Deg2Rad;
+            var sweepDir = new Vector2(Mathf.Sin(sweep), -Mathf.Cos(sweep));
+            DottedLine(c, c + sweepDir * radius,
+                       new Color(HudTheme.Amber.r, HudTheme.Amber.g, HudTheme.Amber.b, 0.5f), 2f, 26);
+
+            // Own ship at the centre.
+            HudTheme.Fill(new Rect(c.x - 2f, c.y - 2f, 4f, 4f), HudTheme.Ok);
+
+            // ---- unit blips -------------------------------------------------------------
+            TargetRegistry.Prune();
+            List<Targetable> all = TargetRegistry.All;
+            for (int i = 0; i < all.Count; i++)
+            {
+                Targetable t = all[i];
+                if (t == null) continue;
+                if (selfTargetable != null && t == selfTargetable) continue;
+                if (t.Health != null && t.Health.IsDestroyed) continue;
+
+                if (!RadarScope.TryProject(self, forward, t.transform.position, range, out Vector2 p))
+                    continue;
+
+                var screen = new Vector2(c.x + p.x * radius, c.y - p.y * radius);
+
+                bool locked = drone.HasTarget && t.Id == drone.DetectedId;
+                if (locked)
+                    BlipSquare(screen, 9f, HudTheme.Amber);
+                else if (t.Faction == 0)
+                    BlipSquare(screen, 5f, HudTheme.Ok);
+                else
+                    BlipSquare(screen, 7f, HudTheme.Critical);
+            }
+
+            // ---- incoming munitions ------------------------------------------------------
+            int incoming = 0;
+            if (selfTargetable != null)
+            {
+                // Blink on unscaled time so the threat still reads while the game is paused.
+                bool blinkOn = Mathf.Sin(Time.unscaledTime * 9f) > -0.2f;
+
+                GuidedMunition.Prune();
+                List<GuidedMunition> munitions = GuidedMunition.Active;
+                for (int i = 0; i < munitions.Count; i++)
+                {
+                    GuidedMunition m = munitions[i];
+                    if (m == null) continue;
+                    if (m.Target != selfTargetable) continue;
+
+                    incoming++;
+
+                    if (!blinkOn) continue;
+                    if (!RadarScope.TryProject(self, forward, m.transform.position, range, out Vector2 p))
+                        continue;
+
+                    var screen = new Vector2(c.x + p.x * radius, c.y - p.y * radius);
+
+                    // Threat axis: a short dotted run from the blip toward own ship.
+                    Vector2 toCentre = c - screen;
+                    float len = toCentre.magnitude;
+                    if (len > 1f)
+                    {
+                        Vector2 dir = toCentre / len;
+                        DottedLine(screen, screen + dir * Mathf.Min(26f, len),
+                                   HudTheme.Critical, 2f, 8);
+                    }
+
+                    BlipTriangle(screen, 11f, HudTheme.Critical);
+                }
+            }
+
+            // ---- threat readout under the scope ------------------------------------------
+            var info = new Rect(disc.x, disc.yMax + 2f, ScopeSize, ScopeInfoH);
+            if (incoming > 0)
+            {
+                float tti = _pilot.TimeToImpact;
+                string time = float.IsPositiveInfinity(tti) ? "--" : $"{tti:0.0} s";
+                HudTheme.Draw(info, $"FÜZE x{incoming} · {time}", HudTheme.Small, HudTheme.Critical);
+            }
+            else
+            {
+                HudTheme.Draw(info, "TEHDİT YOK", HudTheme.Small, HudTheme.TextFaint);
+            }
+
+            DrawRight(info, $"MENZİL {range:0} m", HudTheme.Small, HudTheme.TextDim);
+        }
+
+        /// <summary>Fills a circle out of stacked 1px rows (IMGUI can only draw rectangles).</summary>
+        private static void FillDisc(Vector2 centre, float radius, Color color)
+        {
+            if (radius <= 0f) return;
+
+            int rows = Mathf.Max(4, Mathf.RoundToInt(radius));
+            float step = radius * 2f / rows;
+            for (int i = 0; i < rows; i++)
+            {
+                float dy = -radius + step * (i + 0.5f);
+                float halfW = Mathf.Sqrt(Mathf.Max(0f, radius * radius - dy * dy));
+                if (halfW <= 0.5f) continue;
+                HudTheme.Fill(new Rect(centre.x - halfW, centre.y + dy - step * 0.5f,
+                                       halfW * 2f, step + 0.5f), color);
+            }
+        }
+
+        /// <summary>Strokes a circle as evenly spaced dots — a dotted range ring.</summary>
+        private static void Ring(Vector2 centre, float radius, Color color, int segments)
+        {
+            if (radius <= 0f || segments < 3) return;
+
+            for (int i = 0; i < segments; i++)
+            {
+                float a = (i / (float)segments) * Mathf.PI * 2f;
+                float x = centre.x + Mathf.Cos(a) * radius;
+                float y = centre.y + Mathf.Sin(a) * radius;
+                HudTheme.Fill(new Rect(x - 0.5f, y - 0.5f, 1.5f, 1.5f), color);
+            }
+        }
+
+        /// <summary>Draws a straight run of dots between two points (IMGUI has no line primitive).</summary>
+        private static void DottedLine(Vector2 from, Vector2 to, Color color, float dotSize, int dots)
+        {
+            if (dots < 2) return;
+
+            for (int i = 0; i < dots; i++)
+            {
+                float t = i / (float)(dots - 1);
+                Vector2 p = Vector2.Lerp(from, to, t);
+                HudTheme.Fill(new Rect(p.x - dotSize * 0.5f, p.y - dotSize * 0.5f, dotSize, dotSize),
+                              color);
+            }
+        }
+
+        /// <summary>A square contact blip centred on the given point, with a darker outline.</summary>
+        private static void BlipSquare(Vector2 p, float size, Color color)
+        {
+            float half = size * 0.5f;
+            var r = new Rect(p.x - half, p.y - half, size, size);
+            HudTheme.Fill(r, color);
+            HudTheme.Border(r, new Color(0f, 0f, 0f, 0.6f));
+        }
+
+        /// <summary>A small upward triangle blip, stacked out of rows like the warning triangle.</summary>
+        private static void BlipTriangle(Vector2 p, float size, Color color)
+        {
+            const int rows = 5;
+            float rowH = size / rows;
+            float half = size * 0.5f;
+            for (int i = 0; i < rows; i++)
+            {
+                float t = (i + 1) / (float)rows;
+                float w = size * t;
+                HudTheme.Fill(new Rect(p.x - w * 0.5f, p.y - half + i * rowH, w, rowH + 0.5f), color);
+            }
+        }
+
         // ------------------------------------------------------------------ missile warning
 
         /// <summary>
@@ -565,8 +778,10 @@ namespace Sim.Runtime
             var l2 = new Rect(Margin, strip.y + 19f, hintsW, 15f);
             var l3 = new Rect(Margin, strip.y + 34f, hintsW, 15f);
 
+            bool cockpit = _cameraRig != null && _cameraRig.CockpitView;
             HudTheme.Draw(l1, "WASD + SAĞ TIK: KAMERA · TAB: DRONE TAKİP · F: SERBEST · C: PİLOT MODU"
-                              + (piloting ? " (ÇIKIŞ)" : string.Empty),
+                              + (piloting ? " (ÇIKIŞ)" : string.Empty)
+                              + (piloting ? (cockpit ? " · V: TAKİP KAMERASI" : " · V: KOKPİT") : string.Empty),
                           HudTheme.Centered, HudTheme.TextFaint);
             HudTheme.Draw(l2, "W/S: GAZ · A/D: DÖNÜŞ · ↑/↓: YUNUSLAMA · SPACE: TOP · F: FÜZE · "
                               + "Q: FLARE · E: ART YAKICI · X: KAÇIŞ",
