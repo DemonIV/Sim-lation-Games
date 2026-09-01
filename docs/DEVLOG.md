@@ -23,7 +23,10 @@ boyunca birikmesi). Bu turda `docs/SCENE.md`'nin kalan yüksek/orta öncelikli b
 **B-07/B-09** (spawn yerleşimi), **B-05** (kullanılmayan collider'lar), **B-06** (kare başına tahsis).
 Son tur pilot modunu "uçağın içinde" hissettirmeye ayrıldı: `RadarScope` Core projeksiyonu (testli),
 kaçınılabilir hava savunması füzeleri (SAM 85 / AAA 95), **V** ile açılıp kapanan kokpit kamerası ve
-pilot HUD'ında gelen füzeleri de gösteren dairesel radar skopu.
+pilot HUD'ında gelen füzeleri de gösteren dairesel radar skopu. En son tur iki kullanıcı isteğini
+karşıladı: atış imleci artık ekran ortasına çakılı değil — `GunPipper` (Core, testli) ile namlu
+ekseninden dünyaya yansıtılıyor, uçak eğilince kayıyor/yatıyor ve ~1.7× büyütüldü; ayrıca **G**
+sağdaki filo durumu panelini aç/kapat yapıyor.
 
 ### Yeni oturum için okuma sırası
 1. Bu bölüm.
@@ -133,6 +136,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `WaveComposition` | Bir dalganın düşman kompozisyonu (sabit hedef / SAM / AAA / avcı + toplam). |
 | `TerrainField` | Deterministik prosedürel arazi yükseklik alanı (Perlin + üs çevresinde düz bölge); hem arazi mesh'i hem de yer birimlerinin yerleşimi bunu kullanır. |
 | `RadarScope` | Dünya konumunu burun-yukarı radar skopu koordinatına (−1..1, +Y burun, +X sağ) yansıtır; irtifayı yok sayar (PPI), menzil dışını reddeder. |
+| `GunPipper` | Namlu ekseninde belirli bir menzilde merminin vardığı dünya noktası (uçuş süresi = menzil/ağız hızı, düşüş = ½·g·t²); ağız hızı ≤ 0 veya menzil ≤ 0 ise hitscan gibi doğrudan namlu ekseni. |
 
 ### Sim.Runtime (ince MonoBehaviour'lar)
 | Bileşen | Görevi |
@@ -186,6 +190,7 @@ Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştır
 
 **Kamera kontrolleri:** Sağ tık basılı + fare = bak · WASD = uç · Shift = hızlan · Tab = drone takip et · F = serbest mod.
 Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpit ↔ takip kamerası arasında geçiş yapar.
+**HUD:** **G** sağdaki filo durumu panelini gizler/gösterir (varsayılan: açık).
 
 ---
 
@@ -247,6 +252,8 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
 | `bu tur` | Pilot HUD'ına radar skopu: temaslar + gelen füzeler (+ DEVLOG güncellemesi). |
 | `fa8d6fa` | Prosedürel kokpit içi (`CockpitFrame`): frustum oranlı gösterge paneli, kiriş, A-direkleri, raylar, cam tonu ve burun. |
 | `bu tur` | `CockpitFrame` kokpit görünümüne bağlandı (pilotluk sürerken görünür, burun uçağın rengini alır) + DEVLOG. |
+| `1ac88d2` | `GunPipper` Core nişan noktası geometrisi + EditMode testleri. |
+| `d5d9a55` | Namlu ekseninden yansıtılan büyütülmüş atış imleci + **G** ile filo panelini aç/kapat. |
 
 ---
 
@@ -598,3 +605,35 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
   gizlenen `"Model"` alt ağacındaki `"Fuselage"` materyalinden **uçak değiştikçe bir kez** okunup
   `SetBodyColor` ile veriliyor. Mevcut davranışların hiçbiri değişmedi: **V** geçişi, **C** ile varsayılan
   kokpit, `"Model"` renderer'larının gizlenmesi ve art yakıcı FOV artışı aynen duruyor.
+
+- **Atış imleci namluya bağlandı + filo paneli aç/kapat (kullanıcı isteği):** İki dilim.
+  **(1)** Test-driven `GunPipper` (Core): namlu ekseninde `range` metrede merminin vardığı dünya
+  noktasını verir (`AimPoint(muzzle, forward, muzzleSpeed, range, gravity)`); `forward` normalize
+  edilir, uçuş süresi `t = range / muzzleSpeed`, düşüş `Vector3.down * ½·g·t²`
+  (`BallisticProjectile`'ın konvansiyonu: yerçekimi aşağı yönlü ve **pozitif büyüklük**,
+  `GunPipper.EarthGravity = 9.81`). Bozuk girdiler sıfıra bölmez: sıfır/negatif ağız hızı veya
+  menzil → doğrudan namlu ekseni, sıfır `forward` → namlunun kendisi. 13 EditMode testi (elle
+  hesaplanmış düşüş, düşüşün t² ile büyümesi, burun yukarıyken imlecin yukarı kayması, bozuk
+  girdiler). Sim'in topu **hitscan** olduğu için (`GunTurret.TryFireAtPoint` mermi harcayıp isabeti
+  doğrudan nişan ışını üzerinden zar atar, mermi simüle edilmez) oyunda ağız hızı diye bir değer
+  yok; HUD alanları `pipperMuzzleSpeed`/`pipperGravity` bu yüzden **0** varsayılıyor — imleç tam
+  olarak mermilerin gittiği yeri, namlu eksenini gösteriyor.
+  **(2)** `Hud` artık nişangâhı ekran ortasına çakmıyor: `GunPipper.AimPoint` ile topun **kendi**
+  etkili menzilinde (`GunTurret.Gun.EffectiveRange`; top yoksa `PlayerDroneController.GunRange`)
+  dünya noktası bulunuyor, `CameraRig`'in sürdüğü kameranın `WorldToScreenPoint`'i ile ekrana
+  yansıtılıyor ve IMGUI koordinatına çevriliyor (`y = Screen.height - y`). Böylece **burun yukarı/
+  aşağı eğildiğinde imleç ekranda kayıyor**. İmleç ayrıca uçağın yatışıyla **dönüyor**: yatış açısı
+  `"Model"` çocuğunun (yatışı `BankingVisual` oraya yazar) üst vektörü ile kameranın sağ/üst
+  vektörlerinden `Atan2` ile çıkarılıp `GUIUtility.RotateAroundPivot` ile uygulanıyor; `GUI.matrix`
+  `try/finally` ile geri yükleniyor, istisna GUI matrisini kirli bırakamıyor. Boyut **64 → 110 px**
+  (~1.7×) büyütüldü ve mevcut `HudTheme.Crosshair`'in (orta nokta + boşluklu dört kol + menzil
+  tikleri) üstüne ince bir halka eklendi. Renk paleti değişmedi: normalde amber, tespit edilen canlı
+  bir düşman top menzilindeyken `HudTheme.Critical`. Nişan noktası kameranın arkasında (`z <= 0`)
+  veya görüntü alanı dışında kalırsa imleç hiç çizilmiyor. Kamera `CameraRig` üzerinden bulunuyor
+  (yoksa `Camera.main`), UnityEngine nesnelerinde açık `== null` kullanılıyor.
+  **Filo paneli aç/kapat:** yeni **G** tuşu (`GameControls.FleetPanelVisible`, diğer global tuşlarla
+  aynı yerde) sağdaki `FİLO DURUMU` panelini gizler/gösterir. **F daha iyi okunurdu ("filo") ama
+  zaten pilotun güdümlü füze tuşu ve kameranın serbest mod tuşu**, bu yüzden G seçildi. Panel
+  **varsayılan olarak açık** (`GameControls` yoksa da açık), yani tuşa hiç basmayan oyuncu için
+  hiçbir şey değişmiyor. Alt kontrol şeridine `G: FİLO PANELİ (GİZLE/GÖSTER)` ipucu eklendi.
+  **Hiçbir oyun değeri (menzil, hasar, atış hızı, irtifa) değişmedi** — değişiklik sunum katmanında.
