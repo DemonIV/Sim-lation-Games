@@ -170,14 +170,19 @@ kullanılmıyor (bkz. B-05).
 
 | Drone | Spawn (= `BasePosition` = seyir irtifası) | Rota (dikdörtgen, genişlik × derinlik) | Rota köşesi max yarıçap |
 |---|---|---|---|
-| `IHA_1` | (−20, **10**, −20) | 30 × 25 | ≈ 47.9 m |
-| `IHA_2` | (20, **12**, 20) | 25 × 30 | ≈ 47.8 m |
-| `SIHA_1` | (0, **14**, −30) | 40 × 20 | ≈ 44.7 m |
+| `IHA_1` | (−20, **18**, −20) | 30 × 25 | ≈ 47.9 m |
+| `IHA_2` | (20, **20**, 20) | 25 × 30 | ≈ 47.8 m |
+| `SIHA_1` | (0, **20**, −30) | 40 × 20 | ≈ 44.7 m |
 
 Waypoint'ler spawn irtifasında düz kalır (offset'lerin `y` bileşeni 0). Rotalar 150 m'lik arazinin
 çok içinde; rota **araziden çıkmıyor**. `minAltitude = 5 m` sert taban, `_cruiseAltitude` =
 spawn irtifası (`IhaController.cs:280`). İkmal yarıçapı `baseRadius = 12 m`, servis süresi 4 s —
 yani drone **üsse değil, kendi spawn noktasına** dönüyor (bkz. B-11).
+
+Seyir irtifaları B-21'de **+6 m ötelendi**: bina siluetinin tavanı (arazi 3 m + en yüksek prop 11 m
+= **14 m**) eski 10–14 m bandının içindeydi. Taban artık `Sim.Core.FlightEnvelope.MinCruiseAltitude`
+= **18 m** (14 m tavan + 4 m pay). Oyuncunun uçağı seçilen arketipin profilinden gelir:
+İHA 18 · SİHA 20 · Jet 24 m.
 
 ### 3.4 Düşman spawn kuralları
 
@@ -188,13 +193,14 @@ altındaysa 8 deneme, sonra savunma amaçlı olarak aynı kerteriz üzerinde 15 
 - **Yer birimleri** (yer hedefi / SAM / AAA): `pos.y` spawn'da `TerrainField.Height(x, z)` ile
   ezilir (`:185`, `:213`, `:247`) → ±40 kutusunun neredeyse tamamı düz bölgede olduğu için
   fiilen **y = 0**. Serileştirilmiş `groundY = 1` alanı bu yüzden **hiç kullanılmıyor** (B-12).
-- **Avcı drone'lar:** `RandomAirbornePosition` yalnız `y`'yi **`fighterAltitude = 14`** yapar
-  (`:145`) — `EnemyDroneController.cruiseAltitude` ile aynı. Arama modunda hepsi merkez etrafında
-  `standoff = 25 m` yarıçaplı, **aynı 14 m irtifadaki** yörüngeye yerleşir (B-09).
+- **Avcı drone'lar:** `RandomAirbornePosition` yalnız `y`'yi **`fighterAltitude = 20`** yapar
+  — `EnemyDroneController.cruiseAltitude` ile aynı (ikisi de B-21'de 14 → 20 m). Kademe indekse
+  göre ±2.4 m'dir ve `FlightEnvelope.ClampToCruiseFloor` ile 18 m tabanına yükseltilir (B-09).
 - Spawn'lar arasında **çakışma/ayrışma kontrolü yok**; keep-out yalnız merkeze göredir.
 
-İrtifa özeti: dost seyir 10/12/14 m · düşman avcı 14 m · sert taban 5 m · yer birimleri ~0 m ·
-kamera başlangıcı 60 m · sis görünürlüğü ~400 m · far clip 1200 m · arazi köşesi 212 m.
+İrtifa özeti: dost seyir 18/20 m (oyuncu arketipe göre 18/20/24) · düşman avcı 20 m ·
+**bina/silüet tavanı 14 m** · sert taban 5 m · yer birimleri ~0 m · kamera başlangıcı 60 m ·
+sis görünürlüğü ~400 m · far clip 1200 m · arazi köşesi 212 m.
 
 ---
 
@@ -296,6 +302,8 @@ kullanıcı fark eder · **düşük** = ölü kod, kozmetik tutarsızlık, küç
 | **B-17** | **düşük** | `ApplyAtmosphere` her sahne yüklemesinde **yeni bir skybox `Material`** üretip `RenderSettings.skybox`'a atıyor; eskisi serbest bırakılmıyor. Ayrıca ışığı `FindAnyObjectByType<Light>()` ile buluyor — kullanıcının sahnesinde bir point light varsa **onu** güneşe dönüştürür (`sun.type = Directional`). URP yedek kodları da (`Universal Render Pipeline/Lit`, `_Surface`/`_Blend` yazımları) bu manifest ile hiç çalışmaz; ters yönde, bir gün URP'ye geçilirse `RenderSettings.fog`/`Skybox/Procedural` davranışı ve `Shader.Find("Standard")` **sessizce** bozulur. | `EnvironmentBuilder.cs:185-225`, `SimulationBootstrap.cs:76-86` | Skybox materyalini statik olarak bir kez üret; ışığı `light.type == LightType.Directional` filtresiyle seç. Çalışma zamanı `Shader.Find` bağımlılıklarını (`Standard`, `Sprites/Default`, `Unlit/Color`) Graphics Settings → Always Included Shaders'a ekle, aksi hâlde bir player build'inde materyaller macenta düşer. |
 | **B-18** | **düşük** | `Hud.OnGUI` kare başına en az iki kez (Layout + Repaint) çalışıp ~19 string interpolasyonu üretiyor; `HudTheme.Fill/Border/Bar` her çağrıda `GUI.DrawTexture` yapıyor. Görünür bir kare kaybı yok ama sürekli GC baskısı var. | `Hud.cs:85-108` | Değişmeyen metinleri (görev adı, kontrol şeridi) önbellekle veya yalnız `Event.current.type == EventType.Repaint` içinde çiz. |
 | **B-19** ✅ **ÇÖZÜLDÜ** | **düşük** | `TurretVisual`, `Radar` tabağını `Space.Self` üzerinde Y ekseninde döndürüyor; tabağın local euler'ı `(60, 0, 0)` olduğu için dönüş ekseni eğik → tabak taramak yerine yalpalıyor. | `TurretVisual.cs:44`, `VehicleModelBuilder.cs:113` | Tabağı ölçeksiz bir pivot altına al (tüpler/namlular için zaten yapılan desen) ve pivotu döndür. **Çözüm:** Patriot tipi bataryada `"Radar"` artık ölçeksiz ve **döndürülmemiş** bir pivot; faz dizisi panelinin ~30° geriye yatıklığı altındaki `"ArrayMount"` çocuğunda duruyor, böylece `TurretVisual`'ın `Space.Self` Y dönüşü temiz bir azimut taraması oluyor. |
+| **B-20** ✅ **ÇÖZÜLDÜ** | **yüksek** | Düşman can değerleri **hiç uygulanmıyordu**. `Targetable.Awake` `AddComponent`'in **içinde senkron** çalışıp `Health` havuzunu kurduğu için, spawner'ın hemen ardından yazdığı `targetable.MaxHealth = …` alanı **ölü atama** oluyordu: SAM (120), AAA (70), yer hedefi (60) ve düşman avcı (70) sahada **hepsi varsayılan 100 HP** ile dolaşıyordu. | `TargetRegistry.cs:17, 76`, `ScenarioController.cs:289, 318, 359, 399` | Atama sonrası havuzu yeniden kur. **Çözüm:** yanlış kullanımı **imkânsız** kılan yol seçildi — `Targetable.MaxHealth` artık alan değil **property**; setter `SetMaxHealth`'e yönleniyor ve yeni `Health.SetMax(float)` ile canlı havuzu **yerinde yeniden boyutlandırıyor** (mevcut can oranını koruyarak; yok edilmiş havuz dirilmez). Dört spawn çağrısı tek satır değişmeden doğru değeri alıyor. `HealthTests` yeniden boyutlama yolunu kapsıyor. |
+| **B-21** ✅ **ÇÖZÜLDÜ** | **orta** | Bina tepeleri drone'ların seyir bandının **içindeydi**. Dünya detayı turundan sonra kule arketipi kendi tabanından **10.90 m** (0.50 plint + 7.2 gövde + 2.30 direk ofseti + 0.90 direk yarı-yüksekliği), blok anteni 10.54 m yükseliyor; arazi kabartması (`TerrainField.Amplitude = 3`) buna +3 m ekliyor → **14 m tavan**. Drone'lar 10–14 m'de seyrediyordu → İHA (12 m) ve SİHA (14 m) çatıların **içinden** geçiyordu. Eski 8 m kutularda da pay zaten ~1 m idi. | `EnvironmentBuilder.cs:418-443`, `AircraftProfile.cs:203/219/236`, `SimulationBootstrap.cs:121-122`, `EnemyDroneController.cs:35`, `ScenarioController.cs:32` | Ya siluetleri kıs ya bandı yükselt. **Çözüm:** silueti koruyup **bandı +6 m öteledik** — binaları 14 m tavanın altına indirmek onları 5 m'ye düşürmek demekti. Yeni Core sistemi `FlightEnvelope` sayıyı tek yerde tanımlıyor (11 m prop + 3 m arazi + **4 m pay** = **18 m taban**); İHA 12→18, SİHA 14→20, Jet 18→24, düşman avcı 14→20, kanat pilotları 10/12→18/20. `minAltitude = 5 m` yer çarpma tabanı olarak **değişmedi**: kasıtlı alçalmalar (dalış, yakıtsız süzülüş, alçak taarruz) serbest; garanti edilen şey **normal seyrin** siluete girmemesi. `FlightEnvelopeTests` her profilin tabanı geçtiğini doğruluyor. |
 
 ### Kontrol edilip **sorun bulunmayan** noktalar
 

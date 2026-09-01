@@ -57,6 +57,14 @@ yakıt, radar), maliyet `round(BaseCost·1.6^(L−1)/25)·25`. Yükseltmeler `Ai
 taban profilin üstüne **çarpanla** uygulanır: sıfır yükseltmeyle uçak bugünkünün birebir aynısıdır.
 İlerleme/kredi/garaj `PlayerPrefs` + `JsonUtility` ile kaydedilir (bozuk kayıt istisna değil taze
 başlangıç üretir).
+En son tur **iki hata düzeltmesi** oldu (`docs/SCENE.md` **B-20** ve **B-21**). (1) Düşman can
+değerleri hiç uygulanmıyordu — `Targetable.Awake` `AddComponent` içinde çalıştığı için spawner'ın
+sonradan yazdığı `MaxHealth` ölü atamaydı ve her düşman 100 HP ile doğuyordu; `MaxHealth` artık
+canlı havuzu `Health.SetMax` ile yeniden boyutlandıran bir **property**. (2) Bina tepeleri
+(arazi 3 m + en yüksek prop 11 m = **14 m tavan**) drone'ların 10–14 m seyir bandının içindeydi;
+yeni Core sistemi `FlightEnvelope` **18 m taban** (14 + 4 m pay) tanımlıyor ve bant +6 m ötelendi
+(İHA 18 · SİHA 20 · Jet 24 · düşman avcı 20). Denge notu: yalnız SAM zorlaştı (100→120), AAA / yer
+hedefi / avcı kolaylaştı.
 
 ### Yeni oturum için okuma sırası
 1. Bu bölüm.
@@ -136,7 +144,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `DetectableTarget` | Hedef anlık görüntüsü (id, konum, hız). |
 | `WeaponSystem` | Atış kontrolü: mühimmat, atış hızı, soğuma, yeniden doldurma. |
 | `Ballistics` | Hareketli hedefe önleme (lead) noktası. |
-| `Health` | Can havuzu, hasar, imha. |
+| `Health` | Can havuzu, hasar, imha ve `SetMax` ile **yerinde yeniden boyutlandırma** (mevcut can oranını korur; yok edilmiş havuz dirilmez). |
 | `Atmosphere` | İrtifaya bağlı hava yoğunluğu (ρ = ρ₀·e^(−h/H)). |
 | `BallisticProjectile` | Yerçekimi + sürükleme + rüzgâr + irtifa ile mermi entegrasyonu. |
 | `RadarSystem` | Radar menzil denklemi (menzil ∝ RCS^0.25), hüzme/LOS. |
@@ -164,6 +172,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `ScenarioLibrary` | Görev kütüphanesi: her senaryonun başlığı, brifingi, dalga sayısı ve dalga başına düşman kompozisyonu. |
 | `ScenarioKind` | Seçilebilir görev tipleri: Keşif / SEAD / Hava Muharebesi / Karma Savunma. |
 | `WaveComposition` | Bir dalganın düşman kompozisyonu (sabit hedef / SAM / AAA / avcı + toplam). |
+| `FlightEnvelope` | Sahnenin **dikey zarfı**: en yüksek prop (11 m) + arazi kabartması (`TerrainField.Amplitude` = 3 m) = **14 m silüet tavanı**, üstüne **4 m pay** → `MinCruiseAltitude` = **18 m**. `ClearsStructures`/`ClampToCruiseFloor` ile uçak profilleri ve spawner'lar bu tabana bağlanır; bina büyütülürse test kırılır. |
 | `TerrainField` | Deterministik prosedürel arazi yükseklik alanı (Perlin + üs çevresinde düz bölge); hem arazi mesh'i hem de yer birimlerinin yerleşimi bunu kullanır. |
 | `RadarScope` | Dünya konumunu burun-yukarı radar skopu koordinatına (−1..1, +Y burun, +X sağ) yansıtır; irtifayı yok sayar (PPI), menzil dışını reddeder. |
 | `GunPipper` | Namlu ekseninde belirli bir menzilde merminin vardığı dünya noktası (uçuş süresi = menzil/ağız hızı, düşüş = ½·g·t²); ağız hızı ≤ 0 veya menzil ≤ 0 ise hitscan gibi doğrudan namlu ekseni. |
@@ -321,6 +330,8 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
 | `60213f9` | Görev artık seçilen kampanya seviyesini uçuyor; oyuncunun uçağı `CampaignSession.PlayerProfile` (arketip + yükseltmeler) ile spawn ediliyor. |
 | `14717f4` | Seviye listesi, kalıcı kredi göstergesi ve hangar/yükseltme ekranı (yalnız mevcut `HudTheme` paleti). |
 | `b94bc2a` | Görev sonu: sonucun bir kez işlenmesi (para + seviye açma + kayıt) ve raporda kazanılan/toplam kredi ile "SEVİYE N AÇILDI" bildirimi. |
+| `709fe2e` | `Health.SetMax` + `Targetable.MaxHealth` property'si: düşman can değerleri artık gerçekten uygulanıyor (B-20). |
+| `9e66fa8` | `FlightEnvelope` (Core, testli) ve seyir bandının +6 m ötelenmesi — binalar artık seyir irtifasının altında (B-21). |
 
 ---
 
@@ -898,3 +909,49 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
   `TryBookMissionResult()` ile görev biter bitmez sonucu **bir kez** işler: ödül → `Wallet.Earn` →
   seviye tamamlandı (bir sonraki açılır) → kayıt; rapor ekranında kazanılan/toplam kredi ve
   "SEVİYE N AÇILDI" bildirimi.
+
+
+### Tur — iki hata düzeltmesi: uygulanmayan düşman canları + seyir bandına giren binalar
+
+**(1) Düşman can değerleri hiç uygulanmıyordu (B-20).** `Targetable.Awake`, `AddComponent`'in
+**içinde senkron** çalışıp `Health` havuzunu kuruyor; spawner'ın hemen ardından yazdığı
+`targetable.MaxHealth = 120f` gibi satırlar bu yüzden **ölü atamaydı**. Sonuç: SAM (120), AAA (70),
+yer hedefi (60) ve düşman avcı (70) — dördü de sahada **varsayılan 100 HP** ile dolaşıyordu.
+Düzeltme, çağrı yerlerini tek tek yamamak yerine **yanlış kullanımı imkânsız** kılan yoldan yapıldı:
+`Targetable.MaxHealth` artık serileştirilmiş bir alanın üstünde duran bir **property**, setter'ı
+`SetMaxHealth`'e yönleniyor ve yeni `Health.SetMax(float)` ile **canlı havuzu yerinde yeniden
+boyutlandırıyor**. `SetMax` mevcut can **oranını** korur — dolu birim dolu kalır (yani spawn anında
+doğru değeri alır), yarı canlı birim yarı canlı kalır, **yok edilmiş havuz dirilmez** — ve havuz
+değiştirilmediği için `DamageVisuals` gibi referans tutan bileşenler etkilenmez. Dört spawn çağrısı
+**tek satır bile değişmeden** doğru değeri aldı.
+
+*Denge sonucu:* yalnız SAM **zorlaştı** (100 → 120 HP); AAA (100 → 70), yer hedefi (100 → 60) ve
+düşman avcı (100 → 70) **kolaylaştı**. Yani ilk seviyeler kesinlikle daha kolay: Seviye 1 sadece iki
+yer hedefi (60 HP), Seviye 2 + hafif AAA (70 HP), Seviye 3 avcılar (70 HP). SAM 120 HP = SİHA'nın
+**tam 3 füzesi** (40 hasar) ya da ~2.7 sn nişan üstünde top (10 atış/sn × 4.5 = 45 hasar/sn) — eski
+100 HP de zaten 3 füze gerektiriyordu, yani füze ekonomisi değişmedi. Tek dikkat çeken uç durum:
+füzesi olmayan **Keşif İHA** (3 hasar, 8 atış/sn = 24 hasar/sn) bir SAM'i düşürmek için **5 sn**
+kesintisiz nişan üstünde kalmak zorunda, üstelik SAM 120 m'den atarken İHA'nın topu 45 m — SEAD
+(Seviye 4) İHA ile bilinçli olarak zor bir seçim. Değer olarak yeniden ayarlanmadı, yalnız kayda
+geçirildi.
+
+**(2) Bina tepeleri seyir bandının içindeydi (B-21).** Aritmetik: kule arketipi kendi tabanından
+**10.90 m** yükseliyor (0.50 plint + 7.2 gövde tavanı + 2.30 direk ofseti + 0.90 direk
+yarı-yüksekliği), blok anteni 10.54 m, en yüksek çam ~8.7 m; arazi kabartması
+(`TerrainField.Amplitude = 3`) bunun altına +3 m ekliyor → **14 m silüet tavanı**. Drone'lar
+**10–14 m**'de seyrediyordu: Keşif İHA (12 m) ve SİHA (14 m) çatıların **içinden** geçiyordu (eski
+8 m kutularda pay zaten ~1 m idi). Binaları tavanın altına indirmek onları 5 m'ye kırpmak demek
+olurdu, o yüzden **siluet korundu ve bant +6 m ötelendi**: yeni Core sistemi `FlightEnvelope`
+sayıyı tek yerde tanımlıyor (11 m prop + 3 m arazi + **4 m pay** = **18 m taban**) ve
+`FlightEnvelopeTests` her uçak profilinin bu tabanı geçtiğini doğruluyor — bina büyütülüp sabit
+güncellenmezse test kırılır. Ötelenen değerler: İHA 12→18, SİHA 14→20, Jet 18→24 (bandın **şekli**
+aynı, sadece taşındı), düşman avcı 14→20 (SİHA ile aynı kotta kalsın diye), kanat pilotları
+10/12→18/20; avcı spawn kademesi (±2.4 m) `ClampToCruiseFloor` ile tabana yükseltiliyor.
+
+`minAltitude = 5 m` **bilerek değişmedi**: o bir yer çarpma tabanı, siluet payı değil. Yakıtsız
+süzülüş onunla yere çakılır, `EvasiveManeuver.Choose` eşiklerini ondan türetir; 18 m'ye çekilseydi
+yakıtı biten drone havada patlardı. Yani kasıtlı alçalmalar (dalış, alçak taarruz, dead-stick)
+hâlâ siluetin içine inebilir — garanti edilen şey **normal seyrin** oraya girmemesi. Sahnede zaten
+hiçbir prop'ta collider yok, dolayısıyla bunun bedeli geçici görsel kesişmeden ibaret.
+Üs/düz bölge (r ≤ 45 m, hangarlar 3.2 m), radar skopunun menzil halkaları (yatay projeksiyon) ve
+kamera çerçevelemesi (sabit irtifa varsayımı yok) etkilenmedi.
