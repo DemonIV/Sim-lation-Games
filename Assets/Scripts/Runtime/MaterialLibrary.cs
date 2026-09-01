@@ -67,6 +67,46 @@ namespace Sim.Runtime
             return mat;
         }
 
+        private static Shader _unlitShader;
+        private static bool _unlitShaderResolved;
+        private static readonly Dictionary<string, Material> UnlitCache = new Dictionary<string, Material>();
+
+        /// <summary>Resolves (once) the best available unlit shader for line/tracer materials.</summary>
+        private static Shader ResolveUnlitShader()
+        {
+            if (_unlitShaderResolved) return _unlitShader;
+            _unlitShaderResolved = true;
+
+            _unlitShader = Shader.Find("Sprites/Default");
+            if (_unlitShader == null) _unlitShader = Shader.Find("Unlit/Color");
+            if (_unlitShader == null) _unlitShader = Shader.Find("Standard");
+            return _unlitShader;
+        }
+
+        /// <summary>
+        /// Creates (or returns a cached) unlit material in the given colour, for effects that never
+        /// mutate their material — gun tracers in particular, which would otherwise leak one material
+        /// instance per round fired. The returned material is SHARED: assign it to
+        /// <c>Renderer.sharedMaterial</c> and never write to it.
+        /// </summary>
+        public static Material CreateUnlit(Color color)
+        {
+            string key = string.Format("{0:F3}_{1:F3}_{2:F3}_{3:F3}", color.r, color.g, color.b, color.a);
+
+            Material cached;
+            if (UnlitCache.TryGetValue(key, out cached) && cached != null) return cached;
+
+            Shader shader = ResolveUnlitShader();
+            if (shader == null) return null;
+
+            var mat = new Material(shader);
+            if (mat.HasProperty("_Color")) mat.SetColor("_Color", color);
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
+
+            UnlitCache[key] = mat;
+            return mat;
+        }
+
         /// <summary>
         /// Creates a NEW (uncached) material set up for alpha blending, for effects that fade their
         /// own alpha out (smoke puffs, scorch marks). Handles both the built-in Standard shader and

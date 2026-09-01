@@ -128,5 +128,18 @@ namespace Sim.Runtime
             if (_elapsed >= Lifetime)
                 Destroy(gameObject);
         }
+
+        /// <summary>
+        /// Frees the per-instance material. The fireball animates its own colour/emission every frame,
+        /// so the material cannot be shared — but it must not outlive the effect either.
+        /// </summary>
+        private void OnDestroy()
+        {
+            if (_material != null)
+            {
+                Destroy(_material);
+                _material = null;
+            }
+        }
     }
 }
