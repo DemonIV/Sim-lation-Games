@@ -123,6 +123,10 @@ namespace Sim.Runtime
         /// <returns>The "Props" root GameObject that parents every scattered prop.</returns>
         public static GameObject ScatterProps(float halfExtent, int treeCount = 220, int rockCount = 70, int buildingCount = 18)
         {
+            // The fixed seed must stay local to the scatter: every other Random consumer (enemy
+            // spawn placement, hit dice, radar noise, decoy rolls) would otherwise be pinned to the
+            // same deterministic stream and every run would play out identically.
+            Random.State previousRandomState = Random.state;
             Random.InitState(12345);
 
             var root = new GameObject("Props");
@@ -181,6 +185,7 @@ namespace Sim.Runtime
                 building.transform.position = p + new Vector3(0f, h * 0.5f, 0f);
             }
 
+            Random.state = previousRandomState;
             return root;
         }
 
