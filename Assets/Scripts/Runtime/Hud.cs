@@ -88,6 +88,17 @@ namespace Sim.Runtime
         private Transform _bankOwner;
         private Transform _bankSource;
 
+        // ---- campaign booking (exactly once per mission end) ----
+
+        /// <summary>True once this mission's result has been paid out and saved.</summary>
+        private bool _missionBooked;
+
+        /// <summary>Money the finished mission earned, shown on the report screen.</summary>
+        private int _earnedMoney;
+
+        /// <summary>Star grade the booking used, so the report and the save cannot disagree.</summary>
+        private int _bookedStars;
+
         // Radar contact rows, rebuilt each frame into reused lists so OnGUI allocates nothing extra.
         private readonly List<string> _contactId = new List<string>();
         private readonly List<string> _contactType = new List<string>();
@@ -119,6 +130,40 @@ namespace Sim.Runtime
                 if (_menu == null) _menu = FindAnyObjectByType<ScenarioMenu>();
                 if (_cameraRig == null) _cameraRig = FindAnyObjectByType<CameraRig>();
             }
+
+            TryBookMissionResult();
+        }
+
+        /// <summary>
+        /// Pays out and saves the campaign result the moment the mission ends — ONCE. Everything the
+        /// booking needs already exists: the <see cref="ScenarioController"/> owns win/lose, the
+        /// <see cref="SimulationDirector"/>'s <see cref="MissionState"/> owns the counters and
+        /// <see cref="MissionGrade"/> owns the star rating; <see cref="CampaignSession.CompleteMission"/>
+        /// turns those into money, marks the level complete (unlocking the next one) and writes the
+        /// save.
+        ///
+        /// <para>
+        /// It lives in <see cref="Update"/>, not in the report drawing, because OnGUI runs several
+        /// times per frame; <see cref="_missionBooked"/> guards it anyway, and the flag resets by
+        /// construction — a restart rebuilds this component along with the rest of the world.
+        /// </para>
+        /// </summary>
+        private void TryBookMissionResult()
+        {
+            if (_missionBooked) return;
+
+            MissionState m = _director != null ? _director.Mission : null;
+            if (m == null) return;
+
+            MissionStatus endStatus = _scenario != null ? MapScenario(_scenario.Status) : m.Status;
+            if (endStatus != MissionStatus.Won && endStatus != MissionStatus.Lost) return;
+
+            _missionBooked = true;
+            _bookedStars = MissionGrade.Stars(endStatus, m.FriendliesLost, m.ElapsedTime);
+            _earnedMoney = CampaignSession.CompleteMission(
+                CampaignSession.SelectedLevelIndex,
+                endStatus == MissionStatus.Won,
+                m.HostilesDestroyed, m.FriendliesLost, _bookedStars);
         }
 
         private void RefreshSensors()
@@ -1069,12 +1114,13 @@ namespace Sim.Runtime
                           new Color(HudTheme.Bg.r, HudTheme.Bg.g, HudTheme.Bg.b, 0.80f));
 
             const float w = 640f;
-            const float h = 300f;
+            const float h = 340f;
             var panel = new Rect((Screen.width - w) * 0.5f, (Screen.height - h) * 0.5f, w, h);
 
             HudTheme.Fill(panel, HudTheme.PanelBg);
             HudTheme.Border(panel, accent);
-            HudTheme.Header(new Rect(panel.x, panel.y, w, HeaderH), "GÖREV RAPORU",
+            HudTheme.Header(new Rect(panel.x, panel.y, w, HeaderH),
+                            $"GÖREV RAPORU  ·  SEVİYE {CampaignSession.SelectedLevelIndex}",
                             Upper(ScenarioLibrary.Title(ScenarioController.SelectedKind)));
 
             float x = panel.x + 20f;
@@ -1085,8 +1131,11 @@ namespace Sim.Runtime
                           HudTheme.Verdict, accent);
             y += 58f;
 
-            // Star rating (filled/empty), from the same MissionGrade call as before.
-            int stars = MissionGrade.Stars(endStatus, m.FriendliesLost, m.ElapsedTime);
+            // Star rating (filled/empty). Once the result is booked the report shows exactly the
+            // grade that was paid out and saved, so the two can never disagree.
+            int stars = _missionBooked
+                ? _bookedStars
+                : MissionGrade.Stars(endStatus, m.FriendliesLost, m.ElapsedTime);
             stars = Mathf.Clamp(stars, 0, 3);
             string starText = new string('★', stars) + new string('☆', 3 - stars);
             HudTheme.Draw(new Rect(x, y, cw, 34f), starText, HudTheme.Verdict28C(), HudTheme.Amber);
@@ -1105,6 +1154,26 @@ namespace Sim.Runtime
             StatCell(new Rect(x + (cell + 4f) * 3f, y, cell, 44f), "SKOR",
                      m.Score.ToString(), HudTheme.Amber);
             y += 52f;
+
+            // Campaign payout: what this sortie earned and what the purse now holds. The numbers come
+            // straight from the booking in TryBookMissionResult — nothing is recomputed here.
+            KeyValueRow(new Rect(x, y, cw, 20f), "KAZANILAN KREDİ",
+                        $"+{_earnedMoney}", _earnedMoney > 0 ? HudTheme.Ok : HudTheme.TextDim);
+            y += 26f;
+            KeyValueRow(new Rect(x, y, cw, 20f), "TOPLAM KREDİ",
+                        CampaignSession.Wallet.Balance.ToString(), HudTheme.Amber);
+            y += 26f;
+
+            // Unlock notice: only after a win that actually opened the next level.
+            int nextLevel = CampaignSession.SelectedLevelIndex + 1;
+            if (won && CampaignLibrary.IsValidIndex(nextLevel)
+                && CampaignSession.Progress.IsUnlocked(nextLevel))
+            {
+                DrawCenter(new Rect(x, y, cw, 16f),
+                           $"SEVİYE {nextLevel} AÇILDI — {Upper(CampaignLibrary.GetOrFirst(nextLevel).Name)}",
+                           HudTheme.Small, HudTheme.Ok);
+            }
+            y += 22f;
 
             // Actions.
             ActionBox(new Rect(x, y, cw * 0.5f - 6f, 34f), "R", "YENİDEN BAŞLAT", HudTheme.Amber);
