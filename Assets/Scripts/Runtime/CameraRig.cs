@@ -51,13 +51,39 @@ namespace Sim.Runtime
         private Camera _camera;
         private float _baseFov = 60f;
 
+        // ---------------------------------------------------------------- cockpit view (pilot only)
+
+        [Header("Cockpit")]
+        // Seat position in the aircraft's own axes: this far up the nose and this far above the spine.
+        // Applied along transform.forward/up (NOT TransformPoint) because unit roots are scaled.
+        [SerializeField] private float cockpitForward = 1.6f;
+        [SerializeField] private float cockpitUp = 0.5f;
+        // Much stiffer than the chase cam: the seat is bolted to the airframe.
+        [SerializeField] private float cockpitPositionLerp = 30f;
+        [SerializeField] private float cockpitRotationLerp = 25f;
+        // Degrees shaved off the base FOV inside the cockpit, for a tighter "inside" feel.
+        [SerializeField] private float cockpitFovNarrow = 8f;
+
+        // Renderers of the piloted aircraft's "Model" subtree, hidden while sitting inside it.
+        private Renderer[] _hiddenRenderers;
+        private Transform _hiddenModelOwner;
+
+        // Edge detection for taking/releasing control, so the view can default to the cockpit on C.
+        private bool _pilotWasActive;
+
+        /// <summary>True while the camera is sitting in the piloted aircraft's cockpit.</summary>
+        public bool CockpitView { get; private set; }
+
         /// <summary>Widens the FOV under afterburner and eases it back when the burner is released.</summary>
         private void UpdateFov()
         {
             if (_camera == null) return;
 
+            // The cockpit narrows the base FOV; the afterburner kick still works relative to it.
+            float baseFov = CockpitView ? Mathf.Max(20f, _baseFov - cockpitFovNarrow) : _baseFov;
+
             bool burner = _pilot != null && _pilot.IsActive && _pilot.AfterburnerActive;
-            float target = burner ? _baseFov + afterburnerFovBoost : _baseFov;
+            float target = burner ? baseFov + afterburnerFovBoost : baseFov;
             _camera.fieldOfView = Mathf.Lerp(_camera.fieldOfView, target,
                                              Mathf.Clamp01(fovLerp * Time.unscaledDeltaTime));
         }
@@ -137,6 +163,16 @@ namespace Sim.Runtime
         private void OnDestroy()
         {
             if (_instance == this) _instance = null;
+
+            // Never leave an aircraft invisible because the rig went away while in the cockpit.
+            RestoreHiddenModel();
+        }
+
+        private void OnDisable()
+        {
+            SetCockpitView(false);
+            // Re-enabling the rig mid-sortie should drop the player back into the cockpit.
+            _pilotWasActive = false;
         }
 
         private void Start()
@@ -177,11 +213,33 @@ namespace Sim.Runtime
                 _following = false;
                 _followTarget = null;
 
+                // Taking control (C) drops the player straight into the cockpit.
+                if (!_pilotWasActive)
+                {
+                    _pilotWasActive = true;
+                    CockpitView = true;
+                }
+
+                // V swaps between the chase cam and the cockpit while flying.
+                if (Input.GetKeyDown(KeyCode.V)) SetCockpitView(!CockpitView);
+
                 // PilotActive() already proved the piloted drone is live; re-read it into a local and
                 // check again so a drone destroyed in this very frame cannot be dereferenced.
                 IhaController piloted = _pilot.Controlled;
-                if (piloted != null) Chase(piloted.transform);
+                if (piloted != null)
+                {
+                    if (CockpitView) Cockpit(piloted.transform);
+                    else Chase(piloted.transform);
+                }
                 return;
+            }
+
+            // Control released (or the piloted drone is gone): leave the cockpit and give the aircraft
+            // its model back before returning to the normal spectator behaviour.
+            if (_pilotWasActive)
+            {
+                _pilotWasActive = false;
+                SetCockpitView(false);
             }
 
             // Cycle followed drone with Tab.
@@ -281,6 +339,103 @@ namespace Sim.Runtime
             Vector3 euler = transform.rotation.eulerAngles;
             _pitch = NormalizePitch(euler.x);
             _yaw = euler.y;
+        }
+
+        /// <summary>
+        /// Sits the camera at the piloted aircraft's nose, looking down its boresight. Follows the
+        /// airframe far more tightly than <see cref="Chase"/> so it feels rigidly attached.
+        /// </summary>
+        private void Cockpit(Transform t)
+        {
+            if (t == null)
+            {
+                SetCockpitView(false);
+                return;
+            }
+
+            float dt = Time.unscaledDeltaTime;
+
+            // Looking out of the canopy, not at the inside of the fuselage.
+            HideOwnModel(t);
+
+            // Direction vectors, not TransformPoint: unit roots carry a non-uniform scale that the
+            // "Model" child cancels, and it would distort a local-space offset.
+            Vector3 desired = t.position + t.forward * cockpitForward + t.up * cockpitUp;
+            transform.position = Vector3.Lerp(transform.position, desired,
+                                              Mathf.Clamp01(cockpitPositionLerp * dt));
+
+            if (t.forward.sqrMagnitude > 1e-6f)
+            {
+                Quaternion want = Quaternion.LookRotation(t.forward, Vector3.up);
+                transform.rotation = Quaternion.Slerp(transform.rotation, want,
+                                                      Mathf.Clamp01(cockpitRotationLerp * dt));
+            }
+
+            // Keep the free-fly state and the chase cam's damper in step so leaving the cockpit
+            // (V, or releasing control) neither snaps the view nor flings the camera.
+            Vector3 euler = transform.rotation.eulerAngles;
+            _pitch = NormalizePitch(euler.x);
+            _yaw = euler.y;
+            _followVelocity = Vector3.zero;
+        }
+
+        /// <summary>Enters/leaves the cockpit, restoring the aircraft's model on the way out.</summary>
+        private void SetCockpitView(bool on)
+        {
+            CockpitView = on;
+            if (!on) RestoreHiddenModel();
+        }
+
+        /// <summary>
+        /// Disables the renderers of the given aircraft's "Model" subtree, restoring whatever was
+        /// hidden before (the pilot can switch aircraft with Tab while flying).
+        /// </summary>
+        private void HideOwnModel(Transform aircraft)
+        {
+            // Unity's overloaded == is what makes this safe: a DESTROYED transform compares equal to
+            // null, so a dead owner never matches a live aircraft and the stale entry is dropped.
+            if (aircraft == null)
+            {
+                RestoreHiddenModel();
+                return;
+            }
+            if (_hiddenModelOwner == aircraft) return;
+
+            RestoreHiddenModel();
+
+            Transform model = aircraft.Find("Model");
+            if (model == null) return;
+
+            Renderer[] renderers = model.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer r = renderers[i];
+                if (r == null) continue;
+                r.enabled = false;
+            }
+
+            _hiddenRenderers = renderers;
+            _hiddenModelOwner = aircraft;
+        }
+
+        /// <summary>
+        /// Re-enables any renderers this rig hid. Every entry is null-checked because the aircraft may
+        /// have been destroyed (shot down, or torn down by a rebuild) while the player was inside it.
+        /// </summary>
+        private void RestoreHiddenModel()
+        {
+            if (_hiddenRenderers != null)
+            {
+                for (int i = 0; i < _hiddenRenderers.Length; i++)
+                {
+                    Renderer r = _hiddenRenderers[i];
+                    if (r == null) continue;
+                    r.enabled = true;
+                }
+            }
+
+            _hiddenRenderers = null;
+            _hiddenModelOwner = null;
         }
 
         /// <summary>
