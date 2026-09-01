@@ -522,12 +522,44 @@ namespace Sim.Runtime
             else
                 HudTheme.Draw(new Rect(bx, by, bw, BarH), "FLARE: YOK", HudTheme.Small, HudTheme.TextFaint);
 
-            // Active special abilities (E afterburner / X evasive manoeuvre): lit when on, dim when off.
+            // Active special abilities (E afterburner / X evasive break turn). The break turn also
+            // reports its cooldown, so the pilot can tell "not ready yet" from "did nothing".
             float ax = Screen.width - Margin - 150f;
             HudTheme.Tag(new Rect(ax, wpnY, 150f, 22f), "ART YAKICI",
                          _pilot.AfterburnerActive ? HudTheme.Amber : HudTheme.TextFaint);
-            HudTheme.Tag(new Rect(ax, wpnY + 28f, 150f, 22f), "KAÇIŞ",
-                         _pilot.EvadeActive ? HudTheme.Amber : HudTheme.TextFaint);
+
+            string evadeText;
+            Color evadeAccent;
+            if (_pilot.EvadeActive)
+            {
+                // Confirmation flash: the key press is visibly doing something.
+                float flash = 0.6f + 0.4f * Mathf.Abs(Mathf.Sin(Time.unscaledTime * 12f));
+                evadeText = "KAÇIŞ · ETKİN";
+                evadeAccent = new Color(HudTheme.Ok.r, HudTheme.Ok.g, HudTheme.Ok.b, flash);
+            }
+            else if (!_pilot.EvadeReady)
+            {
+                evadeText = $"KAÇIŞ · {_pilot.EvadeCooldownRemaining:0.0} s";
+                evadeAccent = HudTheme.TextFaint;
+            }
+            else
+            {
+                evadeText = "KAÇIŞ · HAZIR [X]";
+                evadeAccent = HudTheme.Amber;
+            }
+
+            var evadeTag = new Rect(ax, wpnY + 28f, 150f, 22f);
+            HudTheme.Tag(evadeTag, evadeText, evadeAccent);
+
+            // Recharge bar along the bottom edge of the chip.
+            float evadeFraction = Mathf.Clamp01(_pilot.EvadeReadyFraction);
+            HudTheme.Fill(new Rect(evadeTag.x + 1f, evadeTag.yMax - 3f, evadeTag.width - 2f, 2f),
+                          HudTheme.Track);
+            if (evadeFraction > 0f)
+                HudTheme.Fill(new Rect(evadeTag.x + 1f, evadeTag.yMax - 3f,
+                                       (evadeTag.width - 2f) * evadeFraction, 2f),
+                              _pilot.EvadeReady ? HudTheme.Ok : HudTheme.Amber);
+
             HudTheme.Draw(new Rect(ax, wpnY + 54f, 150f, 14f), "YANIK = ETKİN · SÖNÜK = PASİF",
                           HudTheme.Small, HudTheme.TextFaint);
         }
@@ -743,6 +775,9 @@ namespace Sim.Runtime
                     GuidedMunition m = munitions[i];
                     if (m == null) continue;
                     if (m.Target != selfTargetable) continue;
+                    // A decoyed / lock-lost round is coasting ballistically: the shot is beaten, so it
+                    // drops off the threat picture instead of lingering as a phantom contact.
+                    if (!m.IsGuiding) continue;
 
                     incoming++;
 
@@ -899,6 +934,65 @@ namespace Sim.Runtime
                           HudTheme.Verdict28(), HudTheme.Text);
             DrawRight(new Rect(band.x + 190f, band.y + 16f, band.width - 204f, 24f), "Q: FLARE",
                       HudTheme.Small, HudTheme.TextDim);
+
+            DrawBreakCue(new Rect(band.x, band.yMax + 6f, band.width, 26f), tti, pulse);
+        }
+
+        /// <summary>
+        /// The break-turn cue under the missile warning: the one thing the player has to read to know
+        /// WHEN pressing X is worth anything.
+        ///
+        /// <para>
+        /// The window comes from <see cref="Sim.Core.EvasiveManeuver.InBreakWindow"/> — it lives next
+        /// to the manoeuvre logic, not here, so the cue and the steering can never drift apart. Amber
+        /// while the shot is still too far out to break against, pulsing red the moment it enters the
+        /// window, and faint with the remaining lock-out while the ability is recharging.
+        /// </para>
+        /// </summary>
+        private void DrawBreakCue(Rect r, float tti, float pulse)
+        {
+            // Only the pilot has the ability; the AI breaks on its own.
+            if (_pilot == null || !_pilot.IsActive) return;
+
+            bool inWindow = EvasiveManeuver.InBreakWindow(tti);
+            bool active = _pilot.EvadeActive;
+            bool ready = _pilot.EvadeReady;
+
+            string text;
+            Color accent;
+
+            if (active)
+            {
+                // Confirmation flash while the manoeuvre is being flown: pressing X visibly does
+                // something. Faster pulse than the warning band so the two read apart.
+                float flash = 0.6f + 0.4f * Mathf.Abs(Mathf.Sin(Time.unscaledTime * 12f));
+                text = "KAÇIŞ MANEVRASI — UYGULANIYOR";
+                accent = new Color(HudTheme.Ok.r, HudTheme.Ok.g, HudTheme.Ok.b, flash);
+            }
+            else if (!ready)
+            {
+                text = $"KAÇIŞ MANEVRASI — DOLUYOR {_pilot.EvadeCooldownRemaining:0.0} s";
+                accent = HudTheme.TextFaint;
+            }
+            else if (inWindow)
+            {
+                text = "KAÇIŞ MANEVRASI — ŞİMDİ! [X]";
+                accent = new Color(HudTheme.Critical.r, HudTheme.Critical.g, HudTheme.Critical.b, pulse);
+            }
+            else
+            {
+                text = $"KAÇIŞ MANEVRASI — BEKLE ({EvasiveManeuver.BreakWindowSeconds:0.0} s ALTINDA KIR)";
+                accent = HudTheme.Amber;
+            }
+
+            HudTheme.Tag(r, text, accent);
+
+            // Recharge bar hugging the bottom edge of the chip, so the cooldown is legible at a glance.
+            float fraction = Mathf.Clamp01(_pilot.EvadeReadyFraction);
+            HudTheme.Fill(new Rect(r.x + 1f, r.yMax - 3f, r.width - 2f, 2f), HudTheme.Track);
+            if (fraction > 0f)
+                HudTheme.Fill(new Rect(r.x + 1f, r.yMax - 3f, (r.width - 2f) * fraction, 2f),
+                              ready ? HudTheme.Ok : HudTheme.Amber);
         }
 
         // ------------------------------------------------------------------ bottom strip
@@ -928,7 +1022,7 @@ namespace Sim.Runtime
                               + (piloting ? (cockpit ? " · V: TAKİP KAMERASI" : " · V: KOKPİT") : string.Empty),
                           HudTheme.Centered, HudTheme.TextFaint);
             HudTheme.Draw(l2, "W/S: GAZ · A/D: DÖNÜŞ · ↑/↓: YUNUSLAMA · SPACE: TOP · F: FÜZE · "
-                              + "Q: FLARE · E: ART YAKICI · X: KAÇIŞ",
+                              + "Q: FLARE · E: ART YAKICI · X: KAÇIŞ MANEVRASI (SERT KIRIŞ)",
                           HudTheme.Centered, HudTheme.TextFaint);
             string fleetHint = fleetVisible ? "GİZLE" : "GÖSTER";
             HudTheme.Draw(l3, $"P: {pauseText} · +/−: HIZ (x{scale:0.00}) · R: YENİDEN · "
