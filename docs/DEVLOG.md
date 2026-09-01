@@ -149,7 +149,8 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `ScenarioController` | Dalga tabanlı senaryo: seçilen göreve göre (`ScenarioLibrary.Composition`) her dalganın düşman karışımını spawn eder ve kazan/kaybet'i yönetir; `BeginMission()` çağrılana kadar bekler. |
 | `SimulationDirector` | Görev takibi ve skorlama (dalga güvenli kill sayımı; kazan/kaybet ScenarioController'da, bu yüzden `MissionState` saf sayaç olarak kurulur ve kendi kendine bitmez). |
 | `Hud` | Ekran üstü (IMGUI) bilgi paneli: görev, skor, radar temasları; pilot modunda dairesel radar skopu (temaslar + gelen füzeler). |
-| `CameraRig` | Serbest uçan kamera (WASD + fare), drone takip modu ve pilot modunda kokpit görünümü (**V** ile geçiş). |
+| `CameraRig` | Serbest uçan kamera (WASD + fare), drone takip modu ve pilot modunda kokpit görünümü (**V** ile geçiş); kokpitte `CockpitFrame`'i açar/kapatır. |
+| `CockpitFrame` | Kameraya bağlı prosedürel kokpit içi (gösterge paneli, güneşlik dudağı, ön cam kirişi, A-direkleri, kanopi rayları, hafif cam tonu, önde uçağın burnu); tüm parçalar kameranın gerçek frustum'una oranla ölçeklenir, FOV/en-boy değişince yeniden yerleşir. |
 | `ExplosionEffect` | Asset'siz patlama işareti: büyüyüp sönen emisyonlu küre (mühimmat isabeti + imha). |
 | `GameControls` | Klavye kontrolleri: R yeniden başlat, P duraklat, +/- zaman ölçeği. |
 | `GunTurret` | `GunSystem` + `HitProbability` sarmalayıcısı: hedefe veya serbest nişan noktasına top atışı, izli mermi. |
@@ -244,6 +245,8 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
 | `60dd15f` | Hava savunması füzeleri yavaşlatıldı (SAM 150→85, AAA 130→95) — kaçınılabilir hâle geldi. |
 | `76202c2` | Pilot modunda kokpit görünümü; **V** ile kokpit/takip kamerası arasında geçiş. |
 | `bu tur` | Pilot HUD'ına radar skopu: temaslar + gelen füzeler (+ DEVLOG güncellemesi). |
+| `fa8d6fa` | Prosedürel kokpit içi (`CockpitFrame`): frustum oranlı gösterge paneli, kiriş, A-direkleri, raylar, cam tonu ve burun. |
+| `bu tur` | `CockpitFrame` kokpit görünümüne bağlandı (pilotluk sürerken görünür, burun uçağın rengini alır) + DEVLOG. |
 
 ---
 
@@ -568,3 +571,30 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
   ve en kısa çarpma süresi yazıyor. IMGUI'de çizgi/daire primitifi olmadığı için disk satırlardan,
   halkalar ve çizgiler noktalardan kuruluyor. Mevcut HUD öğelerinin hiçbiri kaldırılmadı; alt kontrol
   şeridine yalnızca `V: KOKPİT / TAKİP KAMERASI` ipucu eklendi.
+
+- **Gerçek kokpit içi (`CockpitFrame`):** Kokpit görünümü artık yalnız buruna oturmuş bir kamera
+  değil; oyuncu gerçekten camın ardında oturuyor. Kokpit primitive'lerden kuruluyor ve **uçağa değil
+  KAMERAYA** bağlanıyor (birim kökleri ölçekli olduğu için uçağa bağlı bir kokpit shear olurdu ve her
+  uçak için ayrı ayarlanması gerekirdi). Hiçbir ölçü sabit metre değil: seçilen kare mesafesinde
+  (`d = max(0.6 m, nearClip * 2)`) kameranın gerçek frustum yarı-yüksekliği
+  `halfH = d * tan(FOV/2)` ve yarı-genişliği `halfW = halfH * aspect` hesaplanıp her parça bunların
+  oranı olarak yerleştiriliyor — böylece kokpit her FOV ve en-boy oranında aynı kadrajı veriyor.
+  Parçalar: pilota doğru hafifçe eğimli (−12°) koyu **gösterge paneli** (alttan görüş yüksekliğinin ~%28'ine kadar),
+  üstünde ayrı okunan **güneşlik dudağı**, üst kenarda görüş yüksekliğinin ~%8'i kalınlığında **ön cam
+  kirişi**, panelin uçlarından kirişin uçlarına hafifçe içe yakınsayan iki **A-direği** (her biri görüş
+  genişliğinin %7'si — ileri görüş açık kalıyor), iki yanda tam boy koyu **kanopi rayları**, `d * 3`
+  mesafesinde alçakta duran ve pilotun üzerinden baktığı iki parçalı **burun kaması**, tüm görüşü
+  kaplayan çok hafif soğuk tonlu **kanopi camı** (alfa 0.06, `MaterialLibrary.CreateTransparent`;
+  materyal kurulamazsa cam hiç çizilmiyor) ve panelde üç sönük dekoratif **gösterge ışığı** (amber/teal
+  — gerçek veri HUD'da olduğu için bilinçli olarak silik). Her parçanın collider'ı siliniyor, gölge
+  atmıyor/almıyor (`VehicleModelBuilder` konvansiyonu); materyali kurulamayan parça çizilmiyor.
+  `LateUpdate` FOV/aspect'i önbellekle karşılaştırıp (0.25° / 0.005) sapma olunca yerleşimi yeniden
+  çalıştırıyor — art yakıcı FOV artışında birkaç kare boyunca yalnızca ~13 transform yazımı, tahsis yok.
+  Kameranın clip düzlemlerine dokunulmadı; bunun yerine kare mesafesi near plane'in iki katından
+  aşağı inemiyor (en yakın parça olan cam bile `0.9 * d` ile önde kalıyor).
+  `CameraRig` tarafı: kare ilk kokpit girişinde tembel kuruluyor, yalnızca pilotluk + `CockpitView`
+  doğruyken görünür (takip kamerası, serbest uçuş, kontrol bırakma, uçağın düşmesi, rig'in kapanması →
+  gizleniyor), rig yok edilirken kamera altında kalmasın diye siliniyor. Burun rengi, kokpitte zaten
+  gizlenen `"Model"` alt ağacındaki `"Fuselage"` materyalinden **uçak değiştikçe bir kez** okunup
+  `SetBodyColor` ile veriliyor. Mevcut davranışların hiçbiri değişmedi: **V** geçişi, **C** ile varsayılan
+  kokpit, `"Model"` renderer'larının gizlenmesi ve art yakıcı FOV artışı aynen duruyor.

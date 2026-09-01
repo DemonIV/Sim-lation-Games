@@ -68,6 +68,15 @@ namespace Sim.Runtime
         private Renderer[] _hiddenRenderers;
         private Transform _hiddenModelOwner;
 
+        // The procedural cockpit interior. Built lazily on the first entry into the cockpit and then
+        // only shown/hidden; it hangs off the CAMERA, not off the aircraft.
+        private CockpitFrame _cockpitFrame;
+
+        // Airframe colour, read once per aircraft off its "Model" subtree so the nose visible ahead
+        // of the windscreen matches the aircraft actually being flown.
+        private Color _pilotedBodyColor = Color.grey;
+        private bool _hasPilotedBodyColor;
+
         // Edge detection for taking/releasing control, so the view can default to the cockpit on C.
         private bool _pilotWasActive;
 
@@ -166,6 +175,10 @@ namespace Sim.Runtime
 
             // Never leave an aircraft invisible because the rig went away while in the cockpit.
             RestoreHiddenModel();
+
+            // The frame is parented to the camera, which may well outlive this rig.
+            if (_cockpitFrame != null) Destroy(_cockpitFrame.gameObject);
+            _cockpitFrame = null;
         }
 
         private void OnDisable()
@@ -358,6 +371,9 @@ namespace Sim.Runtime
             // Looking out of the canopy, not at the inside of the fuselage.
             HideOwnModel(t);
 
+            // ...and out THROUGH the canopy: coaming, pillars, rails and the nose ahead.
+            ShowCockpitFrame();
+
             // Direction vectors, not TransformPoint: unit roots carry a non-uniform scale that the
             // "Model" child cancels, and it would distort a local-space offset.
             Vector3 desired = t.position + t.forward * cockpitForward + t.up * cockpitUp;
@@ -383,7 +399,38 @@ namespace Sim.Runtime
         private void SetCockpitView(bool on)
         {
             CockpitView = on;
-            if (!on) RestoreHiddenModel();
+            if (on) return;
+
+            RestoreHiddenModel();
+
+            // Chase view, free-fly, released control or a destroyed aircraft: no cockpit interior.
+            if (_cockpitFrame != null) _cockpitFrame.SetVisible(false);
+        }
+
+        /// <summary>
+        /// Builds the cockpit interior on first use and shows it, keeping its nose in the colour of
+        /// the aircraft being flown. Only ever called from <see cref="Cockpit"/>, i.e. while the
+        /// player is piloting in cockpit view.
+        /// </summary>
+        private void ShowCockpitFrame()
+        {
+            if (_camera == null) return;
+
+            if (_cockpitFrame == null)
+            {
+                _cockpitFrame = _hasPilotedBodyColor
+                    ? CockpitFrame.Attach(_camera, _pilotedBodyColor)
+                    : CockpitFrame.Attach(_camera);
+                // No camera to attach to, or the frame could not be built: fly without it.
+                if (_cockpitFrame == null) return;
+            }
+            else if (_hasPilotedBodyColor)
+            {
+                // Cheap no-op unless the player switched to a differently painted aircraft.
+                _cockpitFrame.SetBodyColor(_pilotedBodyColor);
+            }
+
+            _cockpitFrame.SetVisible(true);
         }
 
         /// <summary>
@@ -416,6 +463,43 @@ namespace Sim.Runtime
 
             _hiddenRenderers = renderers;
             _hiddenModelOwner = aircraft;
+
+            // Read once, here, because this runs only when the piloted aircraft actually changes.
+            Color body;
+            _hasPilotedBodyColor = TryReadBodyColor(model, out body);
+            if (_hasPilotedBodyColor) _pilotedBodyColor = body;
+        }
+
+        /// <summary>
+        /// Reads the airframe's primary colour off its "Fuselage" part (any renderer will do as a
+        /// fallback), so the cockpit's nose can be painted to match. Returns false when there is
+        /// nothing to read, in which case the frame keeps its neutral default.
+        /// </summary>
+        private static bool TryReadBodyColor(Transform model, out Color color)
+        {
+            color = Color.grey;
+            if (model == null) return false;
+
+            Renderer r = null;
+            Transform fuselage = model.Find("Fuselage");
+            if (fuselage != null) r = fuselage.GetComponent<Renderer>();
+            if (r == null) r = model.GetComponentInChildren<Renderer>(true);
+            if (r == null) return false;
+
+            Material mat = r.sharedMaterial;
+            if (mat == null) return false;
+
+            if (mat.HasProperty("_Color"))
+            {
+                color = mat.GetColor("_Color");
+                return true;
+            }
+            if (mat.HasProperty("_BaseColor"))
+            {
+                color = mat.GetColor("_BaseColor");
+                return true;
+            }
+            return false;
         }
 
         /// <summary>
