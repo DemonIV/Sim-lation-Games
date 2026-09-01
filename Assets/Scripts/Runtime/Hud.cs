@@ -935,7 +935,7 @@ namespace Sim.Runtime
             DrawRight(new Rect(band.x + 190f, band.y + 16f, band.width - 204f, 24f), "Q: FLARE",
                       HudTheme.Small, HudTheme.TextDim);
 
-            DrawBreakCue(new Rect(band.x, band.yMax + 6f, band.width, 26f), tti, pulse);
+            DrawBreakCue(new Rect(band.x, band.yMax + 6f, band.width, 26f), pulse);
         }
 
         /// <summary>
@@ -949,12 +949,13 @@ namespace Sim.Runtime
         /// window, and faint with the remaining lock-out while the ability is recharging.
         /// </para>
         /// </summary>
-        private void DrawBreakCue(Rect r, float tti, float pulse)
+        private void DrawBreakCue(Rect r, float pulse)
         {
             // Only the pilot has the ability; the AI breaks on its own.
             if (_pilot == null || !_pilot.IsActive) return;
 
-            bool inWindow = EvasiveManeuver.InBreakWindow(tti);
+            // The window itself is decided by Sim.Core.EvasiveManeuver, via the pilot's own hook.
+            bool inWindow = _pilot.BreakWindowOpen;
             bool active = _pilot.EvadeActive;
             bool ready = _pilot.EvadeReady;
 
