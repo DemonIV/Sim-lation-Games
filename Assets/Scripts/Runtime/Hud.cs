@@ -30,6 +30,12 @@ namespace Sim.Runtime
         private SimulationDirector _director;
         private ScenarioController _scenario;
         private RadarSensor[] _sensors;
+
+        // Hostile sensors, refreshed alongside _sensors. They are what lets the signature panel say
+        // whether anything has ACTUALLY acquired the player, rather than only how visible they are.
+        private AirDefenseSite[] _hostileSites;
+        private EnemyDroneController[] _hostileFighters;
+
         private GameControls _controls;
         private PlayerDroneController _pilot;
         private ScenarioMenu _menu;
@@ -56,6 +62,9 @@ namespace Sim.Runtime
 
         /// <summary>Height of the threat readout row drawn under the scope.</summary>
         private const float ScopeInfoH = 18f;
+
+        /// <summary>Height of the signature panel drawn above the scope (header + bar + status tag).</summary>
+        private const float SignatureBlockH = HeaderH + 6f + BarH + 6f + 16f + 6f;
 
         // ---- gun pipper (the reticle is projected from the bore, not welded to screen centre) ----
 
@@ -169,6 +178,8 @@ namespace Sim.Runtime
         private void RefreshSensors()
         {
             _sensors = FindObjectsByType<RadarSensor>(FindObjectsSortMode.None);
+            _hostileSites = FindObjectsByType<AirDefenseSite>(FindObjectsSortMode.None);
+            _hostileFighters = FindObjectsByType<EnemyDroneController>(FindObjectsSortMode.None);
         }
 
         private void OnGUI()
@@ -759,6 +770,13 @@ namespace Sim.Runtime
             var disc = new Rect(Screen.width - Margin - ScopeSize,
                                 blockBottom - ScopeInfoH - ScopeSize, ScopeSize, ScopeSize);
 
+            // Own signature panel, sitting directly on top of the scope: how visible the player is,
+            // and whether a hostile radar has actually got them. It reads as the mirror image of the
+            // threat readout drawn under the scope — that one is "what is shooting at me", this one
+            // is "how easily can they see me in the first place".
+            DrawSignatureBlock(new Rect(disc.x, disc.y - SignatureBlockH - 8f,
+                                        ScopeSize, SignatureBlockH), selfTargetable);
+
             Vector2 c = disc.center;
             float radius = ScopeSize * 0.5f - 2f;
 
@@ -860,6 +878,106 @@ namespace Sim.Runtime
             }
 
             DrawRight(info, $"MENZİL {range:0} m", HudTheme.Small, HudTheme.TextDim);
+        }
+
+        /// <summary>
+        /// The player's own RADAR SIGNATURE panel: the raw cross section of the airframe they picked,
+        /// a gauge of how detectable that makes them right now, and whether a hostile radar has
+        /// actually acquired them.
+        ///
+        /// <para>
+        /// The gauge reads as STEALTH — more is better, like every other bar on this HUD — and is
+        /// derived from <see cref="Sim.Core.SignatureDetection.DetectionRangeMultiplier"/>, the factor
+        /// every hostile detection range is scaled by against this aircraft. It is LIVE: the multiplier
+        /// already folds in any noise <see cref="Jammer"/> the aircraft is carrying, so switching one
+        /// on immediately lengthens the bar and drops the readout below ×1.
+        /// </para>
+        ///
+        /// <para>
+        /// The mapping (baseline = the amber/green boundary at 0.5) is a pure PRESENTATION choice and
+        /// deliberately lives here rather than in Core: the 1 m² SİHA reads neutral, the smaller recon
+        /// İHA green, the bigger jet amber, and heavy jamming pushes anything to green.
+        /// </para>
+        /// </summary>
+        private void DrawSignatureBlock(Rect r, Targetable self)
+        {
+            // Signature and jamming come off the aircraft's own components (cached on the Targetable).
+            // An aircraft with no RcsComponent is simply the 1 m² baseline.
+            float signature = SignatureDetection.BaselineRcs;
+            float jamming = 0f;
+            int selfId = -1;
+
+            if (self != null)
+            {
+                selfId = self.Id;
+
+                RcsComponent rcs = self.Rcs;
+                if (rcs != null) signature = rcs.NominalRcs;
+
+                Jammer jammer = self.Jammer;
+                if (jammer != null) jamming = jammer.Strength;
+            }
+
+            float mult = SignatureDetection.DetectionRangeMultiplier(signature, jamming);
+            float stealth = Mathf.Clamp01(0.5f / Mathf.Max(1e-3f, mult * mult));
+
+            // Has anything actually got us? Count hostile radars holding this drone as their contact,
+            // and flag the one state that matters most: a confirmed SAM/AAA firing lock.
+            int contacts = 0;
+            bool locked = false;
+            if (selfId >= 0)
+            {
+                if (_hostileSites != null)
+                {
+                    for (int i = 0; i < _hostileSites.Length; i++)
+                    {
+                        AirDefenseSite site = _hostileSites[i];
+                        if (site == null) continue;              // destroyed since the last refresh
+                        if (site.CurrentTargetId != selfId) continue;
+                        contacts++;
+                        if (site.IsLocked) locked = true;
+                    }
+                }
+
+                if (_hostileFighters != null)
+                {
+                    for (int i = 0; i < _hostileFighters.Length; i++)
+                    {
+                        EnemyDroneController fighter = _hostileFighters[i];
+                        if (fighter == null) continue;
+                        if (!fighter.HasTarget) continue;
+                        if (fighter.DetectedId != selfId) continue;
+                        contacts++;
+                    }
+                }
+            }
+
+            HudTheme.Panel(r);
+            HudTheme.Header(new Rect(r.x, r.y, r.width, HeaderH), "İMZA", $"{signature:0.00} m²");
+
+            float bx = r.x + 12f;
+            float bw = r.width - 24f;
+            float by = r.y + HeaderH + 6f;
+
+            HudTheme.Bar(new Rect(bx, by, bw, BarH), stealth, "GİZLİ", $"×{mult:0.00}");
+            by += BarH + 6f;
+
+            var tag = new Rect(bx, by, bw, 16f);
+            if (locked)
+            {
+                // Same unscaled blink the missile picture uses, so a lock still reads while paused.
+                float flash = 0.55f + 0.45f * Mathf.Abs(Mathf.Sin(Time.unscaledTime * 9f));
+                HudTheme.Tag(tag, "RADAR KİLİDİ", new Color(HudTheme.Critical.r, HudTheme.Critical.g,
+                                                            HudTheme.Critical.b, flash));
+            }
+            else if (contacts > 0)
+            {
+                HudTheme.Tag(tag, $"RADAR TEMASI x{contacts}", HudTheme.Amber);
+            }
+            else
+            {
+                HudTheme.Draw(tag, "RADAR TEMASI YOK", HudTheme.Small, HudTheme.TextFaint);
+            }
         }
 
         /// <summary>Fills a circle out of stacked 1px rows (IMGUI can only draw rectangles).</summary>

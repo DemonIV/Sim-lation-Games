@@ -112,6 +112,41 @@ namespace Sim.Tests
                             SignatureDetection.EffectiveRange(Ref, Baseline, Baseline, -5f), 1e-3f);
         }
 
+        // ------------------------------------------------------------------ readout multiplier
+
+        [Test]
+        public void RangeMultiplier_IsOneAtTheBaselineAndOrdersTheArchetypes()
+        {
+            Assert.AreEqual(1f, SignatureDetection.DetectionRangeMultiplier(1f, 0f), 1e-3f);
+
+            float jet = SignatureDetection.DetectionRangeMultiplier(4f, 0f);
+            float siha = SignatureDetection.DetectionRangeMultiplier(1f, 0f);
+            float iha = SignatureDetection.DetectionRangeMultiplier(0.25f, 0f);
+
+            Assert.Greater(jet, siha);
+            Assert.Greater(siha, iha);
+            Assert.AreEqual(Mathf.Sqrt(2f), jet, 1e-3f);
+            Assert.AreEqual(1f / Mathf.Sqrt(2f), iha, 1e-3f);
+        }
+
+        [Test]
+        public void RangeMultiplier_IsIndependentOfTheSensorItDescribes()
+        {
+            // It is a pure property of the TARGET: any sensor scales by the same factor.
+            float mult = SignatureDetection.DetectionRangeMultiplier(4f, 3f);
+            Assert.AreEqual(SignatureDetection.EffectiveRange(160f, Baseline, 4f, 3f) / 160f,
+                            mult, 1e-3f);
+            Assert.AreEqual(SignatureDetection.EffectiveRange(80f, Baseline, 4f, 3f) / 80f,
+                            mult, 1e-3f);
+        }
+
+        [Test]
+        public void RangeMultiplier_FallsWhenJammingComesOn()
+        {
+            Assert.Less(SignatureDetection.DetectionRangeMultiplier(1f, 4f),
+                        SignatureDetection.DetectionRangeMultiplier(1f, 0f));
+        }
+
         // ------------------------------------------------------------------ the predicate
 
         [Test]

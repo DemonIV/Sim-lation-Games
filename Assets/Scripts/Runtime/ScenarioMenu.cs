@@ -66,9 +66,11 @@ namespace Sim.Runtime
         private const float LegendH = 92f;
         private const float FooterH = 24f;
 
-        // Aircraft row: header (20) + description (26+4) + four 9px gauges with 5px gaps = ~106px of
-        // content, so 120 is the smallest height that never clips a card.
-        private const float AircraftRowH = 120f;
+        // Aircraft row: header (20) + description (26+4) + FIVE 9px gauges with 5px gaps = ~124px of
+        // content, so 134 is the smallest height that never clips a card. (Grown by one bar row when
+        // the stealth gauge was added — the archetypes' radar signature is a real trade-off now, so
+        // it has to be visible at the moment of choosing.)
+        private const float AircraftRowH = 134f;
         private const float AircraftLabelH = 16f;
         private const float RatingBarH = 9f;
         private const float RatingBarGap = 5f;
@@ -277,7 +279,7 @@ namespace Sim.Runtime
 
             int rows = Mathf.Max(1, Mathf.CeilToInt(levels.Count / (float)LevelColumns));
 
-            float aircraftH = Mathf.Clamp(body.height * 0.3f, AircraftRowH, 150f);
+            float aircraftH = Mathf.Clamp(body.height * 0.3f, AircraftRowH, 164f);
             // The grid never shrinks below MinLevelCardH per ROW (gaps included), even if that means
             // spilling into the aircraft row on a very short window.
             float gridH = Mathf.Max(rows * MinLevelCardH + CardGap * (rows - 1),
@@ -638,7 +640,7 @@ namespace Sim.Runtime
         }
 
         /// <summary>
-        /// One aircraft card: header (name + SEÇİLİ marker), the one-line description and the four
+        /// One aircraft card: header (name + SEÇİLİ marker), the one-line description and the five
         /// 0..1 ratings as labelled gauges. The selected card gets the SAME amber treatment the
         /// level cards use for hover, so selection reads consistently across the screen. Returns
         /// true when the card was clicked.
@@ -671,12 +673,15 @@ namespace Sim.Runtime
             HudTheme.Draw(new Rect(x, y, cw, 26f), p.Description, _brief,
                           lit ? HudTheme.Text : HudTheme.TextDim);
 
-            // Rating gauges (0..1, no raw units on screen).
+            // Rating gauges (0..1, no raw units on screen). GİZLİ is the archetype's radar signature
+            // read the way every other bar reads — MORE is better — so the recon İHA's small
+            // cross section and the jet's big one are a visible trade-off at the moment of choosing.
             y += 30f;
             y = DrawRating(x, y, cw, "HIZ", p.SpeedRating);
             y = DrawRating(x, y, cw, "ÇEVİK", p.AgilityRating);
             y = DrawRating(x, y, cw, "ATEŞ", p.FirepowerRating);
-            DrawRating(x, y, cw, "SÜRE", p.EnduranceRating);
+            y = DrawRating(x, y, cw, "SÜRE", p.EnduranceRating);
+            DrawRating(x, y, cw, "GİZLİ", p.StealthRating);
 
             // Invisible hit area over the whole card, exactly like the level cards.
             return GUI.Button(r, GUIContent.none, GUIStyle.none);

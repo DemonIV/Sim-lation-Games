@@ -79,6 +79,18 @@ namespace Sim.Core
         }
 
         /// <summary>
+        /// How far ANY sensor reaches against this target relative to its stated range: 1 means
+        /// exactly the configured (baseline) range, 1.41 means half again as far, 0.71 means it has
+        /// to come that much closer. Because the reference range cancels out, this single number is
+        /// "how detectable am I right now" — signature and jamming folded together — which is
+        /// precisely what the HUD's signature readout shows the player.
+        /// </summary>
+        public static float DetectionRangeMultiplier(float rcs, float jammerStrength)
+        {
+            return EffectiveRange(1f, BaselineRcs, rcs, jammerStrength);
+        }
+
+        /// <summary>
         /// THE predicate: can a sensor at <paramref name="sensorPos"/> looking along
         /// <paramref name="sensorForward"/> see this target right now? Combines all four terms —
         /// range, signature, field of view and jamming.

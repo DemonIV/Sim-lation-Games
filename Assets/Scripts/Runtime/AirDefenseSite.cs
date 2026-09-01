@@ -46,6 +46,13 @@ namespace Sim.Runtime
         public int CurrentTargetId { get; private set; } = -1;
 
         /// <summary>
+        /// True while this site holds a CONFIRMED firing lock on <see cref="CurrentTargetId"/> — the
+        /// state one step short of a launch. Read by the HUD so the player can be told that a hostile
+        /// radar has actually acquired them, not merely that one exists.
+        /// </summary>
+        public bool IsLocked => _targeting != null && _targeting.IsLocked;
+
+        /// <summary>
         /// Sets tunable parameters before <see cref="Start"/> builds the targeting/weapon systems.
         /// The scenario calls this immediately after AddComponent (same frame, before Start), so it
         /// safely overrides the serialized defaults used to build SAM vs AAA variants.
