@@ -55,8 +55,10 @@ namespace Sim.Runtime
         /// Statics that must NOT survive are reset here (registry, live munitions, effect budget,
         /// time scale). Statics that MUST survive are deliberately left alone:
         /// <see cref="ScenarioController.SelectedKind"/> (the player's mission choice),
-        /// <see cref="ScenarioController.SelectedAircraftId"/> (the player's aircraft choice) and
-        /// <see cref="ScenarioMenu"/>'s auto-begin flag (set by a mid-mission mission switch just
+        /// <see cref="ScenarioController.SelectedAircraftId"/> (the player's aircraft choice),
+        /// <see cref="CampaignSession"/> (level progress, money and the garage — it is the campaign
+        /// itself, and is deliberately NOT reloaded here) and <see cref="ScenarioMenu"/>'s
+        /// auto-begin flag (set by a mid-mission mission switch just
         /// before calling this, and consumed by the freshly built menu so the briefing does not
         /// wrongly reappear).
         /// </para>
@@ -121,10 +123,13 @@ namespace Sim.Runtime
 
             // The PLAYER's aircraft slot, in the place the armed SİHA always held. WHICH airframe
             // stands here — and every performance number on it — comes from the archetype picked on
-            // the mission-select screen (see ScenarioController.SelectedAircraft). With the default
-            // SİHA profile this spawns exactly the drone it always did. The two recon İHA above are
-            // untouched AI wingmen: no profile is ever applied to them.
-            IhaController playerAircraft = SpawnPlayerAircraft(ScenarioController.SelectedAircraft);
+            // the mission-select screen WITH the hangar upgrades folded in
+            // (see CampaignSession.PlayerProfile). AircraftUpgrades.Apply is a pure function of the
+            // CATALOGUE profile, so re-reading it on every Build() can never compound: a rebuild
+            // yields the same aircraft, not a doubly upgraded one. With the default SİHA profile and
+            // an empty garage this spawns exactly the drone it always did. The two recon İHA above
+            // are untouched AI wingmen: no profile is ever applied to them.
+            IhaController playerAircraft = SpawnPlayerAircraft(CampaignSession.PlayerProfile);
 
             // Wave-based scenario. The ScenarioController (created after the drones) now owns ALL enemy
             // spawning — escalating waves of three hostile archetypes (plain target / SAM / AAA) — and

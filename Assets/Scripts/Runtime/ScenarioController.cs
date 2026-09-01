@@ -69,6 +69,16 @@ namespace Sim.Runtime
         public ScenarioKind Kind => SelectedKind;
 
         /// <summary>
+        /// The campaign level being flown (see <see cref="CampaignSession.SelectedLevel"/>). It is
+        /// what actually decides the mission now: <see cref="SelectedKind"/> is derived from it, the
+        /// wave count comes from <see cref="CampaignLevel.TotalWaves"/> and each wave's enemy mix from
+        /// <see cref="CampaignLevel.Composition"/> — which itself delegates to
+        /// <see cref="ScenarioLibrary.Composition"/>, so no scenario data is duplicated.
+        /// Never null.
+        /// </summary>
+        public static CampaignLevel Level => CampaignSession.SelectedLevel;
+
+        /// <summary>
         /// False until <see cref="BeginMission"/> is called. While false <see cref="Update"/> does
         /// nothing at all — no spawning, no wave advance, no fail check — so the mission-select menu
         /// can hold the sim on a clean field.
@@ -97,19 +107,31 @@ namespace Sim.Runtime
 
         private void Start()
         {
-            // Build the state from the selected scenario so the HUD can already show the right wave
+            // Build the state from the selected level so the HUD can already show the right wave
             // count behind the menu, but do NOT start: Update stays idle until BeginMission().
-            _state = new ScenarioState(ScenarioLibrary.TotalWaves(SelectedKind));
+            SyncStateToLevel();
         }
 
         /// <summary>
-        /// Starts (or restarts) the mission for the currently <see cref="SelectedKind"/> scenario.
-        /// Called by <see cref="ScenarioMenu"/> when the player picks a mission.
+        /// Starts (or restarts) the mission for the currently selected campaign level.
+        /// Called by <see cref="ScenarioMenu"/> when the player picks a level.
         /// </summary>
         public void BeginMission()
         {
-            _state = new ScenarioState(ScenarioLibrary.TotalWaves(SelectedKind));
+            SyncStateToLevel();
             Started = true;
+        }
+
+        /// <summary>
+        /// Rebuilds the wave state from <see cref="Level"/> and mirrors that level's scenario into
+        /// <see cref="SelectedKind"/>, so the HUD and the mission report keep naming the right
+        /// mission type.
+        /// </summary>
+        private void SyncStateToLevel()
+        {
+            CampaignLevel level = Level;
+            SelectedKind = level.Scenario;
+            _state = new ScenarioState(level.TotalWaves);
         }
 
         private void Update()
@@ -154,15 +176,16 @@ namespace Sim.Runtime
         }
 
         /// <summary>
-        /// Spawns the full enemy mix for the given (0-based) wave. The mix comes from
-        /// <see cref="ScenarioLibrary.Composition"/> for the selected scenario — Mixed Defense
-        /// delegates to the original <see cref="WavePlan"/>, the other missions have their own
+        /// Spawns the full enemy mix for the given (0-based) wave. The mix comes from the campaign
+        /// <see cref="Level"/>, which adds its own start offset and then delegates to
+        /// <see cref="ScenarioLibrary.Composition"/> for the selected scenario — Mixed Defense in
+        /// turn delegates to the original <see cref="WavePlan"/>, the other missions have their own
         /// per-wave composition (ground-only recon, SAM/AAA-only SEAD, fighters-only air combat).
         /// Ground archetypes are scattered on the deck; fighters spawn airborne at cruise altitude.
         /// </summary>
         private void SpawnWave(int waveIndex)
         {
-            WaveComposition c = ScenarioLibrary.Composition(SelectedKind, waveIndex);
+            WaveComposition c = Level.Composition(waveIndex);
 
             // Spacing is enforced per wave: everything placed below is kept clear of the units this
             // wave has already put on the field.
