@@ -13,8 +13,24 @@ namespace Sim.Runtime
         /// <summary>Faction id. 0 = friendly, 1 = hostile.</summary>
         public int Faction = 0;
 
-        /// <summary>Maximum hit points assigned to this object's <see cref="Sim.Core.Health"/> pool.</summary>
-        public float MaxHealth = 100f;
+        [SerializeField] private float maxHealth = 100f;
+
+        /// <summary>
+        /// Maximum hit points of this object's <see cref="Sim.Core.Health"/> pool.
+        ///
+        /// <para>
+        /// This is a PROPERTY, not a plain field, on purpose. <see cref="Awake"/> runs synchronously
+        /// inside <c>AddComponent</c>, so a spawner can only ever assign this AFTER the pool has been
+        /// built. As a bare field that assignment was silently dead — every hostile ended up with the
+        /// default 100 HP. The setter now resizes the live pool as well, so writing it is correct at
+        /// any point in the object's life and the ordering trap simply cannot be fallen into.
+        /// </para>
+        /// </summary>
+        public float MaxHealth
+        {
+            get => maxHealth;
+            set => SetMaxHealth(value);
+        }
 
         /// <summary>The pure-logic health pool backing this object. Created in Awake.</summary>
         public Health Health { get; private set; }
@@ -73,7 +89,7 @@ namespace Sim.Runtime
 
         private void Awake()
         {
-            Health = new Health(MaxHealth);
+            Health = new Health(maxHealth);
             Id = TargetRegistry.NextId();
             TargetRegistry.Register(this);
         }
@@ -84,20 +100,23 @@ namespace Sim.Runtime
         }
 
         /// <summary>
-        /// Sets the hit-point pool after the fact.
+        /// Sets the hit-point pool, resizing the live <see cref="Health"/> when it already exists.
         ///
         /// <para>
-        /// <see cref="Awake"/> runs INSIDE <c>AddComponent</c>, so assigning <see cref="MaxHealth"/>
-        /// from a spawner afterwards cannot reach the already-built <see cref="Health"/>; this rebuilds
-        /// it. Only used where a value other than the default is genuinely required (the player's
-        /// profiled aircraft) — existing spawns are left exactly as they were.
+        /// Identical to assigning <see cref="MaxHealth"/> — the property setter forwards here — so both
+        /// spellings behave the same whether they run before or after <see cref="Awake"/>. The pool is
+        /// RESIZED rather than replaced, keeping the current health ratio (a full unit stays full, a
+        /// half-dead one stays half-dead) and keeping any reference other components already hold.
         /// </para>
+        ///
+        /// <para>Non-positive values are ignored, so a mis-configured spawner cannot zero a unit out.</para>
         /// </summary>
-        public void SetMaxHealth(float maxHealth)
+        public void SetMaxHealth(float value)
         {
-            if (maxHealth <= 0f) return;
-            MaxHealth = maxHealth;
-            Health = new Health(maxHealth);
+            if (value <= 0f) return;
+            maxHealth = value;
+            if (Health == null) Health = new Health(value);
+            else Health.SetMax(value);
         }
 
         /// <summary>Applies damage to this object's health pool and destroys the GameObject when depleted.</summary>
