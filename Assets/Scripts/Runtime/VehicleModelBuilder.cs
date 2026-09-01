@@ -61,6 +61,103 @@ namespace Sim.Runtime
             return model;
         }
 
+        /// <summary>
+        /// The player's fighter jet (Savaş Uçağı): an area-ruled single-engine airframe with a
+        /// pointed radome, a raked bubble canopy, cranked-delta wings with leading-edge root
+        /// extensions, twin canted fins, side intakes, four underwing stores and a ventral sensor
+        /// ball.
+        ///
+        /// <para>Layout notes (model space, +Z forward, +Y up, ~6.8 long by ~5.2 span):</para>
+        /// <list type="bullet">
+        ///   <item>the fuselage is FIVE stacked cylinders whose cross-sections pinch in over the
+        ///   wing and swell again over the engine bay — a readable stand-in for area ruling that a
+        ///   single box cannot give;</item>
+        ///   <item>the pilot's eye in cockpit view sits at roughly (0, 0.5, 1.6) — see
+        ///   <c>CameraRig.cockpitForward/cockpitUp</c> — so the canopy is built around that point
+        ///   and the radome runs on ahead of it, which is exactly what
+        ///   <see cref="CockpitFrame"/> draws from the inside;</item>
+        ///   <item>"Fuselage" stays a DIRECT child of "Model": <c>CameraRig.TryReadBodyColor</c>
+        ///   looks it up with <c>Find</c>, which does not recurse;</item>
+        ///   <item>there is no "Propeller" — a jet has none, and
+        ///   <see cref="PropellerSpinner"/> simply finds nothing and does nothing.</item>
+        /// </list>
+        /// </summary>
+        public static Transform BuildFighterJet(Transform root, Color primary)
+        {
+            Transform model = CreateModelRoot(root);
+            if (model == null) return null;
+
+            Material body = Body(primary);
+            Material trim = Trim(primary);
+            Material accent = Accent(primary);
+            Material dark = DarkMetal();
+
+            // ---- fuselage: nose 0.48 wide → 0.64 at the intakes → 0.58 waist → 0.62 engine bay.
+            Part(model, PrimitiveType.Capsule, "Radome", new Vector3(0f, 0.02f, 2.85f), new Vector3(0.36f, 0.55f, 0.36f), new Vector3(90f, 0f, 0f), dark);
+            Part(model, PrimitiveType.Cylinder, "PitotBoom", new Vector3(0f, 0.02f, 3.55f), new Vector3(0.05f, 0.20f, 0.05f), new Vector3(90f, 0f, 0f), dark);
+            Part(model, PrimitiveType.Cylinder, "NoseSection", new Vector3(0f, 0.02f, 1.95f), new Vector3(0.48f, 0.45f, 0.50f), new Vector3(90f, 0f, 0f), body);
+            Part(model, PrimitiveType.Cylinder, "Fuselage", new Vector3(0f, 0f, 0.65f), new Vector3(0.64f, 0.85f, 0.68f), new Vector3(90f, 0f, 0f), body);
+            Part(model, PrimitiveType.Cylinder, "MidFuselage", new Vector3(0f, 0f, -0.95f), new Vector3(0.58f, 0.75f, 0.62f), new Vector3(90f, 0f, 0f), body);
+            Part(model, PrimitiveType.Cylinder, "AftFuselage", new Vector3(0f, 0f, -2.30f), new Vector3(0.62f, 0.60f, 0.58f), new Vector3(90f, 0f, 0f), body);
+            Part(model, PrimitiveType.Cube, "Spine", new Vector3(0f, 0.34f, -0.75f), new Vector3(0.30f, 0.24f, 2.30f), Vector3.zero, accent);
+
+            // ---- cockpit. The glass is the one part that may be missing: CreateTransparent can
+            // return null when no shader resolves, and an opaque canopy would be worse than none.
+            Part(model, PrimitiveType.Cube, "CanopySill", new Vector3(0f, 0.32f, 1.55f), new Vector3(0.52f, 0.14f, 1.35f), Vector3.zero, trim);
+            Material glass = CanopyGlass();
+            if (glass != null)
+                Part(model, PrimitiveType.Capsule, "Canopy", new Vector3(0f, 0.46f, 1.60f), new Vector3(0.44f, 0.52f, 0.44f), new Vector3(86f, 0f, 0f), glass);
+
+            // ---- cranked delta. A Y rotation of -a sweeps the LEFT panel back (its outboard end
+            // runs along (-cos a, 0, -sin a)), so the mirrored panel takes +a — same sign
+            // convention the enemy fighter's swept panels already use.
+            Part(model, PrimitiveType.Cube, "LerxL", new Vector3(-0.42f, -0.02f, 0.85f), new Vector3(0.55f, 0.08f, 2.00f), new Vector3(0f, -6f, 0f), trim);
+            Part(model, PrimitiveType.Cube, "LerxR", new Vector3(0.42f, -0.02f, 0.85f), new Vector3(0.55f, 0.08f, 2.00f), new Vector3(0f, 6f, 0f), trim);
+
+            Part(model, PrimitiveType.Cube, "WingL", new Vector3(-1.05f, -0.06f, -0.55f), new Vector3(2.00f, 0.10f, 1.70f), new Vector3(0f, -30f, 0f), trim);
+            Part(model, PrimitiveType.Cube, "WingR", new Vector3(1.05f, -0.06f, -0.55f), new Vector3(2.00f, 0.10f, 1.70f), new Vector3(0f, 30f, 0f), trim);
+            // Outer panels pick up extra sweep at the crank, starting where the inner panel tips out.
+            Part(model, PrimitiveType.Cube, "WingOuterL", new Vector3(-2.27f, -0.06f, -1.40f), new Vector3(1.00f, 0.09f, 1.00f), new Vector3(0f, -45f, 0f), trim);
+            Part(model, PrimitiveType.Cube, "WingOuterR", new Vector3(2.27f, -0.06f, -1.40f), new Vector3(1.00f, 0.09f, 1.00f), new Vector3(0f, 45f, 0f), trim);
+            // Flaperons ride the inner panel's trailing edge (0.95 back along its own local -Z).
+            Part(model, PrimitiveType.Cube, "FlaperonL", new Vector3(-0.58f, -0.06f, -1.37f), new Vector3(1.90f, 0.07f, 0.30f), new Vector3(0f, -30f, 0f), accent);
+            Part(model, PrimitiveType.Cube, "FlaperonR", new Vector3(0.58f, -0.06f, -1.37f), new Vector3(1.90f, 0.07f, 0.30f), new Vector3(0f, 30f, 0f), accent);
+
+            // ---- tail: swept tailplanes plus twin fins canted OUTWARD (a +Z rotation tips the
+            // left fin's top toward -X, so the pair takes opposite signs).
+            Part(model, PrimitiveType.Cube, "StabL", new Vector3(-0.95f, 0f, -2.35f), new Vector3(1.30f, 0.08f, 0.85f), new Vector3(0f, -28f, 0f), trim);
+            Part(model, PrimitiveType.Cube, "StabR", new Vector3(0.95f, 0f, -2.35f), new Vector3(1.30f, 0.08f, 0.85f), new Vector3(0f, 28f, 0f), trim);
+            Part(model, PrimitiveType.Cube, "FinL", new Vector3(-0.50f, 0.62f, -2.05f), new Vector3(0.08f, 1.10f, 0.95f), new Vector3(0f, 0f, 20f), trim);
+            Part(model, PrimitiveType.Cube, "FinR", new Vector3(0.50f, 0.62f, -2.05f), new Vector3(0.08f, 1.10f, 0.95f), new Vector3(0f, 0f, -20f), trim);
+
+            // ---- side intakes. The lips are dark so the duct mouths read as holes, not as caps.
+            Part(model, PrimitiveType.Cube, "IntakeL", new Vector3(-0.46f, -0.14f, 0.75f), new Vector3(0.34f, 0.42f, 1.60f), new Vector3(0f, -4f, 0f), trim);
+            Part(model, PrimitiveType.Cube, "IntakeR", new Vector3(0.46f, -0.14f, 0.75f), new Vector3(0.34f, 0.42f, 1.60f), new Vector3(0f, 4f, 0f), trim);
+            Part(model, PrimitiveType.Cube, "IntakeLipL", new Vector3(-0.46f, -0.14f, 1.56f), new Vector3(0.38f, 0.46f, 0.14f), Vector3.zero, dark);
+            Part(model, PrimitiveType.Cube, "IntakeLipR", new Vector3(0.46f, -0.14f, 1.56f), new Vector3(0.38f, 0.46f, 0.14f), Vector3.zero, dark);
+
+            // ---- single centreline nozzle carrying the conventional "EngineGlow" part.
+            Part(model, PrimitiveType.Cylinder, "NozzleShroud", new Vector3(0f, 0f, -3.02f), new Vector3(0.50f, 0.28f, 0.50f), new Vector3(90f, 0f, 0f), dark);
+            Part(model, PrimitiveType.Sphere, "EngineGlow", new Vector3(0f, 0f, -3.20f), new Vector3(0.34f, 0.34f, 0.28f), Vector3.zero, Glow());
+
+            // ---- four pylons with slim stores, sitting under the inner wing panel.
+            Part(model, PrimitiveType.Cube, "PylonL", new Vector3(-0.95f, -0.22f, -0.50f), new Vector3(0.09f, 0.26f, 0.50f), Vector3.zero, trim);
+            Part(model, PrimitiveType.Cube, "PylonR", new Vector3(0.95f, -0.22f, -0.50f), new Vector3(0.09f, 0.26f, 0.50f), Vector3.zero, trim);
+            Part(model, PrimitiveType.Capsule, "MissileL", new Vector3(-0.95f, -0.44f, -0.40f), new Vector3(0.16f, 0.50f, 0.16f), new Vector3(90f, 0f, 0f), dark);
+            Part(model, PrimitiveType.Capsule, "MissileR", new Vector3(0.95f, -0.44f, -0.40f), new Vector3(0.16f, 0.50f, 0.16f), new Vector3(90f, 0f, 0f), dark);
+            Part(model, PrimitiveType.Cube, "PylonOuterL", new Vector3(-1.75f, -0.20f, -0.95f), new Vector3(0.08f, 0.22f, 0.42f), Vector3.zero, trim);
+            Part(model, PrimitiveType.Cube, "PylonOuterR", new Vector3(1.75f, -0.20f, -0.95f), new Vector3(0.08f, 0.22f, 0.42f), Vector3.zero, trim);
+            Part(model, PrimitiveType.Capsule, "MissileOuterL", new Vector3(-1.75f, -0.40f, -0.90f), new Vector3(0.13f, 0.42f, 0.13f), new Vector3(90f, 0f, 0f), dark);
+            Part(model, PrimitiveType.Capsule, "MissileOuterR", new Vector3(1.75f, -0.40f, -0.90f), new Vector3(0.13f, 0.42f, 0.13f), new Vector3(90f, 0f, 0f), dark);
+
+            // ---- ventral sensor ball on the same unscaled-pivot convention the SAM/AAA turrets
+            // use, so a TurretVisual attached here would slew it without shearing anything.
+            Transform turret = Pivot(model, "Turret", new Vector3(0f, -0.34f, 1.30f));
+            Part(turret, PrimitiveType.Sphere, "TurretBody", Vector3.zero, new Vector3(0.34f, 0.34f, 0.34f), Vector3.zero, dark);
+
+            return model;
+        }
+
         /// <summary>Aggressive delta-wing enemy jet with a glowing exhaust.</summary>
         public static Transform BuildEnemyFighter(Transform root, Color primary)
         {
@@ -80,8 +177,7 @@ namespace Sim.Runtime
             Part(model, PrimitiveType.Cube, "TailFinL", new Vector3(-0.6f, 0.5f, -1.5f), new Vector3(0.08f, 0.9f, 0.6f), Vector3.zero, trim);
             Part(model, PrimitiveType.Cube, "TailFinR", new Vector3(0.6f, 0.5f, -1.5f), new Vector3(0.08f, 0.9f, 0.6f), Vector3.zero, trim);
 
-            Material glow = MaterialLibrary.Create(new Color(1f, 0.45f, 0.15f), 0f, 0.6f, new Color(2f, 0.7f, 0.15f));
-            Part(model, PrimitiveType.Sphere, "EngineGlow", new Vector3(0f, 0f, -1.8f), new Vector3(0.35f, 0.35f, 0.35f), Vector3.zero, glow);
+            Part(model, PrimitiveType.Sphere, "EngineGlow", new Vector3(0f, 0f, -1.8f), new Vector3(0.35f, 0.35f, 0.35f), Vector3.zero, Glow());
 
             return model;
         }
@@ -263,10 +359,48 @@ namespace Sim.Runtime
             return MaterialLibrary.Create(c, 0.35f, 0.35f);
         }
 
+        /// <summary>
+        /// Lighter, slightly washed-out variant of the primary colour, used for panel detail that has
+        /// to read against the body: spines, control surfaces and the recon airframe's wing skin.
+        /// Derived from the unit's own colour, so no new palette is introduced.
+        /// </summary>
+        private static Material Accent(Color primary)
+        {
+            var c = new Color(
+                Mathf.Lerp(primary.r, 1f, 0.35f),
+                Mathf.Lerp(primary.g, 1f, 0.35f),
+                Mathf.Lerp(primary.b, 1f, 0.35f),
+                primary.a);
+            return MaterialLibrary.Create(c, 0.2f, 0.4f);
+        }
+
         /// <summary>Dark metallic material for sensors, barrels, munitions and wheels.</summary>
         private static Material DarkMetal()
         {
             return MaterialLibrary.Create(new Color(0.16f, 0.17f, 0.19f), 0.6f, 0.8f);
+        }
+
+        /// <summary>Hot emissive exhaust material, shared by every engine nozzle in the sim.</summary>
+        private static Material Glow()
+        {
+            return MaterialLibrary.Create(new Color(1f, 0.45f, 0.15f), 0f, 0.6f, new Color(2f, 0.7f, 0.15f));
+        }
+
+        // The single canopy-glass instance. CreateTransparent hands back an UNCACHED material that
+        // the caller owns, so caching it here is what keeps a rebuild from leaking one glass
+        // material per aircraft. Unity's overloaded == makes the null test cover the destroyed case
+        // too (leaving play mode tears runtime materials down), so it is simply rebuilt on demand.
+        private static Material _canopyGlass;
+
+        /// <summary>
+        /// Tinted canopy glass, or null when no transparent material could be built — in which case
+        /// callers must SKIP the canopy rather than draw it opaque.
+        /// </summary>
+        private static Material CanopyGlass()
+        {
+            if (_canopyGlass == null)
+                _canopyGlass = MaterialLibrary.CreateTransparent(new Color(0.42f, 0.55f, 0.68f, 0.35f));
+            return _canopyGlass;
         }
     }
 }
