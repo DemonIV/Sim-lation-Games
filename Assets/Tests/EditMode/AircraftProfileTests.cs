@@ -149,6 +149,35 @@ namespace Sim.Tests
         }
 
         [Test]
+        public void EveryArchetype_FliesLongEnoughToBeWorthTakingOff()
+        {
+            // Endurance is what the player actually feels — capacity ALONE says nothing, because the
+            // jet's smaller tank is paired with a heavier burn. A sortie used to end in 21.9 s on the
+            // jet (7.3 s of it if the afterburner was held, which costs 3x), which is less than one
+            // lap of the 80 x 80 m arena plus a firing pass. The floors below are the "this is a
+            // sortie, not a hop" bound; they are deliberately well under the authored values so the
+            // profiles stay retunable.
+            Assert.Greater(Endurance(Jet), 45f);
+            Assert.Greater(Endurance(Siha), 100f);
+            Assert.Greater(Endurance(Iha), 250f);
+
+            // Even with the afterburner's 3x burn AND a radiating jammer's 1.5x on top (4.5x), the
+            // thirstiest archetype still gets a usable burst rather than a puff.
+            Assert.Greater(Endurance(Jet) / 4.5f, 10f);
+
+            // And the ORDERING is the archetypes' identity: the recon İHA is the long-legged one and
+            // the jet the short-legged one, whatever the tanks are retuned to.
+            Assert.Greater(Endurance(Iha), Endurance(Siha));
+            Assert.Greater(Endurance(Siha), Endurance(Jet));
+        }
+
+        /// <summary>Seconds of flight at full throttle: the tank divided by the burn rate.</summary>
+        private static float Endurance(AircraftProfile p)
+        {
+            return p.FuelCapacity / p.FuelBurnRate;
+        }
+
+        [Test]
         public void Iha_SeesFurthest_JetSeesLeast()
         {
             Assert.Greater(Iha.RadarRange, Siha.RadarRange);

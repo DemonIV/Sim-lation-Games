@@ -236,6 +236,18 @@ namespace Sim.Core
         // 18 m is FlightEnvelope.MinCruiseAltitude (14 m skyline + 4 m margin); the relative spacing
         // between the three archetypes is unchanged, and FlightEnvelopeTests asserts the floor holds.
 
+        // ENDURANCE: every tank was multiplied by 3 (SİHA 100 -> 300, jet 70 -> 210, recon İHA
+        // 180 -> 540) with the BURN RATES untouched, because a sortie was running dry far too fast.
+        // Full-throttle endurance was jet 70/3.2 = 21.9 s, SİHA 100/2 = 50 s, recon İHA 180/1.4 =
+        // 128.6 s — and the afterburner burns 3x (jet: 7.3 s) and a radiating jammer 1.5x on top of
+        // that. A campaign level, by contrast, is 2 hostiles on level 1 but 24 on level 5, 50 on
+        // level 6 and 85 on level 8, spawned back to back with no inter-wave pause: at a realistic
+        // ~10 s per kill that is roughly 20 s, 240 s, 500 s and 850 s of flying. The jet could not
+        // finish level 1. It is now 65.6 / 150 / 385.7 s, so a leg covers several engagements plus
+        // the trip home, and the base resupply cycle covers the rest of a long level. A UNIFORM
+        // factor keeps the archetypes' ordering and every ratio exactly as authored (the recon İHA
+        // still flies 5.9x as long as the jet), so the endurance RATINGS below are unchanged too.
+
         // SIGNATURES: expressed in the m² units Sim.Core.RadarCrossSection already models, whose
         // nominal BaseRcs is 1 m². The SİHA sits exactly on that 1 m² baseline, so every hostile
         // detection range in the project keeps meaning literally what it says. The other two are one
@@ -244,15 +256,15 @@ namespace Sim.Core
         // than the SİHA, the recon İHA ~29 % closer in.
 
         // Baseline = today's armed SİHA: flight 30 m/s / 80 deg/s, pilot cap 40 m/s, cruise 20 m,
-        // tank 100 @ 2/s, gun 300 rounds / 10 rps / 60 m / 2.5° / 4.5 dmg, 6 missiles at 120 m,
-        // targeting 120 m, radar reference 250 m, 1 m² signature, 100 HP.
+        // tank 300 @ 2/s (150 s of full throttle), gun 300 rounds / 10 rps / 60 m / 2.5° / 4.5 dmg,
+        // 6 missiles at 120 m, targeting 120 m, radar reference 250 m, 1 m² signature, 100 HP.
         private static readonly AircraftProfile _siha = new AircraftProfile(
             id: SihaId,
             displayName: "SİHA",
             description: "Dengeli silahlı İHA: bol füze, uzun menzil, her işte iyi.",
             kind: AircraftKind.Siha,
             maxSpeed: 30f, pilotMaxSpeed: 40f, turnRateDeg: 80f, cruiseAltitude: 20f,
-            fuelCapacity: 100f, fuelBurnRate: 2f,
+            fuelCapacity: 300f, fuelBurnRate: 2f,
             gunMagazine: 300, gunRoundsPerSecond: 10f, gunRange: 60f,
             gunDispersionDeg: 2.5f, gunDamage: 4.5f,
             missileCapacity: 6, missileRange: 120f,
@@ -270,7 +282,7 @@ namespace Sim.Core
             description: "Hızlı ve çevik avcı: güçlü top, az füze, çok yakıt yakar.",
             kind: AircraftKind.FighterJet,
             maxSpeed: 45f, pilotMaxSpeed: 60f, turnRateDeg: 100f, cruiseAltitude: 24f,
-            fuelCapacity: 70f, fuelBurnRate: 3.2f,
+            fuelCapacity: 210f, fuelBurnRate: 3.2f,
             gunMagazine: 400, gunRoundsPerSecond: 16f, gunRange: 70f,
             gunDispersionDeg: 2f, gunDamage: 6f,
             missileCapacity: 2, missileRange: 100f,
@@ -288,7 +300,7 @@ namespace Sim.Core
             description: "Uzun havada kalış ve en geniş radar: zayıf top, ince zırh.",
             kind: AircraftKind.Iha,
             maxSpeed: 21f, pilotMaxSpeed: 28f, turnRateDeg: 65f, cruiseAltitude: 18f,
-            fuelCapacity: 180f, fuelBurnRate: 1.4f,
+            fuelCapacity: 540f, fuelBurnRate: 1.4f,
             gunMagazine: 200, gunRoundsPerSecond: 8f, gunRange: 45f,
             gunDispersionDeg: 3f, gunDamage: 3f,
             missileCapacity: 0, missileRange: 0f,

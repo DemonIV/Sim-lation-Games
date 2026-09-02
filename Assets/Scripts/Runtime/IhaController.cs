@@ -36,7 +36,13 @@ namespace Sim.Runtime
         [SerializeField] private int hostileFaction = 1;
 
         [Header("Endurance")]
-        [SerializeField] private float fuelCapacity = 100f;
+        // These defaults are the SİHA baseline (see Sim.Core.AircraftCatalog) and they are what the AI
+        // wingmen actually fly on: SimulationBootstrap applies a profile only to the PLAYER's
+        // aircraft, so IHA_1/IHA_2 keep whatever stands here. They therefore move with the catalogue —
+        // the tank was tripled (100 -> 300, i.e. 150 s of full throttle) so a wingman is not shuttling
+        // to the pad every 50 s, which also matters because SquadStatus fails the mission once every
+        // surviving friendly has a dry tank.
+        [SerializeField] private float fuelCapacity = 300f;
         [SerializeField] private float fuelBurnRate = 2f;
 
         [Header("Resupply")]
