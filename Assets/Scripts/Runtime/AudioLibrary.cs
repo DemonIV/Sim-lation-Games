@@ -26,10 +26,21 @@ namespace Sim.Runtime
     /// </para>
     ///
     /// <para>
-    /// LOOPS. <see cref="EngineProp"/> and <see cref="EngineJet"/> must loop without a click, so they
-    /// are built ONLY from frequencies that complete a whole number of cycles inside the clip (every
-    /// partial is a multiple of 2 Hz in a 0.5 s buffer, and the tremolo starts at its maximum). That
-    /// is why they contain no noise and carry no envelope.
+    /// LOOPS. <see cref="EngineProp"/>, <see cref="EngineJet"/> and <see cref="EngineAfterburner"/>
+    /// must loop without a click, so every tonal partial completes a whole number of cycles inside
+    /// the clip (a multiple of 2 Hz in a 0.5 s buffer — <see cref="Loop"/> snaps them there instead
+    /// of leaving it to hand-picked round numbers) and the tremolo starts at its maximum. They carry
+    /// no envelope, for the same reason.
+    /// </para>
+    ///
+    /// <para>
+    /// NOISE IN A LOOP. Tones alone read as a synthesiser; a turbofan is mostly BROADBAND noise. The
+    /// loops used to avoid noise altogether because filtered noise cannot simply be looped — the
+    /// filters start from rest, so the buffer opens on silence and the wrap ticks once per cycle.
+    /// That is now solved at the source rather than dodged: <see cref="AudioSynth.AddLoopableNoise"/>
+    /// generates the samples that come AFTER the loop point too and cross-fades them over the head,
+    /// so the head begins on exactly the sample that follows the tail and the wrap is an ordinary
+    /// step of the same stream. The engine loops are therefore noise-based now.
     /// </para>
     ///
     /// Purely cosmetic — nothing here touches gameplay state.
@@ -110,10 +121,22 @@ namespace Sim.Runtime
             get { return Get("EngineProp", EngineLoopSeconds, BuildEngineProp); }
         }
 
-        /// <summary>Seamless turbine loop (fighter jet): rumble plus a high compressor whine.</summary>
+        /// <summary>
+        /// Seamless turbofan loop (fighter jet): a broadband roar with a high compressor whine and
+        /// its blade-passing tones over it.
+        /// </summary>
         public static AudioClip EngineJet
         {
             get { return Get("EngineJet", EngineLoopSeconds, BuildEngineJet); }
+        }
+
+        /// <summary>
+        /// Seamless afterburner LAYER, mixed UNDER <see cref="EngineJet"/> (never instead of it) while
+        /// the burner is lit: a low, thunder-like rumble with heavy sub energy and a slow swell.
+        /// </summary>
+        public static AudioClip EngineAfterburner
+        {
+            get { return Get("EngineAfterburner", EngineLoopSeconds, BuildEngineAfterburner); }
         }
 
         // ------------------------------------------------------------------ recipes
@@ -197,18 +220,74 @@ namespace Sim.Runtime
             AudioSynth.NormalizeTo(d, 0.75f);
         }
 
+        /// <summary>
+        /// The fighter's turbofan. A real one is mostly BROADBAND: a low roar from the core and a
+        /// wideband hiss from the exhaust, with a narrow, piercing compressor whine on top. The whine
+        /// is not one tone either — it is the fan's blade-passing frequency (blade count x shaft
+        /// rate) flanked by shaft-rate sidebands, which is what gives a jet its metallic, slightly
+        /// beating edge. All of it is loop-safe: the noise beds through
+        /// <see cref="AudioSynth.AddLoopableNoise"/>, every tone through <see cref="Loop"/>.
+        /// </summary>
         private static void BuildEngineJet(float[] d, int rate)
         {
-            AudioSynth.AddSine(d, rate, 110f, 0.35f);
-            AudioSynth.AddSine(d, rate, 220f, 0.30f);
-            AudioSynth.AddSine(d, rate, 440f, 0.18f);
-            AudioSynth.AddSine(d, rate, 3300f, 0.22f);         // compressor whine
-            AudioSynth.AddSine(d, rate, 4400f, 0.10f);
-            AudioSynth.ApplyTremolo(d, rate, 4f, 0.10f);       // slight unsteadiness
+            // The roar: the core's low broadband energy, and the exhaust hiss well above it.
+            uint seed = AudioSynth.AddLoopableNoise(d, rate, 0.55f, 1100f, 70f, 7717u);
+            AudioSynth.AddLoopableNoise(d, rate, 0.16f, 9000f, 2600f, seed);
+
+            // Shaft and core tones under the noise: body, not melody.
+            AudioSynth.AddSine(d, rate, Loop(110f), 0.20f);
+            AudioSynth.AddSine(d, rate, Loop(220f), 0.15f);
+            AudioSynth.AddSine(d, rate, Loop(440f), 0.09f);
+
+            // Compressor whine: blade-passing fundamental (30 blades x 110 Hz), its two shaft-rate
+            // sidebands, and the second harmonic. The sidebands are what stop it reading as a test
+            // tone — they beat against the fundamental at the shaft rate.
+            AudioSynth.AddSine(d, rate, Loop(3300f), 0.15f);
+            AudioSynth.AddSine(d, rate, Loop(3300f - 110f), 0.07f);
+            AudioSynth.AddSine(d, rate, Loop(3300f + 110f), 0.07f);
+            AudioSynth.AddSine(d, rate, Loop(6600f), 0.05f);
+
+            AudioSynth.ApplyTremolo(d, rate, Loop(4f), 0.08f); // slight unsteadiness
             AudioSynth.NormalizeTo(d, 0.8f);
         }
 
+        /// <summary>
+        /// The afterburner bed. Deliberately NOT "the jet loop but louder": it is a separate layer
+        /// with its own character, so lighting the burner is an EVENT. Nearly all of its energy is
+        /// low — a sub-bass pair under a heavily low-passed rumble — with a mid-band of grit for the
+        /// ragged, torn edge of a burning exhaust, and two slow tremolos beating against each other
+        /// so the level rolls rather than sits still. That combination is what reads as thunder.
+        /// </summary>
+        private static void BuildEngineAfterburner(float[] d, int rate)
+        {
+            // The thunder itself: a wide, very low noise bed.
+            uint seed = AudioSynth.AddLoopableNoise(d, rate, 0.85f, 240f, 22f, 3131u);
+            // Grit: the mid band, well below the jet loop's whine so the two layers do not fight.
+            AudioSynth.AddLoopableNoise(d, rate, 0.28f, 1500f, 180f, seed);
+
+            // Sub tones for the body a filtered noise bed alone never has.
+            AudioSynth.AddSine(d, rate, Loop(46f), 0.30f);
+            AudioSynth.AddSine(d, rate, Loop(92f), 0.16f);
+
+            // Two rates, so the swell never settles into an obvious pulse. Both complete whole cycles
+            // in the loop, so the product still starts and ends at full gain.
+            AudioSynth.ApplyTremolo(d, rate, Loop(6f), 0.32f);
+            AudioSynth.ApplyTremolo(d, rate, Loop(14f), 0.16f);
+            AudioSynth.NormalizeTo(d, 0.9f);
+        }
+
         // ------------------------------------------------------------------ plumbing
+
+        /// <summary>
+        /// Snaps a partial to the nearest frequency that completes whole cycles in
+        /// <see cref="EngineLoopSeconds"/> — the condition for a click-free loop. Lets the recipes
+        /// above ask for the frequency they actually mean (3300 - 110 Hz, say) instead of only ever
+        /// using hand-picked multiples of the loop's 2 Hz bin.
+        /// </summary>
+        private static float Loop(float frequencyHz)
+        {
+            return AudioSynth.SnapToLoop(frequencyHz, EngineLoopSeconds);
+        }
 
         /// <summary>
         /// Returns the cached clip, building it on first use. A name that failed to build once is

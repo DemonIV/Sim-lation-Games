@@ -354,6 +354,111 @@ namespace Sim.Tests
             Assert.AreEqual(0.5f, AudioSynth.Peak(untouched), 0.01f);
         }
 
+        // ------------------------------------------------------------------ loopable noise
+
+        /// <summary>
+        /// Mean absolute difference between neighbouring samples — the "normal" step size of the
+        /// signal. A seamless loop's wrap has to be one of these; a seam is many times larger.
+        /// </summary>
+        private static float MeanStep(float[] buffer)
+        {
+            if (buffer.Length < 2) return 0f;
+            double sum = 0.0;
+            for (int i = 1; i < buffer.Length; i++) sum += Mathf.Abs(buffer[i] - buffer[i - 1]);
+            return (float)(sum / (buffer.Length - 1));
+        }
+
+        [Test]
+        public void LoopableNoise_IsBandLimitedNoise_AtTheRequestedPeak()
+        {
+            float[] buffer = AudioSynth.CreateBuffer(0.5f, Rate);
+            AudioSynth.AddLoopableNoise(buffer, Rate, 0.6f, 900f, 60f, 7717u);
+
+            // Normalised to the asked-for peak, and actually carrying energy (not near-silence):
+            // a noise bed's RMS sits at roughly a quarter of its peak.
+            Assert.AreEqual(0.6f, AudioSynth.Peak(buffer), 1e-3f);
+            Assert.Greater(Rms(buffer), 0.02f);
+
+            // Band-limited, not white: a 900 Hz low-pass leaves far fewer zero crossings than white
+            // noise, which changes sign on about half of all sample pairs.
+            Assert.Less(ZeroCrossings(buffer), buffer.Length / 3);
+
+            // ...but it IS noise: neighbouring samples genuinely differ.
+            Assert.Greater(MeanStep(buffer), 0f);
+        }
+
+        [Test]
+        public void LoopableNoise_WrapsWithoutASeam()
+        {
+            float[] looped = AudioSynth.CreateBuffer(0.5f, Rate);
+            AudioSynth.AddLoopableNoise(looped, Rate, 0.6f, 400f, 0f, 2024u);
+
+            // THE invariant of the whole generator. The head is cross-faded starting from exactly the
+            // sample that FOLLOWS the tail in the noise stream, so playing the buffer on repeat steps
+            // from buffer[N-1] to buffer[0] the way the stream itself steps: the wrap is an ordinary
+            // step, not a discontinuity. Six times the mean step is a ~4.8-sigma bound on that.
+            float wrap = Mathf.Abs(looped[0] - looped[looped.Length - 1]);
+            Assert.Greater(MeanStep(looped), 0f);
+            Assert.LessOrEqual(wrap, 6f * MeanStep(looped));
+
+            // And the head is NOT the filter's start transient. Feeding the same noise straight
+            // through the low-pass — the naive recipe this generator replaces — always opens on
+            // (near) silence, because a one-pole filter starts from rest: its very first output is
+            // only a*x[0], with a = dt/(RC+dt) = 0.6 % at 40 Hz. That silent opening is the tick you
+            // hear once per loop.
+            float[] naive = AudioSynth.CreateBuffer(0.5f, Rate);
+            AudioSynth.AddNoise(naive, 1f, 2024u);
+            AudioSynth.LowPass(naive, Rate, 40f);
+            AudioSynth.NormalizeTo(naive, 0.6f);
+            Assert.Less(Mathf.Abs(naive[0]), 0.1f * AudioSynth.Peak(naive));
+        }
+
+        [Test]
+        public void LoopableNoise_IsDeterministic_AndAnswersDegenerateInputQuietly()
+        {
+            float[] a = AudioSynth.CreateBuffer(0.05f, Rate);
+            float[] b = AudioSynth.CreateBuffer(0.05f, Rate);
+            AudioSynth.AddLoopableNoise(a, Rate, 0.5f, 1000f, 0f, 99u);
+            AudioSynth.AddLoopableNoise(b, Rate, 0.5f, 1000f, 0f, 99u);
+            for (int i = 0; i < a.Length; i += 17) Assert.AreEqual(a[i], b[i], 1e-6f);
+
+            // The seed advances, so two beds in one recipe are two different beds.
+            uint next = AudioSynth.AddLoopableNoise(b, Rate, 0.5f, 1000f, 0f, 99u);
+            Assert.AreNotEqual(99u, next);
+
+            // Degenerate input: nothing written, nothing thrown.
+            float[] untouched = AudioSynth.CreateBuffer(0.05f, Rate);
+            AudioSynth.AddLoopableNoise(untouched, 0, 0.5f, 1000f, 0f, 5u);
+            AudioSynth.AddLoopableNoise(untouched, Rate, 0f, 1000f, 0f, 5u);
+            AudioSynth.AddLoopableNoise(null, Rate, 0.5f, 1000f, 0f, 5u);
+            AudioSynth.AddLoopableNoise(AudioSynth.Empty, Rate, 0.5f, 1000f, 0f, 5u);
+            Assert.AreEqual(0f, AudioSynth.Peak(untouched), 1e-6f);
+        }
+
+        [Test]
+        public void SnapToLoop_ReturnsWholeCyclesPerLoop()
+        {
+            // 0.5 s loop -> the bin is 2 Hz. A blade-passing sideband lands on the grid.
+            Assert.AreEqual(3190f, AudioSynth.SnapToLoop(3190f, 0.5f), 1e-3f);
+            Assert.AreEqual(3190f, AudioSynth.SnapToLoop(3189.4f, 0.5f), 1e-3f);
+            Assert.AreEqual(3192f, AudioSynth.SnapToLoop(3191.4f, 0.5f), 1e-3f);
+
+            // Whatever is asked for, the result completes whole cycles in the loop — which is the
+            // condition every partial of a seamless engine loop has to satisfy.
+            float[] wanted = { 37f, 110f, 441f, 2999f, 8000.4f };
+            for (int i = 0; i < wanted.Length; i++)
+            {
+                float cycles = AudioSynth.SnapToLoop(wanted[i], 0.5f) * 0.5f;
+                Assert.AreEqual(Mathf.Round(cycles), cycles, 1e-3f);
+                Assert.GreaterOrEqual(cycles, 1f);
+            }
+
+            // Never below one cycle per loop, and degenerate input is 0 rather than an exception.
+            Assert.AreEqual(2f, AudioSynth.SnapToLoop(0.4f, 0.5f), 1e-3f);
+            Assert.AreEqual(0f, AudioSynth.SnapToLoop(-5f, 0.5f), 1e-6f);
+            Assert.AreEqual(0f, AudioSynth.SnapToLoop(440f, 0f), 1e-6f);
+        }
+
         // ------------------------------------------------------------------ levels
 
         [Test]

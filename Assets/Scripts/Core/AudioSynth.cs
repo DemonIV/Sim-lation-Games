@@ -164,6 +164,99 @@ namespace Sim.Core
             return s;
         }
 
+        /// <summary>
+        /// Adds a band-limited noise bed that LOOPS WITHOUT A SEAM, at <paramref name="amplitude"/>
+        /// peak. This is what lets a sustained loop (the jet's roar, the afterburner's rumble) be
+        /// broadband instead of a bare stack of harmonics — a turbofan is mostly noise, and a pure
+        /// tone stack reads as a synthesiser, not an engine.
+        ///
+        /// <para>
+        /// THE SEAM, AND WHY THIS IS NOT JUST <see cref="AddNoise"/> + <see cref="LowPass"/>. A
+        /// filtered noise buffer cannot simply be looped: the filters start from rest, so the buffer
+        /// begins at (near) silence and ends at whatever value the stream happened to hold, and the
+        /// wrap from the last sample back to the first is a step — an audible tick once a loop.
+        /// Three things are done about it, all inside this method:
+        /// </para>
+        /// <list type="number">
+        ///   <item>a WARM-UP region is generated and filtered ahead of the buffer and then thrown
+        ///   away, so what is kept is the filters' steady state, not their start transient;</item>
+        ///   <item>the noise stream is generated <paramref name="buffer"/>'s length PLUS a fade
+        ///   region, i.e. the samples that would come immediately AFTER the loop point are computed
+        ///   too;</item>
+        ///   <item>those continuation samples are cross-faded over the head of the buffer. The head
+        ///   therefore starts on exactly x[N] — the sample that genuinely follows x[N−1], which is
+        ///   where the buffer ends — so the wrap is one ordinary step of the same noise stream and
+        ///   not a discontinuity. The loop is seamless BY CONSTRUCTION rather than by luck.</item>
+        /// </list>
+        ///
+        /// <para>
+        /// <paramref name="lowPassHz"/> and <paramref name="highPassHz"/> shape the band (either may
+        /// be 0 to skip that filter); the result is normalised so its loudest sample is exactly
+        /// <paramref name="amplitude"/>, which keeps a recipe's mix predictable however the band is
+        /// set. Returns the advanced seed, exactly like <see cref="AddNoise"/>.
+        /// </para>
+        /// </summary>
+        public static uint AddLoopableNoise(float[] buffer, int sampleRate, float amplitude,
+                                            float lowPassHz, float highPassHz, uint seed)
+        {
+            uint s = seed != 0u ? seed : 1u;
+            if (buffer == null || buffer.Length == 0) return s;
+            if (sampleRate <= 0 || amplitude == 0f) return s;
+
+            int n = buffer.Length;
+
+            // Cross-fade region: ~20 ms, but never more than an eighth of the loop (a short loop must
+            // still keep a majority of un-faded material) and never less than one sample.
+            int fade = Mathf.Clamp(n / 8, 1, Mathf.Max(1, sampleRate / 50));
+
+            // Filter warm-up: ~50 ms of material that is generated, filtered and then discarded.
+            int warm = Mathf.Clamp(sampleRate / 20, 1, n);
+
+            var work = new float[warm + n + fade];
+            s = AddNoise(work, 1f, s);
+            if (lowPassHz > 0f) LowPass(work, sampleRate, lowPassHz);
+            if (highPassHz > 0f) HighPass(work, sampleRate, highPassHz);
+
+            float peak = Peak(work);
+            if (peak <= 1e-6f) return s;
+            float gain = amplitude / peak;
+
+            for (int i = 0; i < n; i++)
+            {
+                float v = work[warm + i];
+                if (i < fade)
+                {
+                    // w = 0 at i = 0, so the first sample IS the stream's continuation past the end.
+                    float w = i / (float)fade;
+                    v = work[warm + n + i] * (1f - w) + v * w;
+                }
+                buffer[i] += gain * v;
+            }
+            return s;
+        }
+
+        /// <summary>
+        /// Snaps a frequency to the nearest one that completes a WHOLE number of cycles in a loop of
+        /// <paramref name="loopSeconds"/>, i.e. to a multiple of 1/<paramref name="loopSeconds"/> Hz.
+        ///
+        /// <para>
+        /// Every partial of a looping engine clip must satisfy this or the loop clicks. It used to be
+        /// satisfied by hand-picking round numbers; going through here makes it mechanical, so a
+        /// recipe can ask for the frequency it actually wants (a blade-passing sideband at
+        /// 3300 − 110 Hz, say) and still get a seamless loop. Never returns less than one full cycle
+        /// per loop, and returns 0 for degenerate input.
+        /// </para>
+        /// </summary>
+        public static float SnapToLoop(float frequencyHz, float loopSeconds)
+        {
+            if (frequencyHz <= 0f || loopSeconds <= 0f) return 0f;
+
+            float bin = 1f / loopSeconds;
+            float cycles = Mathf.Round(frequencyHz / bin);
+            if (cycles < 1f) cycles = 1f;
+            return cycles * bin;
+        }
+
         // ------------------------------------------------------------------ filters
 
         /// <summary>

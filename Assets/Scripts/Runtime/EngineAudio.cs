@@ -21,9 +21,20 @@ namespace Sim.Runtime
     /// </para>
     ///
     /// <para>
+    /// AFTERBURNER is a SECOND, quieter loop mixed UNDER the engine — not the engine turned up.
+    /// <see cref="AudioLibrary.EngineAfterburner"/> is a low, thunder-like rumble that fades in over
+    /// a couple of tenths of a second, so lighting the burner reads as an event. It keys off exactly
+    /// the state the camera's FOV kick uses (<see cref="PlayerDroneController.AfterburnerActive"/> on
+    /// the aircraft that pilot is actually flying, see <c>CameraRig.UpdateFov</c>), so the cue and
+    /// the sound can never drift apart.
+    /// </para>
+    ///
+    /// <para>
     /// BUDGET: exactly one source, created once in <see cref="Start"/> and reused for the object's
     /// whole life. If the clip cannot be built the component disables itself and the aircraft is
-    /// simply silent.
+    /// simply silent. The burner source is created LAZILY, the first time this particular aircraft
+    /// lights its burner — only the player's aircraft ever can, so the AI fleet never pays for a
+    /// second voice.
     /// </para>
     ///
     /// Purely cosmetic — nothing here touches gameplay state.
@@ -48,9 +59,24 @@ namespace Sim.Runtime
         [SerializeField] private float minDistance = 6f;
         [SerializeField] private float maxDistance = 130f;
 
+        // Afterburner layer: peak volume of the rumble, and how fast it fades in and out. The fade is
+        // quicker than the engine's own so the burner "lights" rather than swells.
+        [SerializeField] private float burnerVolume = 0.55f;
+        [SerializeField] private float burnerResponseRate = 4f;
+
         private AudioSource _source;
         private IhaController _owner;
         private float _referenceSpeed = 30f;
+
+        // The afterburner layer and its pilot lookup. Both stay null on every aircraft that never
+        // lights a burner, which is every aircraft except the one the player is flying.
+        private AudioSource _burner;
+        private bool _burnerUnavailable;
+        private PlayerDroneController _pilot;
+        private float _pilotSearchTimer;
+
+        /// <summary>Seconds between attempts to find the pilot component (it appears at runtime).</summary>
+        private const float PilotSearchInterval = 0.5f;
 
         private void Start()
         {
@@ -102,6 +128,81 @@ namespace Sim.Runtime
             // Inside the aircraft the player is flying, the engine is not "somewhere over there".
             bool piloted = _owner != null && _owner.ManualControl;
             _source.spatialBlend = piloted ? 0f : 1f;
+
+            UpdateAfterburner(running, t);
+        }
+
+        /// <summary>
+        /// Fades the afterburner rumble in and out under the engine loop. The layer is created on the
+        /// first light and then reused; while the burner is out the source is stopped, so an idle
+        /// aircraft costs no voice.
+        /// </summary>
+        private void UpdateAfterburner(bool running, float speed01)
+        {
+            bool lit = running && BurnerLit();
+
+            if (lit && _burner == null && !_burnerUnavailable)
+            {
+                AudioClip clip = AudioLibrary.EngineAfterburner;
+                if (clip == null)
+                {
+                    // No burner clip: the engine loop alone still plays, just without the layer.
+                    _burnerUnavailable = true;
+                }
+                else
+                {
+                    _burner = gameObject.AddComponent<AudioSource>();
+                    _burner.clip = clip;
+                    _burner.loop = true;
+                    _burner.playOnAwake = false;
+                    _burner.rolloffMode = AudioRolloffMode.Logarithmic;
+                    _burner.minDistance = minDistance;
+                    _burner.maxDistance = maxDistance;
+                    _burner.dopplerLevel = 0f;
+                    _burner.volume = 0f;
+                }
+            }
+
+            if (_burner == null) return;
+
+            float target = lit ? burnerVolume : 0f;
+            float step = burnerResponseRate * Time.unscaledDeltaTime;
+            _burner.volume = Mathf.MoveTowards(_burner.volume, target, step);
+
+            // The rumble sits with the engine: same spatialisation, and a touch of pitch with speed so
+            // the two layers stay welded together instead of sounding like a separate machine.
+            _burner.spatialBlend = _source.spatialBlend;
+            _burner.pitch = Mathf.Lerp(0.92f, 1.08f, Mathf.Clamp01(speed01));
+
+            if (_burner.volume > 0.001f)
+            {
+                if (!_burner.isPlaying) _burner.Play();
+            }
+            else if (_burner.isPlaying)
+            {
+                _burner.Stop();
+            }
+        }
+
+        /// <summary>
+        /// True while THIS aircraft's afterburner is lit. Deliberately the same source of truth the
+        /// camera's FOV kick reads — the pilot component's <c>AfterburnerActive</c>, on the aircraft
+        /// it is currently flying — so the visual and the audible cue cannot disagree.
+        /// </summary>
+        private bool BurnerLit()
+        {
+            if (_owner == null || !_owner.ManualControl) return false;
+
+            if (_pilot == null)
+            {
+                _pilotSearchTimer -= Time.unscaledDeltaTime;
+                if (_pilotSearchTimer > 0f) return false;
+                _pilotSearchTimer = PilotSearchInterval;
+                _pilot = FindAnyObjectByType<PlayerDroneController>();
+            }
+
+            if (_pilot == null) return false;
+            return _pilot.IsActive && _pilot.Controlled == _owner && _pilot.AfterburnerActive;
         }
 
         /// <summary>Finds the first descendant transform with the given name, or null.</summary>
