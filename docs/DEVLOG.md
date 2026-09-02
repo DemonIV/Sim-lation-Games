@@ -89,6 +89,19 @@ varlığı olmadığı ve içe aktarılamadığı için her ses kodla üretiliyo
 uyarı tonu (kaçış penceresinde değişiyor), patlama ve menü/hangar sesleri var; ana ses/sessiz
 **N** tuşunda ve `PlayerPrefs`'te saklanıyor. Ayrıntı `## 9`'un son iki maddesinde.
 
+En son tur **üç cila maddesi** (hepsi kullanıcının oynarken bildirdiği): (1) düşman renkleri —
+yer hedefi tam orta gri, SAM ise neredeyse siyah bordoydu, ikisi de araziye/binalara gömülüyordu;
+AAA turuncu, düşman avcı mordu, yani ortak bir fraksiyon dili yoktu. Yeni `HostilePalette` dört
+arketipi tek ılık banda topladı (ton ~350°–22°, doygunluk 0.45–0.56, değer 0.70–0.86); doygunluk
+bilinçli düşük tutuldu ki dost SİHA'nın tam doygun turuncusu ve grimsi bina paletiyle çakışmasın.
+(2) jet sesi — ilmek artık geniş bantlı: yeni `AudioSynth.AddLoopableNoise` ilmek dikişini
+*kaçınarak değil çözerek* halletti (ilmek sonrasının örnekleri de üretilip başa çapraz geçişle
+bindiriliyor), üstüne kanat geçiş frekansı + şaft yan bantlı kompresör ıslığı geldi; ayrıca
+gök gürültüsü gibi ayrı bir **art yakıcı katmanı** (kameranın FOV tekmesiyle aynı durumdan
+tetikleniyor). (3) yakıt — tam gaz menzili jette **21.9 sn** idi (art yakıcıyla 7.3 sn), yani
+seviye 1 bile bitmiyordu; tüm depolar **×3** oldu (65.6 / 150 / 385.7 sn), yakım hızlarına
+dokunulmadı, sıralama ve oranlar korundu. Ayrıntı `## 9`'un son maddesinde.
+
 ### Yeni oturum için okuma sırası
 1. Bu bölüm.
 2. `CLAUDE.md` → `## Worker kuralları`.
@@ -215,7 +228,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `AircraftUpgrades` | `Apply(baseProfile, upgradeState) → AircraftProfile`: yükseltmeleri taban profilin üstüne ÇARPANLA uygular (taban profiller otoriter kalır), sıfır yükseltmede taban profile birebir eşit döner, tabanı asla mutasyona uğratmaz. Tek sayısal istisna füze yuvası (adet); topu olup füzesi olmayan gövdede yeni yuvanın menzili tespit menzilinden türer. `AffectedFields` hangi hattın hangi alanı oynattığını söyler. |
 | `ThreatEnvelope` | Sahanın **yatay zarfı** (`FlightEnvelope`'un yatay muadili): saha yarı-genişliği 40 m, spawn keep-out 32 m, köşe-köşe **113 m**, tipik düşman mevzisinden en uzak noktaya **96.6 m** (`MaxEngagementDistance`). Her düşman arketipinin tespit ve atış menzili tek yerde ve arenaya bağlı olarak tanımlı; `DetectionRangeAgainst`/`FireDistanceAgainst`/`CoversWholeField` denge tablosunu tek çağrıyla ifade eder. Değişmezler (tespit > atış; taban SİHA'ya karşı tespit sahayı KAPLAMAMALI; keşif İHA atış menzilinin dışından görülmemeli) `ThreatEnvelopeTests` tarafından doğrulanır. |
 | `JammerSystem` | Karıştırıcının **görev döngüsü**: yayın süresi, soğuma ve şu an yayılan güç (`Ready`/`Active`/`Cooling`). Karıştırmanın fiziği tekrar edilmez — `ElectronicWarfare.EffectiveRange`'e delege eder; bu sınıf yalnız "açık mı?" sorusunu sahiplenir. Yayın iptal edilemez, tuşa basmak süreyi uzatmaz, tek uzun kare soğumayı atlatamaz. `BurstSeconds <= 0` = sürekli yayın (elle kurulmuş sahnelerdeki eski davranış). |
-| `AudioSynth` | **Projenin ses sentezi matematiği:** `float[]` PCM tamponu üzerinde toplamalı üretim — sinüs, tek harmonikli ton, analitik fazlı doğrusal süpürme (chirp), deterministik xorshift gürültüsü, tek kutuplu alçak/yüksek geçiren filtre, tremolo, normalize zamanlı ADSR ve vurmalı zarf, tepe/ölçek/normalize/kırp. Projede ses varlığı olmadığı için **her ses buradan** doğar; `AudioClip`/`AudioSource` bilmez. Bozuk girdi (null tampon, 0 uzunluk/örnekleme hızı, negatif frekans) istisna atmaz, hiçbir şey yapmaz. |
+| `AudioSynth` | **Projenin ses sentezi matematiği:** `float[]` PCM tamponu üzerinde toplamalı üretim — sinüs, tek harmonikli ton, analitik fazlı doğrusal süpürme (chirp), deterministik xorshift gürültüsü, **dikişsiz ilmeklenen bant sınırlı gürültü** (`AddLoopableNoise`: filtre ısınma bölgesi + ilmek sonrası örneklerin başa çapraz geçişi, böylece `buffer[0]` tam olarak `buffer[N-1]`'i izleyen örnek olur), **`SnapToLoop`** (bir frekansı ilmek içinde tam çevrim tamamlayacak şekilde oturtur), tek kutuplu alçak/yüksek geçiren filtre, tremolo, normalize zamanlı ADSR ve vurmalı zarf, tepe/ölçek/normalize/kırp. Projede ses varlığı olmadığı için **her ses buradan** doğar; `AudioClip`/`AudioSource` bilmez. Bozuk girdi (null tampon, 0 uzunluk/örnekleme hızı, negatif frekans) istisna atmaz, hiçbir şey yapmaz. |
 | `SoundSettings` | Ana ses seviyesi + sessize alma kuralları. Sessize alma "seviyeyi 0 yap" DEĞİL, altındaki seviyeyi hatırlar; `CycleVolume` tek tuşluk merdiveni (%100 → %70 → %40 → KAPALI) yürütür ve merdiven dışı bir seviyeden bile mutlaka hareket eder; `Restore` bozuk/NaN değerde varsayılana düşer. `EffectiveVolume` Runtime'ın mixer'a yazdığı tek sayı. |
 
 ### Sim.Runtime (ince MonoBehaviour'lar)
@@ -248,16 +261,17 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `MaterialLibrary` | Standard/URP uyumlu, önbelleklenmiş materyal fabrikası (renk, metalik, pürüzsüzlük, emisyon). |
 | `VehicleModelBuilder` | Primitive'lerden araç siluetleri kurar (keşif İHA 19, SİHA 27, savaş uçağı 37, **Patriot tipi SAM bataryası 37**, **AAA topu 14** parça; ayrıca düşman avcısı, yer hedefi); parçaların collider'ları silinir, fizik etkilenmez. `"Model"` çocuğu kökün ölçeğini tersler; `"Fuselage"`/`"Propeller"`/`"Radar"`/`"EngineGlow"`/`"Turret"`+`"TurretBody"` adları animasyon ve kamera kodunun sözleşmesidir. Açılı alt gruplar (SAM rampası, faz dizisi paneli) ölçeksiz **döndürülmüş pivot** üzerinde durur. |
 | `EnvironmentBuilder` | Prosedürel arazi mesh'i, üs pisti, gökyüzü/sis/ortam ışığı/güneş ayarı ve prop dağılımı (tamamı görsel, hiçbirinde collider yok). Dağılımda **üç ağaç türü** (kozalaklı 5 / geniş yapraklı 6 / çalı 3 parça) ve **üç bina arketipi** (depo 9 / orta katlı blok 9–11 / kule 11 parça); boy, taç yarıçapı, eğim, arketip ve renk seçimi hep aynı **sabit tohumlu** akıştan çekilir. Yaprak/duvar renkleri 6 + 5 tonluk **kuantalanmış palete** bağlıdır (materyal sayısı ~240 → 17). |
+| `HostilePalette` | Düşman fraksiyonunun tek yerde duran **livrezi** (kozmetik): yer hedefi 0.80/0.50/0.44, SAM 0.70/0.33/0.32, AAA 0.85/0.55/0.38, düşman avcı 0.78/0.38/0.45. Dört arketip tek ılık bantta (ton ~350°–22°) durur; doygunluk 0.45–0.56 ve değer 0.70–0.86 aralığında tutulur, çünkü ayrışmayı sağlayan şey budur: dost SİHA'nın livresi tam doygun turuncu (1.00/0.35/0.20), bina/beton paleti ise S≈0.16. Namlu, faz dizisi yüzü ve kanister ağızları `VehicleModelBuilder`'da bilerek karanlık kalır — gövdeler açıldıktan sonra siluetleri okutan tek şey onlar. |
 | `VfxLibrary` | Asset'siz efekt primitifleri (emisyonlu parlama, nokta ışığı patlaması, enkaz, saydam duman, şok dalgası halkası, kıvılcım); global efekt bütçesi ile sınırlı, hepsi kendini yok eder. |
 | `ScorchMark` | İmha edilen yer birimlerinin arazide bıraktığı, zamanla sönen yanık izi (en fazla 40 iz). |
 | `DamageVisuals` | Can oranı düşen birimlerde duman, kritik seviyede alev efekti (yalnızca `Health` okur). |
 | `PropellerSpinner` | "Propeller" parçasını hıza bağlı olarak kendi Z ekseninde döndürür. |
 | `BankingVisual` | Dönüşlerde yalnızca "Model" çocuğunu yatırır (kök transform'a asla dokunmaz). |
 | `TurretVisual` | SAM/AAA'da "Turret" hedefi takip eder, "Radar" tabağı sürekli döner (yalnız çocuk transform'lar). |
-| `AudioLibrary` | Asset'siz **ses fabrikası** (`MaterialLibrary`/`VfxLibrary` kalıbı): on klip tarifi (patlama, top, füze atışı, füze uyarısı, kaçış uyarısı, UI tık/onay/ret, pervane ve türbin motor ilmeği) `AudioSynth` ile üretilip önbelleklenir. Klip **ilk kullanımda bir kez** kurulur, atış başına asla; başarısız üretim null olarak hatırlanır ve tekrar denenmez. Motor ilmekleri dikişsiz: 0.5 sn tamponda yalnız 2 Hz'in katı kısmi frekanslar, gürültüsüz ve zarfsız. |
+| `AudioLibrary` | Asset'siz **ses fabrikası** (`MaterialLibrary`/`VfxLibrary` kalıbı): on bir klip tarifi (patlama, top, füze atışı, füze uyarısı, kaçış uyarısı, UI tık/onay/ret, pervane ilmeği, **turbofan ilmeği** ve **art yakıcı ilmeği**) `AudioSynth` ile üretilip önbelleklenir. Klip **ilk kullanımda bir kez** kurulur, atış başına asla; başarısız üretim null olarak hatırlanır ve tekrar denenmez. İlmekler dikişsiz: her tonal kısmi `Loop()`/`SnapToLoop` ile 2 Hz ızgarasına oturur, gürültü yatakları `AddLoopableNoise`'tan gelir (artık gürültüsüz değiller), zarf yok. Jet ilmeği: çekirdek kükremesi + egzoz tıslaması + şaft tonları + kanat geçiş frekansı (3300 Hz) ve şaft yan bantları (3190/3410 Hz). |
 | `AudioDirector` | Sesin ön bürosu: `AudioListener`'ı garantiler (elle kurulan kameranın dinleyicisi yoktur), **12 uzamsal + 1 iki boyutlu** `AudioSource`'u bir kez kurup dönüşümlü kullanır (olay başına bileşen yok; havuz doluysa en eskisini çalar), `PlayAt`/`Play2D` tek giriş noktasıdır ve **N** ana ses tuşunu taşır. Ayar statiktir, `Rebuild()` sesi geri açmaz; sessizken çalma çağrıları hemen döner. |
 | `AudioSave` | Ses ayarının `PlayerPrefs` katmanı — kampanya kaydından **ayrı iki anahtar** (`sim.audio.volume`/`sim.audio.muted`), çünkü kampanya blob'unun sürüm çakışması "sıfırdan başla" demektir ve bir ses ayarı kimsenin kampanyasına mal olmamalıdır. Okuma/yazma istisna atmaz. |
-| `EngineAudio` | Uçak başına tek döngüsel kaynak; ses yüksekliği ve perdesi hız/azami hız oranını takip eder. Arketip karakteri gövdeden gelir: `"Propeller"` parçası olan (keşif İHA / SİHA) pervane uğultusu, olmayan (savaş uçağı) türbin ıslığı alır. Oyuncu o uçağı uçarken **2D**, diğer hâllerde uzamsal; duraklamada ve yakıt bitince sıfıra iner. |
+| `EngineAudio` | Uçak başına tek döngüsel kaynak; ses yüksekliği ve perdesi hız/azami hız oranını takip eder. Arketip karakteri gövdeden gelir: `"Propeller"` parçası olan (keşif İHA / SİHA) pervane uğultusu, olmayan (savaş uçağı) turbofan kükremesi alır. Oyuncu o uçağı uçarken **2D**, diğer hâllerde uzamsal; duraklamada ve yakıt bitince sıfıra iner. **Art yakıcı** motorun ALTINA bindirilen ikinci bir ilmek: kaynak yalnız o uçak ilk kez art yakıcı yaktığında (yani pratikte sadece oyuncunun uçağında) TEMBEL kuruluyor, ses sönünce durduruluyor. Tetik, kameranın FOV tekmesiyle birebir aynı kaynak: `PlayerDroneController.AfterburnerActive` + uçulan uçağın eşleşmesi. |
 | `MissileWarningAudio` | Kokpit füze uyarı tonu. HUD'un `FÜZE!` bandı ve `KAÇIŞ MANEVRASI` satırıyla **aynı iki bayrağı** okur (`MissileIncoming` / `BreakWindowOpen`), böylece göz ile kulak çelişemez: 0.6 sn aralıklı alçak bip, kaçış penceresi açılınca anında 0.2 sn aralıklı yüksek/sert bip. 2D ve ölçekli zamanda (duraklamada susar). |
 
 ### Testler (Sim.Tests.EditMode)
@@ -379,6 +393,10 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
 | `77e4bbc` | Motor sesi: gaza bağlı döngü, `"Propeller"` parçasına göre pervane/türbin, uçulurken 2D. |
 | `d0edca9` | Top raporu, füze atış sesi (dost/düşman ayrı) ve gelen füze uyarı tonu (kaçış penceresinde değişiyor). |
 | `312685f` | Menü/hangar arayüz sesleri: tık, onay ve ret. |
+| `981f847` | DEVLOG: denge + ses turu. |
+| `a9bf6c6` | `HostilePalette`: düşman fraksiyonuna açık, ortak ve okunur bir livre (gri yer hedefi + karanlık SAM kalktı); SAM kanister kapakları koyulaştı. |
+| `e348035` | `AudioSynth.AddLoopableNoise` + `SnapToLoop` (Core, testli); geniş bantlı turbofan ilmeği, yeni art yakıcı ilmeği ve `EngineAudio`'nun tembel art yakıcı katmanı. |
+| `6bb43d9` | Denge: tüm yakıt depoları ×3 (jet 70→210, SİHA 100→300, keşif İHA 180→540), yakım hızları sabit; YZ kanat uçaklarının varsayılanı da 300. |
 
 ---
 
@@ -1330,5 +1348,116 @@ sessiz kalırdı.
 
 **Yapılmayanlar (bilinçli).** Müzik yok; çarpma/isabet sesi ayrı değil (patlama yolunu kullanıyor);
 düşman avcılarının motor sesi yok (uçak başına bir kaynak, kalabalık dalgada bütçeyi bozar);
-karıştırıcı/flare/art yakıcı için ayrı ses yok; ses seviyesi ekranda kaydırıcı değil, tek tuşluk
-merdiven.
+karıştırıcı/flare için ayrı ses yok (art yakıcının artık kendi katmanı var, bir sonraki maddeye
+bakın); ses seviyesi ekranda kaydırıcı değil, tek tuşluk merdiven.
+
+---
+
+### Tur — cila: düşman paleti, jet sesi ve uçuş menzili
+
+Kullanıcının oynarken bildirdiği üç madde; üçü ayrı dilim, ayrı commit.
+
+**1) Düşman renkleri açıldı ve bir fraksiyon oldu** (kullanıcı: *"düşman hedeflerin bazılarının
+renkleri gri, onları daha açık bir renk ile değiştirelim"*).
+
+Gri okuyan iki birim vardı ve ikisi de gerçekten griydi:
+
+| Birim | Eskiden | Şimdi | Not |
+|---|---|---|---|
+| Yer hedefi | `0.50, 0.50, 0.50` (tam orta gri) | `0.80, 0.50, 0.44` | En açık üye; artık binaların tan/gri paletine karışmıyor. |
+| SAM bataryası | `0.50, 0.05, 0.05` (parlaklık **0.19**, neredeyse siyah bordo) | `0.70, 0.33, 0.32` | Ailenin ağır üyesi; parlaklık 2.3 katına çıktı. |
+| AAA | `1.00, 0.55, 0.10` (parlak turuncu) | `0.85, 0.55, 0.38` | En ılık/açık üye — topu bataryadan ayıran ipucu korunuyor. |
+| Düşman avcı | `0.55, 0.10, 0.60` (mor) | `0.78, 0.38, 0.45` | Gül/şarap; eski morun izini taşıyor ama artık fraksiyonun içinde. |
+
+Dördü tek bir ılık bantta (ton ~350°–22°) ve tek bir dosyada: `Assets/Scripts/Runtime/HostilePalette.cs`.
+Bant bilinçli olarak **doygunluğu düşük** (0.45–0.56) ve **değeri yüksek** (0.70–0.86) — ayrışmayı
+sağlayan şey bu: dost SİHA'nın livresi tam doygun turuncu (`1.00, 0.35, 0.20`, S 0.80 / V 1.00),
+bina ve beton ise S≈0.16, arazi yeşil. HUD zaten düşmanı kırmızı kodladığı için (`HudTheme.Critical`)
+dünya renkleri artık HUD'un diliyle çakışmıyor, onu tekrarlıyor.
+
+Siluetler için **karanlık parçalar karanlık kaldı** (namlular, faz dizisi yüzü, tekerlekler). Tek
+model değişikliği: SAM kanister ağzındaki dört kapak `accent`'ten `dark`'a alındı — gövde açık tuğla
+rengine çıkınca açık kapaklar kanisterlere karışıyor ve dört ağız okunmuyordu.
+
+Kozmetik: hiçbir oyun değeri değişmedi.
+
+**2) Jet sesi ve gök gürültüsü gibi art yakıcı** (kullanıcı: *"savaş uçağının sesinde daha çok bir
+jet sesi, gök gürültüsüne benzer (art yakıcı çalıştığında)"*).
+
+Eski jet ilmeği beş sinüstü (110/220/440/3300/4400 Hz) — matematiksel olarak dikişsiz ama kulakta
+bir sentezleyici, motor değil. Eksik olan şey **gürültüydü**, ve gürültü bilerek yoktu: filtrelenmiş
+gürültü öylece ilmeklenemez, çünkü filtreler sıfırdan başlar; tampon sessizlikle açılır, akışın
+rastgele bir değeriyle kapanır ve sarma noktası ilmek başına bir "tık" olur.
+
+Bu tur dikiş **kaçınılarak değil, kaynağında çözüldü** — `Sim.Core.AudioSynth.AddLoopableNoise`:
+
+1. atılacak bir **ısınma bölgesi** üretilip filtrelenir, böylece saklanan malzeme filtrenin kalıcı
+   rejimidir, açılış geçici rejimi değil;
+2. gürültü akışı tampon uzunluğu **artı bir geçiş bölgesi** kadar üretilir — yani ilmek noktasından
+   *sonra* gelecek örnekler de hesaplanır;
+3. bu devam örnekleri tamponun başına **çapraz geçişle** bindirilir. Sonuçta `buffer[0]` tam olarak
+   `buffer[N-1]`'i izleyen örnektir; sarma, aynı akışın sıradan bir adımıdır, süreksizlik değil.
+   İlmek şansa değil, **tasarım gereği** dikişsiz.
+
+Yanına ikinci bir Core yardımcısı geldi: `SnapToLoop(frekans, ilmekSüresi)` bir kısmi frekansı ilmek
+içinde tam sayıda çevrim tamamlayacak en yakın değere oturtur. Dikiş güvenliği artık elle seçilmiş
+yuvarlak sayılara değil mekanik bir kurala bağlı, bu yüzden tarifler istedikleri frekansı
+isteyebiliyor (ör. 3300 − 110 Hz). Her ikisi de EditMode testli.
+
+Yeni **turbofan ilmeği**: çekirdek kükremesi (LP 1100 / HP 70) + egzoz tıslaması (2.6–9 kHz) +
+şaft tonları (110/220/440 Hz) + kompresör ıslığı — ıslık tek ton değil, **kanat geçiş frekansı**
+(3300 Hz = 30 kanat × 110 Hz) ve onun **şaft hızındaki iki yan bandı** (3190 / 3410 Hz); yan bantlar
+temel tonla vurarak jete özgü metalik kenarı veriyor.
+
+Yeni **art yakıcı katmanı** (`AudioLibrary.EngineAfterburner`): 22–240 Hz ağır gürleme yatağı,
+180–1500 Hz cızırtı, 46/92 Hz alt tonlar ve birbiriyle vuran **iki yavaş tremolo** (6 ve 14 Hz), yani
+seviye oturmuyor, yuvarlanıyor. "Aynı ses ama daha yüksek" değil, ayrı bir olay. `EngineAudio` bunu
+motorun ALTINA ikinci bir `AudioSource` olarak bindiriyor; kaynak **tembel** kuruluyor (yalnız o uçak
+ilk kez art yakıcı yaktığında — pratikte sadece oyuncunun uçağı, YZ filosu ikinci bir ses kanalı
+ödemiyor) ve ses sönünce durduruluyor. Tetikleyici, kameranın FOV tekmesinin okuduğu durumun
+birebir aynısı: `PlayerDroneController.AfterburnerActive` **ve** o uçağın uçulan uçak olması.
+Klip üretilemezse katman sessizce atlanıyor, hiçbir şey fırlatmıyor.
+
+**3) Yakıt: uçuş menzili ×3** (kullanıcı: *"uçakların yakıtları hemen bitiyor, onları biraz
+artıralım"*).
+
+Önce bugünkü menzil ölçüldü (tam gaz = kapasite ÷ yakım hızı):
+
+| Arketip | Eski depo | Tam gaz | Art yakıcı ×3 | Art yakıcı + karıştırıcı ×4.5 |
+|---|---|---|---|---|
+| Savaş uçağı | 70 @ 3.2/sn | **21.9 sn** | 7.3 sn | 4.9 sn |
+| SİHA | 100 @ 2.0/sn | **50.0 sn** | 16.7 sn | 11.1 sn |
+| Keşif İHA | 180 @ 1.4/sn | **128.6 sn** | 42.9 sn | 28.6 sn |
+
+Seviye süresiyle karşılaştırma (dalgalar arasında bekleme **yok**, bir dalga temizlenince sonraki
+hemen doğuyor): seviye 1'de 2 düşman, 2'de 6, 3'te 5, 4'te 12, 5'te 24, 6'da 50, 7'de 22 avcı,
+8'de 85. Düşman başına gerçekçi ~10 sn ile kabaca **20 / 60 / 120 / 240 / 500 / 850 sn**. Yani savaş
+uçağı **seviye 1'i bile** bitiremiyordu; 22 saniye, 80×80 m arenada bir turdan ve bir atış
+geçişinden kısa.
+
+Değişiklik: **tüm depolar ×3, yakım hızları sabit.**
+
+| Arketip | Yeni depo | Tam gaz | Art yakıcı | Art yakıcı + karıştırıcı |
+|---|---|---|---|---|
+| Savaş uçağı | 70 → **210** | **65.6 sn** | 21.9 sn | 14.6 sn |
+| SİHA | 100 → **300** | **150.0 sn** | 50.0 sn | 33.3 sn |
+| Keşif İHA | 180 → **540** | **385.7 sn** | 128.6 sn | 85.7 sn |
+
+Tek ve düzgün bir çarpan olduğu için sıralama ve bütün oranlar aynen korunuyor (keşif İHA hâlâ jetin
+5.9 katı), dolayısıyla seçim ekranındaki **dayanıklılık puanlarına dokunmak gerekmedi**. Bir bacak
+artık birkaç angajmanı artı eve dönüşü kaldırıyor; uzun seviyelerin kalanını üssün ikmal döngüsü
+karşılıyor (zaten sistemin tasarımı bu — YZ de bingo'da üsse dönüyor).
+
+YZ kanat uçakları (`IHA_1`/`IHA_2`) profil almıyor, `IhaController`'ın serialize edilmiş
+varsayılanını uçuyor; o da SİHA tabanı olduğu için **100 → 300** yapıldı. Bu ihmal edilecek bir
+ayrıntı değil: `SquadStatus` sağ kalan **herkesin** deposu boşalınca görevi başarısız sayıyor.
+
+**Yakıt yükseltme hattı ölmedi.** 4 seviye × %15 = ×1.6 kapasite; uzun seviyelerde (6/7/8) hâlâ
+bir-iki ikmal turu kazandırıyor. Yalnız keşif İHA için zayıf bir alım hâline geldi (385.7 sn zaten
+6. seviyeye kadar her şeyi kapıyor) — ama o zaten dayanıklılık arketipi. Öneri, ileri bir tur için:
+ya keşif İHA'ya hattın etkisini menzil yerine **karıştırıcı/radar süresi** gibi başka bir kaynağa
+bağlamak, ya da depoyu değil **yakım hızını** düşüren bir üst seviye eklemek. Ekonomi bu dilimde
+bilerek elden geçirilmedi.
+
+`ResupplyPoint`, yakıtsız süzülme yolu ve `FlightEnvelope`/irtifa mantığı **hiç değişmedi**.
+
