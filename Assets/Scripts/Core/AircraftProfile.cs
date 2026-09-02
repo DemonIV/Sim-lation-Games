@@ -106,6 +106,20 @@ namespace Sim.Core
         /// <summary>Guided-munition firing range (m). Meaningless when <see cref="MissileCapacity"/> is 0.</summary>
         public float MissileRange { get; }
 
+        /// <summary>
+        /// How many BALİSTİK FÜZE rounds this airframe carries on its centreline station.
+        ///
+        /// <para>
+        /// This is the fighter jet's exclusive heavy weapon: a lofted, unguided round that hits for
+        /// <see cref="BallisticMissile.DamageMultiplier"/>× a normal missile (see
+        /// <see cref="BallisticMissile"/>). ONLY the jet has the launcher — the SİHA and the recon İHA
+        /// carry 0 and can never fire one, which is also why
+        /// <see cref="AircraftUpgrades.Apply"/> only adds bought rounds to an airframe that already
+        /// has the station.
+        /// </para>
+        /// </summary>
+        public int BallisticRounds { get; }
+
         // ---------------------------------------------------------------- sensors & survivability
         /// <summary>Targeting/lock detection range (m).</summary>
         public float DetectionRange { get; }
@@ -167,7 +181,7 @@ namespace Sim.Core
                                float detectionRange, float radarRange, float radarSignature, float health,
                                float speedRating, float agilityRating,
                                float firepowerRating, float enduranceRating, float stealthRating,
-                               float jammerStrength = 0f)
+                               float jammerStrength = 0f, int ballisticRounds = 0)
         {
             Id = id;
             DisplayName = displayName;
@@ -190,6 +204,9 @@ namespace Sim.Core
 
             MissileCapacity = missileCapacity;
             MissileRange = missileRange;
+            // Optional (defaults to 0 = no launcher) for exactly the same reason jammerStrength is:
+            // only ONE archetype carries the station, and every other call site is left untouched.
+            BallisticRounds = Mathf.Max(0, ballisticRounds);
 
             DetectionRange = detectionRange;
             RadarRange = radarRange;
@@ -288,7 +305,11 @@ namespace Sim.Core
             missileCapacity: 2, missileRange: 100f,
             detectionRange: 100f, radarRange: 200f, radarSignature: 4f, health: 90f,
             speedRating: 1f, agilityRating: 0.9f, firepowerRating: 0.6f, enduranceRating: 0.35f,
-            stealthRating: 0.2f);
+            stealthRating: 0.2f,
+            // The jet's EXCLUSIVE weapon: two centreline balistik füze rounds. The other two
+            // archetypes leave this at its 0 default, so the launcher is the one thing only the jet
+            // can bring to a sortie (and the one hangar track only the jet can spend money on).
+            ballisticRounds: 2);
 
         // Recon İHA = baseline × (speed 0.7, turn ~0.81, tank 1.8, burn 0.7, radar 1.4, detection
         // 1.25, SIGNATURE 0.25) with the recon drone's own existing light gun fit (200 rounds / 8 rps

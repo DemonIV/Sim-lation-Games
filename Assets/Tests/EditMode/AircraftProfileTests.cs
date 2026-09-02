@@ -211,6 +211,25 @@ namespace Sim.Tests
         }
 
         [Test]
+        public void OnlyTheJet_CarriesTheBallisticLauncher()
+        {
+            // The user asked for a launcher that is the FIGHTER JET's alone; the other two archetypes
+            // must not be able to fire one at all, which is exactly "0 rounds aboard".
+            Assert.AreEqual(2, Jet.BallisticRounds, "the jet's stock rack holds two rounds");
+            Assert.AreEqual(0, Siha.BallisticRounds);
+            Assert.AreEqual(0, Iha.BallisticRounds);
+        }
+
+        [Test]
+        public void BallisticWarhead_IsExactlyTwiceANormalMissile()
+        {
+            Assert.AreEqual(2f, BallisticMissile.DamageMultiplier, 1e-4f);
+            Assert.AreEqual(80f, BallisticMissile.Damage(40f), 1e-4f);
+            Assert.AreEqual(0f, BallisticMissile.Damage(0f), 1e-4f);
+            Assert.AreEqual(0f, BallisticMissile.Damage(-10f), 1e-4f);
+        }
+
+        [Test]
         public void Jet_IsTheEasiestToSee_IhaTheHardest()
         {
             Assert.Greater(Jet.RadarSignature, Siha.RadarSignature);
@@ -284,6 +303,7 @@ namespace Sim.Tests
                 Assert.Greater(p.GunDamage, 0f, p.Id);
                 Assert.GreaterOrEqual(p.MissileCapacity, 0, p.Id);
                 Assert.GreaterOrEqual(p.MissileRange, 0f, p.Id);
+                Assert.GreaterOrEqual(p.BallisticRounds, 0, p.Id);
                 Assert.Greater(p.DetectionRange, 0f, p.Id);
                 Assert.Greater(p.RadarRange, 0f, p.Id);
                 // A zero/negative signature would make the airframe literally undetectable.

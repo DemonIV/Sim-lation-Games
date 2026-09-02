@@ -33,6 +33,22 @@ namespace Sim.Tests
             Assert.Contains(UpgradeTrack.Hull, tracks);
             Assert.Contains(UpgradeTrack.Fuel, tracks);
             Assert.Contains(UpgradeTrack.Radar, tracks);
+            Assert.Contains(UpgradeTrack.BallisticMissile, tracks);   // balistik füze stoğu
+        }
+
+        [Test]
+        public void BallisticTrack_IsAppendedLastSoSavedIndicesKeepTheirMeaning()
+        {
+            // A save written before this track existed is a SHORTER level array; UpgradeState.Restore
+            // reads a missing entry as 0. That is only safe while the new track sits at the END.
+            Assert.AreEqual(UpgradeTrack.BallisticMissile,
+                            UpgradeCatalog.All[UpgradeCatalog.TrackCount - 1]);
+
+            var restored = new UpgradeState();
+            restored.Restore(new[] { 1, 1, 1, 1, 1, 1, 1 });   // a 7-track save from before both
+            Assert.AreEqual(0, restored.LevelOf(UpgradeTrack.ElectronicWarfare));
+            Assert.AreEqual(0, restored.LevelOf(UpgradeTrack.BallisticMissile));
+            Assert.AreEqual(1, restored.LevelOf(UpgradeTrack.Engine));
         }
 
         [Test]
@@ -234,7 +250,10 @@ namespace Sim.Tests
                 var w = new Wallet(1000000);
                 Assert.IsTrue(s.TryPurchase(t, w));
 
-                AircraftProfile b = AircraftCatalog.Default;
+                // The JET, not the SİHA baseline, because it is the only archetype that carries
+                // EVERY weapon station (missiles AND the balistik füze launcher) — a track cannot be
+                // shown to move its own field on an airframe that has no such station to move.
+                AircraftProfile b = AircraftCatalog.GetOrDefault(AircraftCatalog.FighterJetId);
                 AircraftProfile applied = AircraftUpgrades.Apply(b, s);
 
                 List<string> moved = DifferingFields(b, applied);
@@ -300,6 +319,62 @@ namespace Sim.Tests
             Assert.AreEqual(1, applied.MissileCapacity);
             Assert.Greater(applied.MissileRange, 0f,
                            "a new rack with a 0 m range would be a dead weapon");
+        }
+
+        [Test]
+        public void BallisticTrack_AddsOneRoundPerLevel_ToTheJetsStockRack()
+        {
+            AircraftProfile jet = AircraftCatalog.GetOrDefault(AircraftCatalog.FighterJetId);
+            var s = new UpgradeState();
+            var w = new Wallet(1000000);
+
+            Assert.AreEqual(jet.BallisticRounds,
+                            AircraftUpgrades.Apply(jet, s).BallisticRounds,
+                            "level 0 must leave a fresh save exactly as it is");
+
+            Assert.IsTrue(s.TryPurchase(UpgradeTrack.BallisticMissile, w));
+            Assert.AreEqual(jet.BallisticRounds + 1, AircraftUpgrades.Apply(jet, s).BallisticRounds);
+
+            Assert.IsTrue(s.TryPurchase(UpgradeTrack.BallisticMissile, w));
+            Assert.AreEqual(jet.BallisticRounds + 2, AircraftUpgrades.Apply(jet, s).BallisticRounds);
+        }
+
+        [Test]
+        public void BallisticTrack_CannotBoltALauncherOntoAnAirframeThatHasNone()
+        {
+            var s = new UpgradeState();
+            var w = new Wallet(1000000);
+            while (!s.IsMaxed(UpgradeTrack.BallisticMissile))
+                Assert.IsTrue(s.TryPurchase(UpgradeTrack.BallisticMissile, w));
+
+            foreach (string id in new[] { AircraftCatalog.SihaId, AircraftCatalog.IhaId })
+            {
+                AircraftProfile b = AircraftCatalog.GetOrDefault(id);
+                Assert.AreEqual(0, b.BallisticRounds, id);
+                Assert.AreEqual(0, AircraftUpgrades.Apply(b, s).BallisticRounds,
+                                $"{id}: the balistik füze is the jet's weapon alone");
+            }
+        }
+
+        [Test]
+        public void ApplyingTheSameStateTwice_DoesNotDoubleTheRounds()
+        {
+            AircraftProfile jet = AircraftCatalog.GetOrDefault(AircraftCatalog.FighterJetId);
+            var s = new UpgradeState();
+            var w = new Wallet(1000000);
+            s.TryPurchase(UpgradeTrack.BallisticMissile, w);
+            s.TryPurchase(UpgradeTrack.BallisticMissile, w);
+
+            AircraftProfile once = AircraftUpgrades.Apply(jet, s);
+            AircraftProfile twice = AircraftUpgrades.Apply(jet, s);
+
+            // Apply is a pure function of (base, state): re-deriving the profile — which is exactly
+            // what SimulationBootstrap.Rebuild does — must land on the same rack every time.
+            Assert.AreEqual(jet.BallisticRounds + 2, once.BallisticRounds);
+            Assert.AreEqual(once.BallisticRounds, twice.BallisticRounds);
+            Assert.AreEqual(jet.BallisticRounds, jet.BallisticRounds,
+                            "and the base profile itself is never touched");
+            Assert.AreEqual(2, jet.BallisticRounds);
         }
 
         [Test]
@@ -377,6 +452,7 @@ namespace Sim.Tests
 
             if (a.GunMagazine != b.GunMagazine) diff.Add("GunMagazine");
             if (a.MissileCapacity != b.MissileCapacity) diff.Add("MissileCapacity");
+            if (a.BallisticRounds != b.BallisticRounds) diff.Add("BallisticRounds");
             return diff;
         }
 

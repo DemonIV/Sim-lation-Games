@@ -33,10 +33,21 @@ namespace Sim.Core
         /// <summary>
         /// Elektronik Harp: an onboard noise jammer. LEVEL 0 MEANS NO JAMMER AT ALL, so a save made
         /// before this track existed (and every fresh one) flies exactly the aircraft it always did.
-        /// Listed LAST so the persisted level array keeps its existing indices — a short saved array
-        /// simply restores this track at 0 (see <see cref="UpgradeState.Restore"/>).
+        /// Listed LAST (at the time it was added) so the persisted level array keeps its existing
+        /// indices — a short saved array simply restores this track at 0 (see
+        /// <see cref="UpgradeState.Restore"/>).
         /// </summary>
-        ElectronicWarfare
+        ElectronicWarfare,
+
+        /// <summary>
+        /// Balistik Füze: extra rounds for the fighter jet's centreline balistik füze launcher, the
+        /// heavy weapon that hits for <see cref="Sim.Core.BallisticMissile.DamageMultiplier"/>× a
+        /// normal missile. LEVEL 0 IS THE STOCK RACK (2 rounds on the jet, none at all on the other two
+        /// archetypes), so a save made before this track existed flies exactly the aircraft it did.
+        /// Appended LAST for the same reason <see cref="ElectronicWarfare"/> was: every persisted
+        /// level-array index above it keeps its meaning.
+        /// </summary>
+        BallisticMissile
     }
 
     /// <summary>
@@ -71,7 +82,7 @@ namespace Sim.Core
         {
             UpgradeTrack.Engine, UpgradeTrack.Gun, UpgradeTrack.Missiles,
             UpgradeTrack.Agility, UpgradeTrack.Hull, UpgradeTrack.Fuel, UpgradeTrack.Radar,
-            UpgradeTrack.ElectronicWarfare
+            UpgradeTrack.ElectronicWarfare, UpgradeTrack.BallisticMissile
         };
 
         /// <summary>Every track, in hangar display order.</summary>
@@ -92,6 +103,7 @@ namespace Sim.Core
                 case UpgradeTrack.Hull: return "Gövde Zırhı";
                 case UpgradeTrack.Fuel: return "Yakıt Tankı";
                 case UpgradeTrack.ElectronicWarfare: return "Elektronik Harp";
+                case UpgradeTrack.BallisticMissile: return "Balistik Füze";
                 default: return "Radar";
             }
         }
@@ -109,6 +121,8 @@ namespace Sim.Core
                 case UpgradeTrack.Fuel: return "Depo hacmini büyütür: daha uzun sorti.";
                 case UpgradeTrack.ElectronicWarfare:
                     return "Karıştırıcı: K ile düşman radarını kısa süre kör eder.";
+                case UpgradeTrack.BallisticMissile:
+                    return "Savaş uçağına ek balistik füze: normalin iki katı hasar.";
                 default: return "Radar ve tespit menzilini genişletir.";
             }
         }
@@ -122,6 +136,7 @@ namespace Sim.Core
                 case UpgradeTrack.Fuel: return 4;
                 case UpgradeTrack.Radar: return 4;
                 case UpgradeTrack.ElectronicWarfare: return 3;   // each level is a whole emitter step
+                case UpgradeTrack.BallisticMissile: return 4;    // each level is one more round
                 default: return 5;
             }
         }
@@ -137,9 +152,12 @@ namespace Sim.Core
                 case UpgradeTrack.Agility: return 250;
                 case UpgradeTrack.Hull: return 300;
                 case UpgradeTrack.Fuel: return 200;
-                // The most expensive first level in the shop: it is the only track that buys a piece
-                // of hardware the airframe does not otherwise carry at all.
+                // Expensive because it buys a piece of hardware the airframe does not otherwise
+                // carry at all — only the balistik füze rack below costs more.
                 case UpgradeTrack.ElectronicWarfare: return 350;
+                // Dearer still than the jammer: one round of this doubles a missile's warhead, and
+                // the stock rack only holds two. 450 / 725 / 1150 / 1850 on the shared cost curve.
+                case UpgradeTrack.BallisticMissile: return 450;
                 default: return 200;
             }
         }
@@ -163,6 +181,9 @@ namespace Sim.Core
                 // 4.5), which ElectronicWarfare turns into a detection-range divisor of
                 // (1 + strength)^0.25 = 1.26, 1.41, 1.53. See JammerStrengthAtLevel.
                 case UpgradeTrack.ElectronicWarfare: return 1.5f;
+                // NOT a percentage either: one whole extra round per level, exactly like the missile
+                // track's rack. Nothing on the profile is SCALED by it.
+                case UpgradeTrack.BallisticMissile: return 1f;
                 default: return 0.12f;
             }
         }
@@ -250,6 +271,9 @@ namespace Sim.Core
 
             if (track == UpgradeTrack.Missiles)
                 return $"+{l} füze  ·  +%{Mathf.RoundToInt(PerLevelGain(track) * l * 100f)} menzil";
+
+            if (track == UpgradeTrack.BallisticMissile)
+                return $"+{l} balistik füze";
 
             if (track == UpgradeTrack.ElectronicWarfare)
             {
@@ -405,6 +429,13 @@ namespace Sim.Core
     /// of the state, so <c>SimulationBootstrap.Rebuild()</c> re-deriving it can never double-apply.
     /// </para>
     ///
+    /// <para>
+    /// <see cref="AircraftProfile.BallisticRounds"/> is a COUNT like the missile rack, with one extra
+    /// twist: rounds are only added to an airframe that ALREADY carries the centreline launcher (the
+    /// fighter jet). Buying the track cannot give a SİHA or a recon İHA a weapon the archetype does
+    /// not have — the balistik füze stays the jet's alone, which is the whole point of it.
+    /// </para>
+    ///
     /// Pure logic; no Unity scene dependency.
     /// </summary>
     public static class AircraftUpgrades
@@ -425,6 +456,13 @@ namespace Sim.Core
             float hull = UpgradeCatalog.Multiplier(UpgradeTrack.Hull, upgrades.LevelOf(UpgradeTrack.Hull));
             float fuel = UpgradeCatalog.Multiplier(UpgradeTrack.Fuel, upgrades.LevelOf(UpgradeTrack.Fuel));
             float radar = UpgradeCatalog.Multiplier(UpgradeTrack.Radar, upgrades.LevelOf(UpgradeTrack.Radar));
+
+            // Balistik füze rounds are a COUNT, like the missile rack — but they are only added to an
+            // airframe that actually HAS the centreline launcher (the jet). Buying rounds cannot bolt
+            // a launcher onto a SİHA or a recon İHA, which is what keeps the weapon jet-exclusive.
+            int ballisticRounds = b.BallisticRounds > 0
+                ? b.BallisticRounds + upgrades.LevelOf(UpgradeTrack.BallisticMissile)
+                : 0;
 
             int missileLevel = upgrades.LevelOf(UpgradeTrack.Missiles);
             int missileCapacity = b.MissileCapacity + missileLevel;
@@ -469,7 +507,10 @@ namespace Sim.Core
                 // the airframe, but it will BOLT A JAMMER ON IT. Level 0 -> 0 -> no jammer is fitted,
                 // which is why a fresh save flies the stock aircraft byte for byte.
                 jammerStrength: UpgradeCatalog.JammerStrengthAtLevel(
-                                    upgrades.LevelOf(UpgradeTrack.ElectronicWarfare)));
+                                    upgrades.LevelOf(UpgradeTrack.ElectronicWarfare)),
+                // A pure function of the state, exactly like every field above it: re-deriving the
+                // profile (SimulationBootstrap.Rebuild) can never stack a second set of rounds on.
+                ballisticRounds: ballisticRounds);
         }
 
         /// <summary>
@@ -488,6 +529,7 @@ namespace Sim.Core
                 case UpgradeTrack.Fuel: return new[] { "FuelCapacity" };
                 case UpgradeTrack.Radar: return new[] { "DetectionRange", "RadarRange" };
                 case UpgradeTrack.ElectronicWarfare: return new[] { "JammerStrength" };
+                case UpgradeTrack.BallisticMissile: return new[] { "BallisticRounds" };
                 default: return Array.Empty<string>();
             }
         }
