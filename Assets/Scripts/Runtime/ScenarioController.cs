@@ -24,11 +24,13 @@ namespace Sim.Runtime
         [SerializeField] private int totalWaves = 3;
 
         [Header("Spawn field")]
-        [SerializeField] private float fieldHalfExtent = 40f;
+        // THE arena: 80 x 80 m, 113 m corner to corner. Stated once in Sim.Core.ThreatEnvelope, which
+        // is also where the hostile sensor/weapon ranges below are anchored to it.
+        [SerializeField] private float fieldHalfExtent = ThreatEnvelope.FieldHalfExtent;
         [SerializeField] private float groundY = 1f;
         // Keep-out disc around the airbase. The base footprint reaches ~22 m (runway z ±22, hangars at
         // x −13), so anything smaller lets a SAM/AAA spawn on the runway or inside a hangar.
-        [SerializeField] private float spawnMinRadius = 32f;
+        [SerializeField] private float spawnMinRadius = ThreatEnvelope.SpawnKeepOutRadius;
         // Hostile fighters spawn airborne, at the cruise altitude EnemyDroneController then holds.
         // Raised 14 -> 20 m with the rest of the band so the spawn clears the 14 m scenery ceiling
         // (see Sim.Core.FlightEnvelope).
@@ -341,7 +343,13 @@ namespace Sim.Runtime
             // radius). It is launched on a lead course, so a drone flying straight is hit; a hard
             // break inside ~2 s demands roughly 4 x 85 x 0.47 / t_go m/s^2, which crosses 6 g at about
             // 2.3 s to impact — break late and it cannot recover, break early and it re-corrects.
-            site.Configure(160f, 120f, 1.2f, 6, 0.4f, 85f, 55f, 6f);
+            //
+            // RANGES: detection 160 -> 85 m and fire 120 -> 70 m (Sim.Core.ThreatEnvelope). Both used
+            // to exceed the 113 m field diagonal, so the battery saw and could engage every square
+            // metre of the arena from wherever it stood — which made the archetype signature spread
+            // unobservable. It is still the long-range threat (70 m out-reaches every player gun).
+            site.Configure(ThreatEnvelope.SamDetectionRange, ThreatEnvelope.SamFireRange,
+                           1.2f, 6, 0.4f, 85f, 55f, 6f);
 
             // Cosmetic: sweeping radar dish and a turret that tracks the held contact.
             go.AddComponent<TurretVisual>();
@@ -382,7 +390,12 @@ namespace Sim.Runtime
             // only fires inside 60 m, so its whole flight lasts under a second. That means you cannot
             // react to an AAA launch — you have to be ALREADY breaking. Its answer is to not fly
             // straight over the gun; each round is only worth 20 damage.
-            site.Configure(80f, 60f, 0.8f, 20, 1.5f, 95f, 20f, 9f);
+            //
+            // RANGES: detection 80 -> 60 m and fire 60 -> 50 m (Sim.Core.ThreatEnvelope). It stays the
+            // short-range piece — strictly inside the SAM's envelope and inside the SİHA's own 60 m
+            // gun range, so trading fire with it is still a trade.
+            site.Configure(ThreatEnvelope.AaaDetectionRange, ThreatEnvelope.AaaFireRange,
+                           0.8f, 20, 1.5f, 95f, 20f, 9f);
 
             // Cosmetic: turret tracking (this archetype has no radar dish part).
             go.AddComponent<TurretVisual>();
@@ -417,7 +430,9 @@ namespace Sim.Runtime
             // Gun BEFORE the controller so EnemyDroneController.Start finds it via GetComponent.
             var gun = go.AddComponent<GunTurret>();
             // magazineSize, roundsPerSecond, effectiveRange, dispersionDeg, damagePerRound
-            gun.Configure(200, 8f, 55f, 3f, 3.5f);
+            // The gun range is UNCHANGED (55 m); it is the field-scale yardstick the fighter's new
+            // 65 m detection range is set against (see Sim.Core.ThreatEnvelope).
+            gun.Configure(200, 8f, ThreatEnvelope.FighterGunRange, 3f, 3.5f);
             gun.SetTracerColor(new Color(1f, 0.35f, 0.35f));
 
             // Flare/chaff dispenser, also BEFORE the controller so it is picked up in Start. Slightly

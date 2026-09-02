@@ -26,7 +26,11 @@ namespace Sim.Runtime
         [SerializeField] private float throttle = 1f;
 
         [Header("Sensors")]
-        [SerializeField] private float detectionRange = 130f;
+        // 130 -> 65 m (Sim.Core.ThreatEnvelope). 130 m was longer than the 113 m field diagonal, so a
+        // fighter acquired the player the instant it spawned and the loiter orbit below was never
+        // actually flown. At 65 m against the 1 m² baseline the search phase is real, and what you
+        // fly decides when it ends: jet 92 m, SİHA 65 m, recon İHA 46 m.
+        [SerializeField] private float detectionRange = ThreatEnvelope.FighterDetectionRange;
         [SerializeField] private float fovDeg = 100f;
         // Faction this fighter hunts. 0 = friendly drones.
         [SerializeField] private int targetFaction = 0;

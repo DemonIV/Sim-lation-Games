@@ -20,8 +20,11 @@ namespace Sim.Runtime
         private readonly List<DetectableTarget> _scanBuffer = new List<DetectableTarget>();
 
         [Header("Sensor / Engagement")]
-        [SerializeField] private float detectionRange = 140f;
-        [SerializeField] private float fireRange = 110f;
+        // Field-scale defaults for a site dropped into a hand-authored scene without Configure().
+        // The scenario always overrides these (SAM 85/70, AAA 60/50) — see Sim.Core.ThreatEnvelope,
+        // where the arena the numbers are anchored to is stated.
+        [SerializeField] private float detectionRange = ThreatEnvelope.SamDetectionRange;
+        [SerializeField] private float fireRange = ThreatEnvelope.SamFireRange;
         [SerializeField] private float lockTimeSeconds = 1.2f;
 
         [Header("Weapon")]
