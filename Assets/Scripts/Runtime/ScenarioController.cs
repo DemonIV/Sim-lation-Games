@@ -282,7 +282,10 @@ namespace Sim.Runtime
             go.transform.SetParent(root, true);
         }
 
-        /// <summary>Spawns a plain objective hostile: a grey cube with no weapon (pure target).</summary>
+        /// <summary>
+        /// Spawns a plain objective hostile: an unarmed utility vehicle in the faction's lightest
+        /// clay livery (<see cref="HostilePalette.GroundTarget"/>) — pure target, no weapon.
+        /// </summary>
         private void SpawnPlainHostile(Vector3 pos, string name)
         {
             // Cosmetic: sit on the procedural terrain surface (x/z unchanged).
@@ -293,9 +296,9 @@ namespace Sim.Runtime
             go.transform.position = pos;
             go.transform.localScale = new Vector3(2f, 2f, 2f);
             ParentToSimulationRoot(go);
-            ApplyColor(go, new Color(0.5f, 0.5f, 0.5f));
+            ApplyColor(go, HostilePalette.GroundTarget);
             VehicleModelBuilder.HideRootMesh(go);
-            VehicleModelBuilder.BuildGroundTarget(go.transform, new Color(0.5f, 0.5f, 0.5f));
+            VehicleModelBuilder.BuildGroundTarget(go.transform, HostilePalette.GroundTarget);
 
             var targetable = go.AddComponent<Targetable>();
             targetable.Faction = 1;
@@ -309,7 +312,8 @@ namespace Sim.Runtime
         }
 
         /// <summary>
-        /// Spawns a long-range SAM site: a dark-red cylinder that detects friendlies far out and
+        /// Spawns a long-range SAM site in the faction's brick-red livery
+        /// (<see cref="HostilePalette.SamSite"/>) that detects friendlies far out and
         /// launches heavy guided munitions. Tougher and slower-firing than the AAA.
         /// </summary>
         private void SpawnSam(Vector3 pos, string name)
@@ -322,9 +326,9 @@ namespace Sim.Runtime
             go.transform.position = pos;
             go.transform.localScale = new Vector3(3f, 2f, 3f);
             ParentToSimulationRoot(go);
-            ApplyColor(go, new Color(0.5f, 0.05f, 0.05f));
+            ApplyColor(go, HostilePalette.SamSite);
             VehicleModelBuilder.HideRootMesh(go);
-            VehicleModelBuilder.BuildSamSite(go.transform, new Color(0.5f, 0.05f, 0.05f));
+            VehicleModelBuilder.BuildSamSite(go.transform, HostilePalette.SamSite);
 
             var targetable = go.AddComponent<Targetable>();
             targetable.Faction = 1;
@@ -356,7 +360,8 @@ namespace Sim.Runtime
         }
 
         /// <summary>
-        /// Spawns a short-range AAA piece: an orange, short cylinder that engages only close-in but
+        /// Spawns a short-range AAA piece in the faction's warmest livery
+        /// (<see cref="HostilePalette.AaaSite"/>) that engages only close-in but
         /// fires fast, light rounds. Weaker and shorter-ranged than the SAM.
         /// </summary>
         private void SpawnAaa(Vector3 pos, string name)
@@ -369,9 +374,9 @@ namespace Sim.Runtime
             go.transform.position = pos;
             go.transform.localScale = new Vector3(2f, 1.5f, 2f);
             ParentToSimulationRoot(go);
-            ApplyColor(go, new Color(1f, 0.55f, 0.1f));
+            ApplyColor(go, HostilePalette.AaaSite);
             VehicleModelBuilder.HideRootMesh(go);
-            VehicleModelBuilder.BuildAaaSite(go.transform, new Color(1f, 0.55f, 0.1f));
+            VehicleModelBuilder.BuildAaaSite(go.transform, HostilePalette.AaaSite);
 
             var targetable = go.AddComponent<Targetable>();
             targetable.Faction = 1;
@@ -404,7 +409,8 @@ namespace Sim.Runtime
         }
 
         /// <summary>
-        /// Spawns a hostile fighter drone: a dark-magenta capsule that flies, hunts friendly drones and
+        /// Spawns a hostile fighter drone in the faction's rose livery
+        /// (<see cref="HostilePalette.Fighter"/>) that flies, hunts friendly drones and
         /// strafes them with a gun (<see cref="EnemyDroneController"/> + <see cref="GunTurret"/>). Unlike
         /// the ground archetypes it is spawned AIRBORNE at its cruise altitude.
         /// </summary>
@@ -415,10 +421,10 @@ namespace Sim.Runtime
             go.transform.position = pos;
             go.transform.localScale = new Vector3(1f, 1f, 1f);
             ParentToSimulationRoot(go);
-            ApplyColor(go, new Color(0.55f, 0.1f, 0.6f));
+            ApplyColor(go, HostilePalette.Fighter);
             // Cosmetic only — the airborne spawn altitude is untouched.
             VehicleModelBuilder.HideRootMesh(go);
-            VehicleModelBuilder.BuildEnemyFighter(go.transform, new Color(0.55f, 0.1f, 0.6f));
+            VehicleModelBuilder.BuildEnemyFighter(go.transform, HostilePalette.Fighter);
 
             var targetable = go.AddComponent<Targetable>();
             targetable.Faction = 1;

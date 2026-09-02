@@ -325,10 +325,12 @@ namespace Sim.Runtime
             Part(rack, PrimitiveType.Cube, "CanisterRU", new Vector3(0.38f, 1.14f, 1.45f), new Vector3(0.70f, 0.70f, 2.80f), Vector3.zero, body);
 
             // Blow-out front caps, sitting just proud of the canister mouths (z = 1.45 + 1.40).
-            Part(rack, PrimitiveType.Cube, "CapLL", new Vector3(-0.38f, 0.38f, 2.88f), new Vector3(0.66f, 0.66f, 0.10f), Vector3.zero, accent);
-            Part(rack, PrimitiveType.Cube, "CapRL", new Vector3(0.38f, 0.38f, 2.88f), new Vector3(0.66f, 0.66f, 0.10f), Vector3.zero, accent);
-            Part(rack, PrimitiveType.Cube, "CapLU", new Vector3(-0.38f, 1.14f, 2.88f), new Vector3(0.66f, 0.66f, 0.10f), Vector3.zero, accent);
-            Part(rack, PrimitiveType.Cube, "CapRU", new Vector3(0.38f, 1.14f, 2.88f), new Vector3(0.66f, 0.66f, 0.10f), Vector3.zero, accent);
+            // Deliberately DARK, not accent: the faction livery lifted the canister bodies to a light
+            // brick red, so light caps would melt into them and the four mouths would stop reading.
+            Part(rack, PrimitiveType.Cube, "CapLL", new Vector3(-0.38f, 0.38f, 2.88f), new Vector3(0.66f, 0.66f, 0.10f), Vector3.zero, dark);
+            Part(rack, PrimitiveType.Cube, "CapRL", new Vector3(0.38f, 0.38f, 2.88f), new Vector3(0.66f, 0.66f, 0.10f), Vector3.zero, dark);
+            Part(rack, PrimitiveType.Cube, "CapLU", new Vector3(-0.38f, 1.14f, 2.88f), new Vector3(0.66f, 0.66f, 0.10f), Vector3.zero, dark);
+            Part(rack, PrimitiveType.Cube, "CapRU", new Vector3(0.38f, 1.14f, 2.88f), new Vector3(0.66f, 0.66f, 0.10f), Vector3.zero, dark);
 
             Part(rack, PrimitiveType.Cube, "RackRearPlate", new Vector3(0f, 0.76f, 0.10f), new Vector3(1.76f, 1.76f, 0.14f), Vector3.zero, trim);
             Part(rack, PrimitiveType.Cube, "RackRailL", new Vector3(-0.86f, 0.76f, 1.45f), new Vector3(0.10f, 1.70f, 2.60f), Vector3.zero, trim);
