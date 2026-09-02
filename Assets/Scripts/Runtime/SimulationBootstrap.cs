@@ -277,6 +277,10 @@ namespace Sim.Runtime
             // Cosmetic: spinning propeller and roll-into-the-turn on the "Model" child only.
             go.AddComponent<PropellerSpinner>();
             go.AddComponent<BankingVisual>();
+
+            // Cosmetic: looping engine note whose pitch/volume follow airspeed. Heard positionally,
+            // since these two are AI wingmen the player watches rather than flies.
+            go.AddComponent<EngineAudio>();
         }
 
         /// <summary>
@@ -381,6 +385,10 @@ namespace Sim.Runtime
             // jet airframe has no "Propeller" part; the spinner then simply finds nothing and idles.
             go.AddComponent<PropellerSpinner>();
             go.AddComponent<BankingVisual>();
+
+            // Cosmetic: the engine note. The SAME "Propeller" test picks the loop, so the jet gets a
+            // turbine whine and the two drone airframes a propeller drone; it goes 2D while piloted.
+            go.AddComponent<EngineAudio>();
 
             return ctrl;
         }
