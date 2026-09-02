@@ -169,6 +169,10 @@ namespace Sim.Runtime
             var playerPilot = director.gameObject.AddComponent<PlayerDroneController>();
             playerPilot.SetPreferredAircraft(playerAircraft);
 
+            // Cockpit missile-warning tone, driven by the same two flags as the HUD's FÜZE! band and
+            // KAÇIŞ MANEVRASI row. Added after the pilot component so its Start() finds it.
+            director.gameObject.AddComponent<MissileWarningAudio>();
+
             // Attach a free-fly / drone-follow spectator camera to the main camera (created above in
             // EnsureCameraAndLight), if it doesn't already have one.
             if (Camera.main != null && Camera.main.GetComponent<CameraRig>() == null)

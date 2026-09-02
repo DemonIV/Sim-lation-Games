@@ -199,6 +199,9 @@ namespace Sim.Runtime
             var munition = go.AddComponent<GuidedMunition>();
             // Pass the SİHA's own damage explicitly (clean param, no reflection).
             munition.Launch(target, transform.forward * munitionSpeed, damagePerHit);
+
+            // Launch whoosh, spatialised at the rail. Cosmetic; a missing clip is simply silence.
+            AudioDirector.PlayAt(origin, AudioLibrary.MissileLaunch, 0.55f, 1f, 6f, 140f);
         }
     }
 }

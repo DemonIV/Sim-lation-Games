@@ -222,6 +222,10 @@ namespace Sim.Runtime
             // is passed for the same reason — it is a property of THIS site's round, not of the
             // SİHA air-to-ground missile the component defaults to.
             munition.Launch(target, dir * munitionSpeed, damage, munitionSpeed, munitionLoadG);
+
+            // Launch whoosh, pitched DOWN relative to the drone's own missile so a hostile launch is
+            // audibly a different, heavier event. Cosmetic; a missing clip is simply silence.
+            AudioDirector.PlayAt(origin, AudioLibrary.MissileLaunch, 0.7f, 0.85f, 8f, 200f);
         }
 
         /// <summary>

@@ -124,6 +124,13 @@ namespace Sim.Runtime
             Vector3 muzzle = transform.position + transform.forward * 1.2f;
             VfxLibrary.Glow(muzzle, 0.35f, new Color(1f, 0.95f, 0.55f), new Color(3f, 2.4f, 0.9f), 0.05f);
             VfxLibrary.Flash(muzzle, 4f, new Color(1f, 0.85f, 0.5f), 2f, 0.05f);
+
+            // The report. Per ROUND, which is what makes a burst sound like a burst: the clip is 0.13 s
+            // and the fastest gun in the game fires at 16 rounds/s, so at most a couple of pooled
+            // sources are ever busy with it (see AudioDirector — the pool steals rather than grows).
+            // A small random pitch spread keeps a long burst from turning into a machine tone.
+            AudioDirector.PlayAt(muzzle, AudioLibrary.GunShot, 0.35f, Random.Range(0.92f, 1.1f),
+                                 4f, 90f);
         }
 
         /// <summary>
