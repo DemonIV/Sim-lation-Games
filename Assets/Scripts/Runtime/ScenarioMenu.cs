@@ -180,6 +180,9 @@ namespace Sim.Runtime
             _page = _page == MenuPage.Levels ? MenuPage.Hangar : MenuPage.Levels;
             _message = string.Empty;
             _resetArmed = false;
+
+            // One place for both ways in (the H key and the page button), so the click always sounds.
+            AudioDirector.Play2D(AudioLibrary.UiClick);
         }
 
         /// <summary>
@@ -196,6 +199,7 @@ namespace Sim.Runtime
 
             ScenarioController.SelectedAircraftId =
                 AircraftCatalog.Cycle(ScenarioController.SelectedAircraftId, delta).Id;
+            AudioDirector.Play2D(AudioLibrary.UiClick);
         }
 
         /// <summary>Builds the one local style. Call from OnGUI, after <c>HudTheme.Ensure()</c>.</summary>
@@ -516,19 +520,30 @@ namespace Sim.Runtime
         {
             string name = UpgradeCatalog.Name(track);
 
-            if (maxed) { SetMessage($"{name}: zaten azami seviyede.", HudTheme.TextDim); return; }
+            // Every refusal sounds the same low buzz the message line already says in words; the one
+            // success path gets the rising chime. UiDenied vs UiConfirm is the whole feedback contract.
+            if (maxed)
+            {
+                SetMessage($"{name}: zaten azami seviyede.", HudTheme.TextDim);
+                AudioDirector.Play2D(AudioLibrary.UiDenied);
+                return;
+            }
             if (!affordable)
             {
                 int missing = cost - CampaignSession.Wallet.Balance;
                 SetMessage($"{name}: kredi yetmiyor — {missing} kredi eksik.", HudTheme.Critical);
+                AudioDirector.Play2D(AudioLibrary.UiDenied);
                 return;
             }
 
             if (!CampaignSession.TryPurchase(track))
             {
                 SetMessage($"{name}: satın alınamadı.", HudTheme.Critical);
+                AudioDirector.Play2D(AudioLibrary.UiDenied);
                 return;
             }
+
+            AudioDirector.Play2D(AudioLibrary.UiConfirm);
 
             int level = CampaignSession.Upgrades.LevelOf(track);
             SetMessage($"{name} seviye {level} alındı ({UpgradeCatalog.EffectSummary(track, level)}). "
@@ -558,12 +573,16 @@ namespace Sim.Runtime
             {
                 _resetArmed = true;
                 SetMessage("Kampanyayı sıfırlamak için butona tekrar tıkla.", HudTheme.Amber);
+                // The "are you sure" buzz: this is the one click in the menu that can cost the player
+                // everything, so it deliberately does NOT sound like a normal selection.
+                AudioDirector.Play2D(AudioLibrary.UiDenied);
                 return;
             }
 
             _resetArmed = false;
             CampaignSession.ResetAll();
             SetMessage("Kampanya sıfırlandı: seviye 1, boş kasa, temel uçak.", HudTheme.Amber);
+            AudioDirector.Play2D(AudioLibrary.UiDenied);
         }
 
         /// <summary>Small filled/empty blocks showing how many levels of a track are bought.</summary>
@@ -635,6 +654,7 @@ namespace Sim.Runtime
                 {
                     ScenarioController.SelectedAircraftId = p.Id;
                     CampaignSession.Save();
+                    AudioDirector.Play2D(AudioLibrary.UiClick);
                 }
             }
         }
@@ -837,7 +857,13 @@ namespace Sim.Runtime
         {
             if (level == null) return;
             // Refuses locked levels — the card is already unclickable, this is the second lock.
-            if (!CampaignSession.SelectLevel(level.Index)) return;
+            if (!CampaignSession.SelectLevel(level.Index))
+            {
+                AudioDirector.Play2D(AudioLibrary.UiDenied);
+                return;
+            }
+
+            AudioDirector.Play2D(AudioLibrary.UiConfirm);
 
             SimulationBootstrap boot = SimulationBootstrap.Instance;
             if (boot == null) boot = FindAnyObjectByType<SimulationBootstrap>();
