@@ -151,6 +151,41 @@ namespace Sim.Tests
         }
 
         [Test]
+        public void NoPlayerGun_OutRangesTheAaaItCannotBeAnsweredBy()
+        {
+            // THE level-2 defect, as an invariant. A gun whose reach exceeds the distance the AAA can
+            // answer at gives a free ring to hover in, and level 2 ("Saha Taraması") fields exactly one
+            // AAA and nothing else that shoots back. The recon İHA (45 m gun) used to sit 2.6 m outside
+            // the AAA's signature-clipped 42.4 m answer; it no longer does.
+            AircraftProfile iha = AircraftCatalog.GetOrDefault(AircraftCatalog.IhaId);
+            float answer = ThreatEnvelope.FireDistanceAgainst(ThreatEnvelope.AaaDetectionRange,
+                                                              ThreatEnvelope.AaaFireRange, IhaRcs);
+            Assert.Greater(answer, iha.GunRange,
+                           "recon İHA can out-range the AAA and kill it for free");
+
+            // ...and it is still clipped, i.e. the small signature keeps paying: the İHA is engaged
+            // nearer than the SİHA and the jet, which are both taken at the full fire range.
+            Assert.Less(answer, ThreatEnvelope.AaaFireRange);
+        }
+
+        [Test]
+        public void AaaDetectionChange_LeftTheOtherArchetypesUntouched()
+        {
+            // Why detection (not fire range) was the knob: the jet and the SİHA are FIRE-range-clipped
+            // against an AAA, so any detection value above their own fire-range crossing leaves their
+            // engagement band at exactly 50 m — the level-2 fix costs them nothing.
+            Assert.AreEqual(ThreatEnvelope.AaaFireRange,
+                            ThreatEnvelope.FireDistanceAgainst(ThreatEnvelope.AaaDetectionRange,
+                                                               ThreatEnvelope.AaaFireRange, JetRcs), 1e-3f);
+            Assert.AreEqual(ThreatEnvelope.AaaFireRange,
+                            ThreatEnvelope.FireDistanceAgainst(ThreatEnvelope.AaaDetectionRange,
+                                                               ThreatEnvelope.AaaFireRange, SihaRcs), 1e-3f);
+
+            // And the AAA still does not blanket the arena, not even against the 4 m² jet.
+            Assert.IsFalse(ThreatEnvelope.CoversWholeField(Det(ThreatEnvelope.AaaDetectionRange, JetRcs)));
+        }
+
+        [Test]
         public void Jet_IsConspicuousButSurvivable()
         {
             // Conspicuous: a SAM tracks the jet anywhere on the field.
@@ -173,9 +208,9 @@ namespace Sim.Tests
             Assert.AreEqual(85.00f, Det(ThreatEnvelope.SamDetectionRange, SihaRcs), 0.01f);
             Assert.AreEqual(60.10f, Det(ThreatEnvelope.SamDetectionRange, IhaRcs), 0.01f);
 
-            Assert.AreEqual(84.85f, Det(ThreatEnvelope.AaaDetectionRange, JetRcs), 0.01f);
-            Assert.AreEqual(60.00f, Det(ThreatEnvelope.AaaDetectionRange, SihaRcs), 0.01f);
-            Assert.AreEqual(42.43f, Det(ThreatEnvelope.AaaDetectionRange, IhaRcs), 0.01f);
+            Assert.AreEqual(94.75f, Det(ThreatEnvelope.AaaDetectionRange, JetRcs), 0.01f);
+            Assert.AreEqual(67.00f, Det(ThreatEnvelope.AaaDetectionRange, SihaRcs), 0.01f);
+            Assert.AreEqual(47.38f, Det(ThreatEnvelope.AaaDetectionRange, IhaRcs), 0.01f);
 
             Assert.AreEqual(91.92f, Det(ThreatEnvelope.FighterDetectionRange, JetRcs), 0.01f);
             Assert.AreEqual(65.00f, Det(ThreatEnvelope.FighterDetectionRange, SihaRcs), 0.01f);

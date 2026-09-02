@@ -112,7 +112,7 @@ modunda **İMZA** paneli, seçim kartlarında **GİZLİ** çubuğu var.
 |---|---|---|
 | 1 | **B-10…B-18** | `docs/SCENE.md`'deki kalan **düşük** öncelikli bulgular (ölü `ApplyColor`, üs konumu ile `BasePosition` uyumsuzluğu, ölü alanlar, waypoint GameObject'leri, sis/dünya sınırı, skybox materyali, HUD string'leri). **B-19 kapandı**; **B-16** kısmen kapandı — palet yapıldı, `MaterialLibrary.Create` içinde `enableInstancing` hâlâ açık iş. |
 | 2 | — | **Bilinen küçük hata:** görev kazanıldıktan sonra `MissionState.ElapsedTime` saymaya devam ediyor (director'ın örneği bilerek hiç bitmiyor); debrief saati director tarafında durdurulmalı. |
-| 3 | **Denge (bayraklandı, ayarlanmadı)** | `ThreatEnvelope` turundan sonra **seviye 2 keşif İHA ile bedava**: tek AAA'nın İHA'ya karşı etkin atış mesafesi 42.4 m, İHA topu 45 m. Kaldıraç: AAA atış menzili 50 → 55 m **veya** seviye 2'ye ikinci AAA. Detay `## 9`'un ilgili maddesinde. |
+| 3 | ~~**Denge (bayraklandı, ayarlanmadı)**~~ | ✅ **Kapandı.** Seviye 2 boşluğu `AaaDetectionRange` 60 → **67 m** ile kapatıldı (atış menzili 50 m'de sabit). Gerekçe ve yeni bantlar `## 9`'un son maddesinde. |
 | 4 | — | **Henüz karar verilmedi:** gerçek 3D modeller (render hattı kararı + çalışan bir glTF içe aktarıcı gerekir), ses, zorluk seviyeleri. |
 
 > **B-01…B-09 kapandı.** Yüksek/orta öncelikli bulguların tamamı çözüldü; ayrıntı için
@@ -357,6 +357,7 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
 | `b5912d3` | `ThreatEnvelope` (Core, testli): düşman tespit/atış menzilleri saha ölçeğine çekildi — SAM 160→85 / 120→70, AAA 80→60 / 60→50, düşman avcı 130→65 (top 55 sabit). |
 | `32aae95` | Hangara **Elektronik Harp** hattı (3 seviye, 350/550/900 kredi, güç 1.5/3.0/4.5) + `AircraftProfile.JammerStrength` + `JammerSystem` görev döngüsü; 21 yeni EditMode testi. |
 | `bddf4f9` | Karıştırıcı sahneye takıldı: `SimulationBootstrap` seviye > 0 iken `Jammer` ekliyor, **K** atım tuşu, yayın sürerken yakıt ×1.5, HUD İMZA panelinde karıştırıcı satırı. |
+| `bu tur` | Denge: `ThreatEnvelope.AaaDetectionRange` 60 → **67 m** (atış 50 sabit) — seviye 2'deki "keşif İHA bedava" bandı kapandı; jet/SİHA bantları değişmedi. +2 EditMode testi. |
 
 ---
 
@@ -1125,6 +1126,10 @@ değil. Yani doğrudan bir tutarsızlık yok. Bayraklanan tek gerçek sonuç:
 > geçiriliyor: doğru kaldıraç ya AAA atış menzilini 50 → 55 m'ye çekmek ya da seviye 2'ye ikinci
 > bir AAA koymaktır.
 
+> **Not (sonraki tur):** bu boşluk kapatıldı, ama **önerilen iki kaldıraçla da değil** — AAA
+> **tespit** menzili 60 → **67 m** yapıldı. Yukarıdaki AAA satırları (`60 / 50`, İHA `42 m`) o
+> yüzden tarihsel kayıttır; güncel tablo `## 9`'un son maddesindedir.
+
 ---
 
 ### Tur — karıştırıcı gerçek, kazanılabilir bir sistem oldu (Elektronik Harp)
@@ -1186,3 +1191,48 @@ taşıyor: `Start`'ta `GetComponent`, `Update`'te `Tick` (pilot uçarken de akar
 (`burstSeconds <= 0`), yani hiç tick edilmesine gerek yoktur ve eskisi gibi davranır.
 
 `docs/SCENE.md`: "`Jammer` hiçbir birime takılı değil" notu **kapandı**.
+
+---
+
+### Tur — seviye 2 denge boşluğu kapandı (AAA tespit menzili)
+
+**Sorun (bir önceki turda bayraklanmıştı).** Kampanya seviye 2 "Saha Taraması" = Recon dalga 0 + 1 =
+**5 sabit hedef + 1 AAA**, yani sahada ateş edebilen tek şey o AAA. Etkin atış mesafesi
+`FireDistanceAgainst = min(atış, tespit·RCS^0.25)`; 0.25 m²'lik keşif İHA'ya karşı
+`min(50, 60·0.7071) = 42.4 m`, İHA'nın topu ise **45 m**. Arada **2.6 m**'lik, İHA'nın ateş edip
+AAA'nın cevap veremediği bir bant vardı → seviye bedavaydı.
+
+**Kaldıraç seçimi: `AaaDetectionRange` 60 → 67 m (atış menzili 50 m'de SABİT).**
+
+- **Önerilen "atış 50 → 55" kaldıracı işe yaramıyor.** İHA terimini **tespit** kırpıyor:
+  `min(55, 42.4)` yine **42.4**. Yani İHA hiç etkilenmez, buna karşılık SİHA'nın serbest bandı
+  10 → 5 m, jetinki 20 → 15 m düşerdi — üstelik AAA bulunan **her** seviyede (2, 4, 5, 6, 8).
+  Yanlış uçaklara, yanlış seviyelerde dokunan bir kaldıraç.
+- **"Seviye 2'ye ikinci AAA" da düzeltmiyor.** Geometri aynı kalır (İHA yine ikisini de cevapsız
+  vurur), yalnız süre uzar; ayrıca `ScenarioLibrary`'nin Recon kompozisyonunu değiştirmek gerekirdi.
+- **Tespit menzili cerrahi knob.** Jet (94.7 m) ve SİHA (67 m) zaten **atış-kırpımlı** olduğundan
+  (ikisi de 50 m'lik silahtan uzakta görülür) tespiti oynatmak onların bandını **tam olarak sıfır**
+  kadar değiştirir. Yalnız tabandaki 0.25 m²'lik İHA'nın terimi değişir — düzeltilmesi gereken tek
+  şey oydu.
+- **Neden tam 67?** Çalışan tek pencere: AAA'nın İHA'ya cevap verebilmesi için tespit > `45·√2` =
+  **63.6 m**, küçük imzanın hâlâ bir şey satın alması için tespit < `50·√2` = **70.7 m** (aksi hâlde
+  İHA da herkes gibi tam 50 m'den vurulur ve `ReconIha_IsShotAtCloserThanTheStatedFireRange`
+  değişmezi düşer). **67 = pencerenin orta noktası**: İHA 47.4 m'den, yani kendi topu yetişmeden
+  2.4 m önce ateş yer, ama hâlâ SİHA/jetten 2.6 m daha yakında.
+
+**Sonuçtaki AAA zarfı** (`tespit = 67·RCS^0.25`, `etkin atış = min(50, tespit)`):
+
+| Arketip | AAA tespiti | AAA'nın cevap mesafesi | Oyuncu topu | Serbest bant (eski → yeni) |
+|---|---|---|---|---|
+| Savaş uçağı (4 m²) | 84.9 → **94.7 m** | 50 m (değişmedi) | 70 m | 20 m → **20 m** (aynı) |
+| SİHA (1 m²) | 60 → **67 m** | 50 m (değişmedi) | 60 m | 10 m → **10 m** (aynı) |
+| Keşif İHA (0.25 m²) | 42.4 → **47.4 m** | 42.4 → **47.4 m** | 45 m | +2.6 m → **−2.4 m (yok)** |
+
+SAM ve düşman avcı zarflarına dokunulmadı; kampanya, ekonomi, can, hasar ve dalga kompozisyonu
+değerlerinin hiçbiri değişmedi. Değişmezler korunuyor: AAA tespit (67) > atış (50); SAM tespiti
+(85) > AAA tespiti (67); AAA jete karşı bile sahayı kaplamıyor (94.7 < 96.6 m).
+
+**Testler.** `ThreatEnvelopeTests`'te yayımlanan tablo AAA satırı güncellendi (94.75 / 67.00 / 47.38)
+ve iki yeni test eklendi: `NoPlayerGun_OutRangesTheAaaItCannotBeAnsweredBy` (boşluğun kendisi bir
+değişmez olarak) ve `AaaDetectionChange_LeftTheOtherArchetypesUntouched` (jet/SİHA bandı tam 50 m'de
+kalıyor + AAA sahayı kaplamıyor).

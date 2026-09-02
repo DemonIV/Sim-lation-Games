@@ -391,9 +391,11 @@ namespace Sim.Runtime
             // react to an AAA launch — you have to be ALREADY breaking. Its answer is to not fly
             // straight over the gun; each round is only worth 20 damage.
             //
-            // RANGES: detection 80 -> 60 m and fire 60 -> 50 m (Sim.Core.ThreatEnvelope). It stays the
-            // short-range piece — strictly inside the SAM's envelope and inside the SİHA's own 60 m
-            // gun range, so trading fire with it is still a trade.
+            // RANGES: detection 80 -> 60 -> 67 m and fire 60 -> 50 m (Sim.Core.ThreatEnvelope). It
+            // stays the short-range piece — strictly inside the SAM's envelope and inside the SİHA's
+            // own 60 m gun range, so trading fire with it is still a trade. The 60 -> 67 m step is the
+            // level-2 fix: at 60 m the gun could not answer a 0.25 m² recon İHA (42.4 m) inside that
+            // İHA's own 45 m gun range. Jet/SİHA are fire-range-clipped, so their band is unchanged.
             site.Configure(ThreatEnvelope.AaaDetectionRange, ThreatEnvelope.AaaFireRange,
                            0.8f, 20, 1.5f, 95f, 20f, 9f);
 

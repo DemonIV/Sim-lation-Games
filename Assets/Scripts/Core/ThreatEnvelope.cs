@@ -103,15 +103,44 @@ namespace Sim.Core
 
         /// <summary>
         /// AAA detection range against a 1 m² target, in metres (was 80, which already covered most
-        /// of the field). 60 m keeps it strictly a local sensor: it notices what comes into its own
-        /// neighbourhood.
+        /// of the field, then 60). It stays a LOCAL sensor — it notices what comes into its own
+        /// neighbourhood — but 60 m was one metre-class too short at the bottom of the signature
+        /// spread, and that is what this value is set by.
+        ///
+        /// <para>
+        /// THE DEFECT IT FIXES. Effective fire distance is <see cref="FireDistanceAgainst"/> =
+        /// min(fire, detection·RCS^0.25). At 60 m the AAA answered a 0.25 m² recon İHA at only
+        /// 60/√2 = 42.4 m, while that İHA's own gun reaches 45 m — a 2.6 m ring in which the İHA
+        /// could shoot the gun and the gun could not shoot back. Campaign level 2 ("Saha Taraması")
+        /// is 5 plain targets plus exactly ONE AAA, so that ring made the level free.
+        /// </para>
+        ///
+        /// <para>
+        /// WHY DETECTION AND NOT FIRE RANGE. Raising <see cref="AaaFireRange"/> 50 → 55 cannot close
+        /// the gap: the İHA term is clipped by DETECTION (min(55, 42.4) is still 42.4), so the İHA
+        /// would be untouched while the SİHA (free band 10 → 5 m) and the jet (20 → 15 m) got worse
+        /// on every level that fields an AAA — levels 2, 4, 5, 6 and 8. Detection is the surgical
+        /// knob precisely because the other two archetypes are FIRE-range-clipped (detection 94.7 m
+        /// and 67 m both exceed the 50 m weapon), so moving it changes their bands by exactly zero.
+        /// </para>
+        ///
+        /// <para>
+        /// WHY 67. Only one window works: detection must exceed 45·√2 = 63.6 m for the AAA to answer
+        /// the recon İHA at all, and stay under 50·√2 = 70.7 m or the İHA's small signature stops
+        /// buying it anything (it would be engaged at the full 50 m like everyone else, and the
+        /// <c>ReconIha_IsShotAtCloserThanTheStatedFireRange</c> invariant would fail). 67 is that
+        /// window's midpoint: the İHA is engaged at 47.4 m — 2.4 m before its own gun reaches, and
+        /// still 2.6 m closer in than the SİHA/jet. Against the jet the AAA now sees 94.7 m, still
+        /// short of <see cref="MaxEngagementDistance"/>, so it does not blanket the arena for anyone.
+        /// </para>
         /// </summary>
-        public const float AaaDetectionRange = 60f;
+        public const float AaaDetectionRange = 67f;
 
         /// <summary>
         /// AAA fire range, in metres (was 60). 50 m keeps it inside the SİHA's own 60 m gun range —
         /// a gun run on an AAA is still a trade, not a free kill — while sitting clearly under
-        /// <see cref="SamFireRange"/> so the two archetypes stay distinct.
+        /// <see cref="SamFireRange"/> so the two archetypes stay distinct. UNCHANGED by the level-2
+        /// balance pass: see <see cref="AaaDetectionRange"/> for why the fire range is the wrong knob.
         /// </summary>
         public const float AaaFireRange = 50f;
 
