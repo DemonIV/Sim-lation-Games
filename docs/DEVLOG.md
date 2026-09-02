@@ -65,6 +65,14 @@ canlı havuzu `Health.SetMax` ile yeniden boyutlandıran bir **property**. (2) B
 yeni Core sistemi `FlightEnvelope` **18 m taban** (14 + 4 m pay) tanımlıyor ve bant +6 m ötelendi
 (İHA 18 · SİHA 20 · Jet 24 · düşman avcı 20). Denge notu: yalnız SAM zorlaştı (100→120), AAA / yer
 hedefi / avcı kolaylaştı.
+En son tur **elektronik harp katmanı dekoratif olmaktan çıktı**: düşman sensörleri artık dost
+uçağın **radar imzasını** okuyor. Tespit yasası tek bir Core dosyasında toplandı
+(`SignatureDetection`: menzil ∝ RCS^0.25 + karıştırma + görüş konisi); `AircraftProfile`'a
+`RadarSignature` geldi (jet 4 m² · SİHA 1 m² taban · keşif İHA 0.25 m²) ve `SimulationBootstrap`
+bunu oyuncunun uçağına (ve dost YZ İHA'larına) `RcsComponent` olarak takıyor. SAM/AAA ve düşman
+avcıların ayarlı tespit menzilleri **değişmedi** — artık 1 m² hedefe karşı referans menzil, yani
+SİHA bugünkü mesafede, jet ×√2 daha uzaktan, keşif İHA ÷√2 daha yakından görülüyor. HUD'da pilot
+modunda **İMZA** paneli, seçim kartlarında **GİZLİ** çubuğu var.
 
 ### Yeni oturum için okuma sırası
 1. Bu bölüm.
@@ -140,8 +148,9 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 |---|---|
 | `FlightModel` | Deterministik kinematik uçuş (hız, dönüş hızı sınırı, ivme). |
 | `WaypointNavigator` | Sıralı waypoint takibi, varışta ilerleme, döngü. |
-| `TargetingSystem` | Menzil + görüş açısı (FOV) içinde tespit, zaman tabanlı kilitlenme. |
-| `DetectableTarget` | Hedef anlık görüntüsü (id, konum, hız). |
+| `TargetingSystem` | Menzil + görüş açısı (FOV) içinde tespit, zaman tabanlı kilitlenme. **İmza duyarlı:** `DetectionRange` artık 1 m² (`ReferenceRcs`) hedefe karşı referans menzil; her adayın kendi RCS'i ve karıştırması `SignatureDetection` üzerinden kendi menzilini üretir (`EffectiveRangeFor`). İmzasız anlık görüntüde sonuç birebir eski davranış. |
+| `DetectableTarget` | Hedef anlık görüntüsü (id, konum, hız) + **radar imzası ve karıştırma gücü**. `Signature` özelliği ayarlanmamış (≤ 0) imzayı taban 1 m² olarak okur, böylece `default(DetectableTarget)` ve eski kurucular eski menzille aynı davranır. |
+| `SignatureDetection` | **Projenin tespit yasası, tek kopya:** menzil ∝ RCS^0.25 (`RangeForRcs`), üstüne `ElectronicWarfare` gürültü karıştırması (`EffectiveRange`), üstüne görüş konisi (`CanDetect`). `RadarSystem` ve `TargetingSystem` buraya delege eder. `DetectionRangeMultiplier` = "şu an ne kadar görünürüm" (sensörden bağımsız tek sayı, HUD bunu gösterir). Bozuk girdiler (≤ 0 RCS/menzil/FOV, ≤ 0 referans RCS) istisna atmadan makul cevap verir. |
 | `WeaponSystem` | Atış kontrolü: mühimmat, atış hızı, soğuma, yeniden doldurma. |
 | `Ballistics` | Hareketli hedefe önleme (lead) noktası. |
 | `Health` | Can havuzu, hasar, imha ve `SetMax` ile **yerinde yeniden boyutlandırma** (mevcut can oranını korur; yok edilmiş havuz dirilmez). |
@@ -177,7 +186,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `RadarScope` | Dünya konumunu burun-yukarı radar skopu koordinatına (−1..1, +Y burun, +X sağ) yansıtır; irtifayı yok sayar (PPI), menzil dışını reddeder. |
 | `GunPipper` | Namlu ekseninde belirli bir menzilde merminin vardığı dünya noktası (uçuş süresi = menzil/ağız hızı, düşüş = ½·g·t²); ağız hızı ≤ 0 veya menzil ≤ 0 ise hitscan gibi doğrudan namlu ekseni. |
 | `AircraftKind` | Uçulabilir arketipler: Savaş uçağı (`FighterJet`) / SİHA (`Siha`) / Keşif İHA (`Iha`). |
-| `AircraftProfile` | Bir arketipin değiştirilemez performans profili: hız/dönüş/pilot hız tavanı, seyir irtifası, yakıt, top (5 değer), füze (adet + menzil), tespit ve radar menzili, can + seçim ekranı için dört 0–1 gösterge puanı. Her alanın Runtime'da gerçek bir tüketicisi vardır. |
+| `AircraftProfile` | Bir arketipin değiştirilemez performans profili: hız/dönüş/pilot hız tavanı, seyir irtifası, yakıt, top (5 değer), füze (adet + menzil), tespit ve radar menzili, **radar imzası (`RadarSignature`, m²)**, can + seçim ekranı için **beş** 0–1 gösterge puanı (beşincisi `StealthRating`). Her alanın Runtime'da gerçek bir tüketicisi vardır; imzayı `SimulationBootstrap` `RcsComponent`'e yazar, düşman sensörleri oradan okur. |
 | `AircraftCatalog` | Üç profilin kataloğu: `All`, `Default` (SİHA temel değerleri), `TryGet`/`GetOrDefault` (bilinmeyen id'de hata değil varsayılan) ve klavyeyle sağa/sola dönen `Cycle`. |
 | `MissileAgility` | Bir füzenin **yapısal çeviklik sınırı**: `maxTurnRate = maxG · 9.81 / hız` (hızlı füze daha az çevik), dönüş yarıçapı ve komut edilen yönü bu hıza göre bir adımda ulaşılabilir yöne kırpan saf `ClampTurn`. Sıfır/negatif girdilerde dönüş yetkisi yok — asla sıfıra bölme. |
 | `CampaignLevel` | Bir kampanya seviyesinin tanımı: 1 tabanlı index, Türkçe ad/brifing, hangi `ScenarioKind`'ı kaç dalga ve dalga rampasının kaçıncı adımından (`StartWaveOffset`) başlatarak uçtuğu, zorluk çarpanı ve ödül parametreleri. `Composition(w)` doğrudan `ScenarioLibrary.Composition`'a iner — paralel senaryo sistemi yok. |
@@ -194,16 +203,16 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 |---|---|
 | `IhaController` | Keşif İHA: uçuş + devriye + radar sensörüyle tespit; yakıt, angajman durumu, atanan hedefe gidiş ve tehdit kaçınması. |
 | `SihaController` | Silahlı SİHA (IhaController'dan türer): kilitlenince güdümlü mühimmat fırlatır; mühimmat oranı. |
-| `AirDefenseSite` | Düşman hava savunması: drone'ları tespit edip güdümlü mühimmat fırlatır, kendisi de imha edilebilir (SEAD). `Configure(...)` ile uzun menzilli SAM veya kısa menzilli hızlı-ateşli AAA varyantı kurulur. |
+| `AirDefenseSite` | Düşman hava savunması: drone'ları tespit edip güdümlü mühimmat fırlatır, kendisi de imha edilebilir (SEAD). `Configure(...)` ile uzun menzilli SAM veya kısa menzilli hızlı-ateşli AAA varyantı kurulur. Tespiti **imza duyarlı** (ayarlı menzil = 1 m² hedefe karşı referans); temas kaybı kilidi sıfırlar ve atışı keser. `IsLocked` HUD için salt okunur. |
 | `RadarSensor` | RadarSystem + RCS + EW + TargetTracker ile gerçekçi tespit/izleme. |
-| `RcsComponent` | Hedefin açıya bağlı radar imzası. |
-| `Jammer` | Gemi üstü gürültü karıştırıcı (EW menzil düşürme). |
+| `RcsComponent` | Bir birimin radar imzası. `NominalRcs` (açıdan bağımsız) düşman sensörlerinin okuduğu değerdir; `RcsFrom(radarPos)` dost `RadarSensor` için açıya bağlı imzayı verir. `Configure(nominalRcs)` `RadarCrossSection`'ın burun/yan oranlarını koruyarak eğriyi ölçekler. |
+| `Jammer` | Gemi üstü gürültü karıştırıcı (EW menzil düşürme). Yol uçtan uca çalışır (hem `RadarSensor` hem düşman tespit anlık görüntüsü okur); sahnede hiçbir birime takılı **değil**, o yüzden şimdilik atıl. |
 | `GuidedMunition` | PN güdümü + arayıcı başlık + balistik ile güdümlü mühimmat, yakınlık tapası. **Sınırlı takipçi:** güdüm komutu `MissileAgility` ile `maxLoadG`'ye kırpılır, arayıcı başlık güdümü gerçekten kapıya alır (koniden çıkan hedefte `lostLockGraceSeconds` sonra balistik), hedef hızı konum farkından kestirilip **gerçek** PN'e beslenir; `IsGuiding` kancası. |
 | `TargetRegistry` / `Targetable` | Canlı hedeflerin kaydı; controller'lar her kare sorgular. |
 | `SimulationBootstrap` | Play'de sahneyi primitive'lerden kurar (kamera, ışık, zemin, drone'lar, ScenarioController). Üretilen her şey tek bir `Simulation` kökünün altındadır; `Rebuild()` bu kökü yıkıp yeniden kurar (yerinde yeniden başlatma). |
 | `ScenarioController` | Dalga tabanlı senaryo: seçilen göreve göre (`ScenarioLibrary.Composition`) her dalganın düşman karışımını spawn eder ve kazan/kaybet'i yönetir; `BeginMission()` çağrılana kadar bekler. |
 | `SimulationDirector` | Görev takibi ve skorlama (dalga güvenli kill sayımı; kazan/kaybet ScenarioController'da, bu yüzden `MissionState` saf sayaç olarak kurulur ve kendi kendine bitmez). |
-| `Hud` | Ekran üstü (IMGUI) bilgi paneli: görev, skor, radar temasları; pilot modunda dairesel radar skopu (temaslar + gelen füzeler). |
+| `Hud` | Ekran üstü (IMGUI) bilgi paneli: görev, skor, radar temasları; pilot modunda dairesel radar skopu (temaslar + gelen füzeler) ve skopun üstünde **İMZA paneli** (uçağın m² kesit alanı, canlı GİZLİ göstergesi, RADAR TEMASI / RADAR KİLİDİ durumu). |
 | `CameraRig` | Serbest uçan kamera (WASD + fare), drone takip modu ve pilot modunda kokpit görünümü (**V** ile geçiş); kokpitte `CockpitFrame`'i açar/kapatır. |
 | `CockpitFrame` | Kameraya bağlı prosedürel kokpit içi (gösterge paneli, güneşlik dudağı, ön cam kirişi, A-direkleri, kanopi rayları, hafif cam tonu, önde uçağın burnu); tüm parçalar kameranın gerçek frustum'una oranla ölçeklenir, FOV/en-boy değişince yeniden yerleşir. |
 | `ExplosionEffect` | Asset'siz patlama işareti: büyüyüp sönen emisyonlu küre (mühimmat isabeti + imha). |
@@ -332,6 +341,9 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
 | `b94bc2a` | Görev sonu: sonucun bir kez işlenmesi (para + seviye açma + kayıt) ve raporda kazanılan/toplam kredi ile "SEVİYE N AÇILDI" bildirimi. |
 | `709fe2e` | `Health.SetMax` + `Targetable.MaxHealth` property'si: düşman can değerleri artık gerçekten uygulanıyor (B-20). |
 | `9e66fa8` | `FlightEnvelope` (Core, testli) ve seyir bandının +6 m ötelenmesi — binalar artık seyir irtifasının altında (B-21). |
+| `7cfcc3d` | `SignatureDetection` (tek kopya tespit yasası) + `AircraftProfile.RadarSignature`/`StealthRating` + imza taşıyan `DetectableTarget`; hepsi oran tabanlı EditMode testli. |
+| `3705689` | Düşman sensörleri dost uçağın imzasını okuyor: `RcsComponent.Configure/NominalRcs`, imza+karıştırma taşıyan `TargetRegistry.GetSnapshot`, oyuncunun ve dost YZ uçaklarının imzası. |
+| `315fa0c` | HUD İMZA paneli (canlı GİZLİ göstergesi + RADAR TEMASI/KİLİDİ) ve uçak kartlarında GİZLİ çubuğu; `AirDefenseSite.IsLocked`. |
 
 ---
 
@@ -758,9 +770,10 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
   **C** doğrudan menüde seçilen uçağı devralıyor. İki keşif İHA'sı yapay zekâ kanadı olarak
   **hiç dokunulmadan** kalıyor; profil `Rebuild()` sırasında sızmıyor, her kurulumda statik
   seçimden yeniden okunuyor.
-  **Kapsam dışı bırakılan:** arketiplerin radar kesit alanı (RCS) farkı. Sim'de **dost** bir uçağın
-  RCS'ini okuyan hiçbir şey yok (düşman sensörleri düz menzil/FOV ile tespit ediyor), bu yüzden
-  profile ölü bir alan eklenmedi; düşman sensörlerini imza duyarlı yapmak ayrı bir iş.
+  **O turda kapsam dışı bırakılan (ARTIK ÇÖZÜLDÜ):** arketiplerin radar kesit alanı (RCS) farkı.
+  O tarihte sim'de **dost** bir uçağın RCS'ini okuyan hiçbir şey yoktu (düşman sensörleri düz
+  menzil/FOV ile tespit ediyordu), bu yüzden profile ölü bir alan eklenmemişti. Tüketici sonradan
+  yazıldı — bkz. `## 9`'un son maddesi: "imza duyarlı tespit".
   **Model notu:** savaş uçağı bu turda silahlı İHA siluetini ödünç alıyordu; gerçek gövdeler
   bir sonraki turda geldi (aşağıdaki "Uçak modelleri" maddesi).
 - **Uçak modelleri (kozmetik tur):** üç uçulabilir arketip artık **kendi gövdesini** kullanıyor;
@@ -955,3 +968,86 @@ hâlâ siluetin içine inebilir — garanti edilen şey **normal seyrin** oraya 
 hiçbir prop'ta collider yok, dolayısıyla bunun bedeli geçici görsel kesişmeden ibaret.
 Üs/düz bölge (r ≤ 45 m, hangarlar 3.2 m), radar skopunun menzil halkaları (yatay projeksiyon) ve
 kamera çerçevelemesi (sabit irtifa varsayımı yok) etkilenmedi.
+
+### Tur — imza duyarlı tespit: elektronik harp katmanı nihayet oyuna bağlandı
+
+**Sorun.** Proje `RadarSystem` / `RadarCrossSection` / `ElectronicWarfare` / `RcsComponent` /
+`Jammer` ile tam bir elektronik harp katmanı taşıyordu ama **oyuncu açısından tamamen dekoratifti**:
+düşman sensörleri (SAM/AAA'nın `AirDefenseSite`'ı ve düşman avcının `EnemyDroneController`'ı) düz
+menzil + FOV ile tespit ediyordu, sahada hiçbir **dost** uçak `RcsComponent` taşımıyordu ve hiçbir
+şey bir dostun imzasını okumuyordu. Sonuç: üç arketipin boyut farkının **taktik hiçbir sonucu
+yoktu**.
+
+**(1) Tespit yasası tek yerde (Core).** Yeni `SignatureDetection` üç parçayı birleştiriyor:
+`RangeForRcs` (radar menzil denklemi, menzil ∝ RCS^0.25), `EffectiveRange` (üstüne mevcut
+`ElectronicWarfare.EffectiveRange` gürültü karıştırması) ve `CanDetect` (üstüne görüş konisi).
+İkinci bir kopya yazılmadı: `RadarSystem` bu fonksiyonlara **delege ediyor** (ve karıştırmalı
+`DetectionRange(rcs, jam)` / `CanDetect(..., jam)` aşırı yüklemeleri kazandı), `TargetingSystem` de
+öyle. `DetectableTarget` artık konumun yanında **imzayı ve karıştırma gücünü** de taşıyor; ayarlanmamış
+imza taban 1 m² okunduğu için `default(DetectableTarget)` ve eski kurucular birebir eski davranışı
+veriyor. Testler **oran ve sıralama** üzerinden yazıldı (16× RCS = 2× menzil, ×4 imza = ×√2 menzil,
+FOV dışında boyut işe yaramıyor, karıştırma menzili kısaltıyor, ≤ 0 RCS/menzil/FOV ve ≤ 0 referans
+RCS istisna atmıyor), böylece ileride ayar değişince suite kırılmıyor.
+
+**(2) Profilde imza.** `AircraftProfile.RadarSignature` (m²) — `RadarCrossSection`'ın zaten
+modellediği ölçekte, nominal 1 m² etrafında: **jet 4 · SİHA 1 (taban) · keşif İHA 0.25**. Dördüncü
+kök yasası bunu temiz bir ±√2 tespit mesafesine çeviriyor. `AircraftUpgrades` imzayı ve yeni
+`StealthRating`'i olduğu gibi geçiriyor — hangar sensör satıyor, gizlilik satmıyor.
+
+**(3) Sahada.** `SimulationBootstrap` oyuncunun uçağına `RcsComponent.Configure(profile.RadarSignature)`
+takıyor; dost YZ keşif İHA'ları da keşif arketipinin imzasını alıyor (iki taraf simetrik — düşman
+birimleri zaten `RcsComponent` taşıyordu). `TargetRegistry.GetSnapshot` her kayda birimin
+`NominalRcs`'ini ve varsa `Jammer.Strength`'ini yazıyor (ikisi de `Targetable`'ın önbelleklediği
+referanslardan, alan okuması kadar ucuz). Düşman tespit yolları böylece **tek satır davranış
+değişmeden** imza duyarlı oldu.
+
+**Ortaya çıkan menziller** (ayarlı menziller değişmedi; artık 1 m² hedefe karşı referans):
+
+| Sensör (ayarlı) | Jet (4 m²) | SİHA (1 m²) | Keşif İHA (0.25 m²) |
+|---|---|---|---|
+| SAM tespit 160 m (atış 120 m) | 226 m | **160 m** | 113 m |
+| AAA tespit 80 m (atış 60 m) | 113 m | **80 m** | 57 m |
+| Düşman avcı tespit 130 m | 184 m | **130 m** | 92 m |
+
+**Karıştırma** artık uçtan uca çalışıyor: bir birime `Jammer` takıldığı anda yukarıdaki her sayı
+`(1 + güç)^0.25`'e bölünür (varsayılan güç 4 → ÷1.50; keşif İHA'ya karşı SAM 113 → **76 m**).
+Sahnede **hiçbir dost birime jammer takılı değil** ve bu turda yeni bir toplama/yetenek
+uydurulmadı — yalnızca yolun çalıştığı doğrulandı.
+
+**Temas kaybı.** `TargetingSystem.UpdateLock(false, …)` `HasDetection`'ı düşürüp `LockProgress`'i
+sıfırlıyor; `AirDefenseSite` `!found` durumunda `CurrentTargetId = -1` yazıp **erken dönüyor**
+(tehdit uyarısı ve tüm atış yolları atlanıyor), `EnemyDroneController` gunnery'yi `found` şartına
+bağlıyor. Yani stealth bir drone kendi menzilinin dışına çıktığında iz gerçekten düşüyor, kilit
+sıfırdan kuruluyor. Bu davranış zaten doğruydu; değiştirilmedi, yalnız belgelendi. Yan sonuç:
+**atış menzili tespitle sınırlanıyor** — SAM keşif İHA'yı 120 m'den değil, en fazla 113 m'den
+vurabiliyor.
+
+**(4) Oyuncuya okunur hâle getirme** (yalnız mevcut `HudTheme` paleti, yeni renk yok). Pilot modunda
+radar skopunun **üstünde** bir `İMZA` paneli: başlıkta ham kesit alanı (`1.00 m²`), altında
+`GİZLİ` göstergesi (`SignatureDetection.DetectionRangeMultiplier`'dan türetiliyor, karıştırma açılınca
+anında uzuyor) ve `×1.41` okuması, en altta durum etiketi — `RADAR TEMASI YOK` (soluk) /
+`RADAR TEMASI x2` (amber) / yanıp sönen `RADAR KİLİDİ` (kırmızı, `AirDefenseSite.IsLocked`).
+Skopun altındaki füze tehdit satırının aynası: o "bana ne atıyor", bu "beni ne kadar kolay
+görüyorlar". Seçim ekranındaki uçak kartlarına beşinci çubuk **GİZLİ** (`StealthRating`) eklendi;
+kart satırı bir çubuk boyu büyüdü (120 → 134 px).
+
+**Denge kontrolü (aritmetik).**
+- *Keşif İHA gizli mi, görünmez mi?* Saha ±40 m, yani köşeden köşeye en fazla ~113 m. İHA'ya karşı
+  SAM tespiti tam **113 m** — sahanın çapı kadar, yani İHA hâlâ neredeyse her yerde görülüyor:
+  **gizli, görünmez değil**. Gerçek kazanç düşman **atış** zarfının küçülmesinde: AAA'ya karşı
+  tespit **57 m** ama AAA atış menzili 60 m → İHA 57–60 m bandında ateş yemeden dolaşabiliyor;
+  SAM'de aynı şekilde 113 m < 120 m. Düşman avcı da İHA'yı ancak 92 m'den fark ediyor (jeti 184
+  m'den, yani sahanın her yerinden).
+- *Jet Seviye 4'ün SAM'ini atlatabiliyor mu?* Evet, **maruziyeti hiç değişmedi**. SAM'in atış
+  menzili 120 m ve tespiti taban hâlde zaten 160 m > 120 m idi; jetin 226 m'ye çıkması ilk atışın
+  **ne zaman** geldiğini değiştirmiyor (hâlâ 120 m). Şarjör, atış hızı, mühimmat hızı ve yük sınırı
+  da aynı. Jetin imza cezası bugün sadece **düşman avcıların erken toplanması** olarak hissediliyor.
+- *Şüpheli görünen değer:* düşman sensör menzilleri sahayı zaten baştan kaplıyor (SAM 160 m vs ±40 m
+  saha), bu yüzden imza farkı hak ettiğinden **daha az** hissediliyor. Bu bir ayar sorunu, ama
+  görevin kapsamı "ayarlı menzilleri koru" olduğu için **hiçbir değer değiştirilmedi** — kayda
+  geçiriliyor: ileride imzayı gerçekten belirleyici yapmak istenirse doğru kaldıraç düşman tespit
+  menzillerini saha ölçeğine (~60–100 m) çekmek, imza katsayılarını şişirmek değil.
+
+`docs/SCENE.md`: "sahnede hiçbir nesneye `Jammer` eklenmiyor" notu (B-02'nin içinde) hâlâ geçerli,
+ama artık **bedelsiz ve işlevsel** — dost uçaklar `RcsComponent` taşıdığı için nesne envanteri
+güncellendi.

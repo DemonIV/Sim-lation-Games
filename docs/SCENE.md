@@ -118,8 +118,8 @@ Adet, seçilen senaryonun
 | **Directional Light** | `Light` (Directional) | `:79` |
 | **Terrain** | `MeshFilter`, `MeshRenderer` | `EnvironmentBuilder.cs:79-80` |
 | **Airbase / Props parçaları** | `MeshFilter`, `MeshRenderer` (collider **silinmiş**) | `EnvironmentBuilder.Prop` (`:250`) |
-| **IHA_1 / IHA_2** | `MeshFilter`+`MeshRenderer` (kapalı) + **`CapsuleCollider` (duruyor)**, `GunTurret`(200, 8, 45, 3, 3), `CountermeasureDispenser`, `IhaController`, `RadarSensor`, `PropellerSpinner`, `BankingVisual`, `Targetable`(Faction 0, 100 HP), `DamageVisuals` | `SpawnIha` (`:99`) |
-| **SIHA_1** | aynısı, ama `GunTurret`(300, 10, 60, 2.5, 4.5) ve `IhaController` yerine **`SihaController`** | `SpawnSiha` (`:129`) |
+| **IHA_1 / IHA_2** | `MeshFilter`+`MeshRenderer` (kapalı) + **`CapsuleCollider` (duruyor)**, `RcsComponent`(**0.25 m²**), `GunTurret`(200, 8, 45, 3, 3), `CountermeasureDispenser`, `IhaController`, `RadarSensor`, `PropellerSpinner`, `BankingVisual`, `Targetable`(Faction 0, 100 HP), `DamageVisuals` | `SpawnIha` (`:99`) |
+| **JET_1 / SIHA_1 / IHA_3** (oyuncu) | aynısı, ama her değer seçilen `AircraftProfile`'dan: `RcsComponent`(**jet 4 · SİHA 1 · İHA 0.25 m²**), `GunTurret`(profilden), füze taşıyan arketiplerde `IhaController` yerine **`SihaController`** | `SpawnPlayerAircraft` |
 | **WP_\*** | (bileşen yok — yalnız `Transform`) | `RectangleRoute` (`:178`) |
 | **ScenarioController** | `ScenarioController` | `:37` |
 | **SimulationDirector** | `SimulationDirector`, `Hud`, `GameControls`, `ScenarioMenu`, `PlayerDroneController` | `:42-55` |
@@ -132,6 +132,15 @@ Adet, seçilen senaryonun
 Sahnede hiç `Rigidbody`, `Physics.Raycast`, `OnTrigger*`/`OnCollision*` **yoktur** (tüm kaynak
 tarandı). Yukarıda "duruyor" diye işaretlenen kök collider'lar hiçbir şey tarafından
 kullanılmıyor (bkz. B-05).
+
+**Radar imzası (güncel).** Artık **dost** uçaklar da `RcsComponent` taşıyor — daha önce yalnız düşman
+birimlerinde vardı ve hiçbir şey bir dostun imzasını okumuyordu, yani elektronik harp katmanı
+oyuncu açısından dekoratifti. Düşman tespit yolları (`AirDefenseSite`, `EnemyDroneController`)
+`TargetRegistry.GetSnapshot`'tan gelen imzayı `Sim.Core.SignatureDetection` üzerinden kendi tespit
+menzillerine çeviriyor; ayarlı menziller **1 m² (SİHA taban) hedefe karşı** referans olarak
+yorumlanıyor. `Jammer` hâlâ **hiçbir birime takılı değil** (bkz. B-02), ama yolu artık hem dost
+`RadarSensor`'da hem düşman anlık görüntüsünde canlı: bir birime takıldığı anda ona karşı her tespit
+menzili `(1 + güç)^0.25`'e bölünür.
 
 ---
 
