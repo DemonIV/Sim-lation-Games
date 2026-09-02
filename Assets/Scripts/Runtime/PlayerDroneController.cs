@@ -17,7 +17,8 @@ namespace Sim.Runtime
     /// Controls: <c>C</c> take/release control · <c>Tab</c> pick drone · <c>W</c>/<c>S</c> throttle ·
     /// <c>A</c>/<c>D</c> yaw · <c>↑</c>/<c>↓</c> (or Left-Alt + mouse Y) pitch · <c>Space</c> guns ·
     /// <c>F</c> guided munition (SİHA only) · <c>Q</c> flares/chaff · <c>E</c> (held) afterburner ·
-    /// <c>X</c> evasive break turn (an over-g burst onto the beam, on a cooldown).
+    /// <c>X</c> evasive break turn (an over-g burst onto the beam, on a cooldown) ·
+    /// <c>K</c> karıştırıcı (one jamming burst, only on an aircraft that bought the emitter).
     ///
     /// This is a GAME / EDUCATIONAL flight feel with abstract, gamified parameters.
     /// </summary>
@@ -74,6 +75,15 @@ namespace Sim.Runtime
         private const float AfterburnerFuelMultiplier = 3f;
 
         /// <summary>
+        /// Fuel-burn multiplier while the noise jammer is radiating — THE downside of the ability.
+        /// A high-power emitter is not free: it is fed off the same tank the engine is, exactly the
+        /// way the afterburner is (just far more gently, 1.5× against the afterburner's 3×). It costs
+        /// nothing at all when the jammer is idle or not fitted, so a player who never buys the track
+        /// flies an unchanged sortie.
+        /// </summary>
+        private const float JammerFuelMultiplier = 1.5f;
+
+        /// <summary>
         /// Duration of the one-shot evasive break turn (X), in seconds. Covers
         /// <see cref="Sim.Core.EvasiveManeuver.BreakWindowSeconds"/>, so a break released as the cue
         /// lights up is still being flown when the missile arrives — letting go halfway through would
@@ -114,6 +124,12 @@ namespace Sim.Runtime
 
         /// <summary>True while the one-shot evasive maneuver (X) is flying the drone instead of the pilot.</summary>
         public bool EvadeActive { get; private set; }
+
+        /// <summary>
+        /// True while the noise jammer (K) is radiating on the piloted drone. Drives the extra fuel
+        /// burn below; the HUD reads the emitter's own state off the airframe instead.
+        /// </summary>
+        public bool JammerActive { get; private set; }
 
         /// <summary>True when the break turn can be triggered right now (off cooldown).</summary>
         public bool EvadeReady => _evadeCooldown <= 0f;
@@ -289,6 +305,7 @@ namespace Sim.Runtime
             // Abilities are per-sortie: drop them with the drone.
             AfterburnerActive = false;
             EvadeActive = false;
+            JammerActive = false;
             _evadeTimer = 0f;
             _evadeCooldown = 0f;
 
@@ -306,7 +323,7 @@ namespace Sim.Runtime
             if (dt <= 0f) return;
             if (Controlled == null) return;
 
-            // Special abilities: Q flares, E afterburner, X evasive maneuver.
+            // Special abilities: Q flares, E afterburner, X evasive maneuver, K jamming burst.
             HandleAbilities(dt);
 
             // Throttle. The afterburner raises the achievable top speed while it is held, and pushes
@@ -322,6 +339,9 @@ namespace Sim.Runtime
             // throttle to 1, so the afterburner's heavier burn is applied to the time step instead.
             float commanded = MaxSpeed > 0f ? _speed / MaxSpeed : 0f;
             float burnDt = AfterburnerActive ? dt * AfterburnerFuelMultiplier : dt;
+            // A radiating jammer is a power drain on the same tank (see JammerFuelMultiplier). Set by
+            // HandleAbilities at the top of this method, so it is this frame's state, not last one's.
+            if (JammerActive) burnDt *= JammerFuelMultiplier;
             Controlled.ConsumeFuel(commanded, burnDt);
 
             // A dry tank means no power: the governor caps the achievable speed, tapering it through
@@ -376,8 +396,9 @@ namespace Sim.Runtime
 
         /// <summary>
         /// Reads the special-ability inputs: <c>Q</c> releases a flare/chaff salvo, <c>E</c> holds the
-        /// afterburner (more speed, far heavier burn) and <c>X</c> arms a one-shot evasive maneuver.
-        /// Defensive: every ability is a no-op when the drone lacks the matching hardware.
+        /// afterburner (more speed, far heavier burn), <c>X</c> arms a one-shot evasive maneuver and
+        /// <c>K</c> fires a jamming burst. Defensive: every ability is a no-op when the drone lacks
+        /// the matching hardware.
         /// </summary>
         private void HandleAbilities(float dt)
         {
@@ -402,6 +423,21 @@ namespace Sim.Runtime
             }
             if (_evadeTimer > 0f) _evadeTimer = Mathf.Max(0f, _evadeTimer - dt);
             EvadeActive = _evadeTimer > 0f;
+
+            // K: one jamming burst. The duty cycle (burst length, cooldown, whether it is radiating)
+            // lives in Sim.Core.JammerSystem and is ticked by the airframe itself, so this is only the
+            // key; the emitter is null on any aircraft that never bought the "Elektronik Harp" track.
+            // K is free: no other KeyCode in Sim.Runtime uses it (audited against every binding).
+            Jammer jammer = Controlled.Jammer;
+            if (jammer != null)
+            {
+                if (Input.GetKeyDown(KeyCode.K)) jammer.TryActivate();
+                JammerActive = jammer.IsActive;
+            }
+            else
+            {
+                JammerActive = false;
+            }
 
             // Publish the break state on the airframe: a flare/chaff salvo thrown DURING a break is
             // worth more than one thrown flying straight (see Sim.Core.MissileThreat). The AI branch

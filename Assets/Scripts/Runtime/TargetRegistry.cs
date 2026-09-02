@@ -60,8 +60,10 @@ namespace Sim.Runtime
         /// Cached <see cref="Jammer"/> on this object, or null when it has none. Read by BOTH sensor
         /// paths — the friendly <see cref="RadarSensor"/> and the hostile detection snapshot
         /// (<see cref="TargetRegistry.GetSnapshot(int, List{DetectableTarget})"/>) — so mounting a
-        /// jammer on any unit shortens every hostile and friendly radar's reach against it. Nothing
-        /// in the scene currently mounts one, so this stays null and the jamming path costs nothing.
+        /// jammer on any unit shortens every hostile and friendly radar's reach against it. The
+        /// player's aircraft mounts one when the hangar's "Elektronik Harp" track has been bought
+        /// (see <c>SimulationBootstrap.SpawnPlayerAircraft</c>); on every other unit this stays null
+        /// and the jamming path costs nothing.
         /// </summary>
         public Jammer Jammer
         {

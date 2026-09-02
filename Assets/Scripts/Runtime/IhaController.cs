@@ -82,6 +82,10 @@ namespace Sim.Runtime
         // Optional flare/chaff dispenser (added by the spawner). May be null.
         protected CountermeasureDispenser _cm;
 
+        // Optional noise jammer (added by the spawner ONLY when the hangar's "Elektronik Harp" track
+        // has been bought). Null on every stock airframe. May be null.
+        protected Jammer _jammer;
+
         // World position of the nearest munition currently homing on this drone (valid only while
         // MissileIncoming is true), and whether a salvo was already fired against the current threat.
         private Vector3 _missilePos;
@@ -161,6 +165,13 @@ namespace Sim.Runtime
 
         /// <summary>Optional flare/chaff dispenser attached to this drone, or null when it carries none.</summary>
         public CountermeasureDispenser Countermeasures => _cm;
+
+        /// <summary>
+        /// Optional noise jammer attached to this drone, or null when it carries none. Only the
+        /// player's aircraft ever gets one, and only above level 0 of the hangar's "Elektronik Harp"
+        /// track — a stock airframe returns null and the whole ability is simply absent.
+        /// </summary>
+        public Jammer Jammer => _jammer;
 
         /// <summary>True while at least one live <see cref="GuidedMunition"/> is homing on this drone.</summary>
         public bool MissileIncoming { get; private set; }
@@ -334,6 +345,10 @@ namespace Sim.Runtime
             // Optional flare/chaff dispenser (added by the spawner). Null when this drone carries none.
             _cm = GetComponent<CountermeasureDispenser>();
 
+            // Optional noise jammer (added by the spawner only above level 0 of the "Elektronik Harp"
+            // track). Null on every stock airframe, which is what keeps a fresh save unchanged.
+            _jammer = GetComponent<Jammer>();
+
             // Remember the spawn point so ReturnToBase can steer home.
             BasePosition = transform.position;
             // Hold the spawn altitude as the cruise altitude.
@@ -381,9 +396,12 @@ namespace Sim.Runtime
             if (_policy != null)
                 State = _policy.Decide(HasTarget, AmmoFraction > 0f, FuelFraction);
 
-            // Gun and dispenser cooldowns always advance, no matter who is flying.
+            // Gun, dispenser and jammer cooldowns always advance, no matter who is flying. The
+            // jammer's burst/cooldown timer therefore keeps running while the pilot is at the
+            // controls, which is the only case that has one (see Jammer).
             if (_gun != null) _gun.Tick(dt);
             if (_cm != null) _cm.Tick(dt);
+            if (_jammer != null) _jammer.Tick(dt);
 
             // Missile warning: refresh MissileIncoming/TimeToImpact from the live munitions. Runs for
             // the human pilot too, so the HUD can warn them.
@@ -580,6 +598,9 @@ namespace Sim.Runtime
 
             // Flare/chaff charges, when this drone carries a dispenser.
             if (_cm != null) _cm.Reload();
+
+            // Jamming burst, when this drone carries an emitter: servicing hands it straight back.
+            if (_jammer != null) _jammer.Rearm();
         }
 
         /// <summary>

@@ -333,6 +333,22 @@ namespace Sim.Runtime
             // Added BEFORE the Targetable so the registry's lazy lookup finds it on the first scan.
             go.AddComponent<RcsComponent>().Configure(profile.RadarSignature);
 
+            // Electronic warfare: an onboard noise jammer, fitted ONLY when the hangar's "Elektronik
+            // Harp" track has actually been bought. Level 0 yields strength 0 (see
+            // UpgradeCatalog.JammerStrengthAtLevel), so no component is added at all and a fresh save
+            // flies exactly the aircraft it always did. Added BEFORE the Targetable, like the
+            // RcsComponent above, so the registry's lazy component lookup finds it on the very first
+            // detection snapshot — which is the path that carries the jamming strength to every
+            // hostile sensor. AircraftUpgrades.Apply is a pure function of the upgrade state, so a
+            // Rebuild() (which destroys this whole aircraft and re-derives the profile) can neither
+            // double-apply the strength nor leave a stale emitter behind.
+            if (profile.JammerStrength > 0f)
+            {
+                go.AddComponent<Jammer>().Configure(profile.JammerStrength,
+                                                    UpgradeCatalog.JammerBurstSeconds,
+                                                    UpgradeCatalog.JammerCooldownSeconds);
+            }
+
             MarkFriendly(go, profile.Health);
 
             // Gun, added before the controller so its Start() picks it up.

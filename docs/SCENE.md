@@ -138,9 +138,15 @@ birimlerinde vardı ve hiçbir şey bir dostun imzasını okumuyordu, yani elekt
 oyuncu açısından dekoratifti. Düşman tespit yolları (`AirDefenseSite`, `EnemyDroneController`)
 `TargetRegistry.GetSnapshot`'tan gelen imzayı `Sim.Core.SignatureDetection` üzerinden kendi tespit
 menzillerine çeviriyor; ayarlı menziller **1 m² (SİHA taban) hedefe karşı** referans olarak
-yorumlanıyor. `Jammer` hâlâ **hiçbir birime takılı değil** (bkz. B-02), ama yolu artık hem dost
-`RadarSensor`'da hem düşman anlık görüntüsünde canlı: bir birime takıldığı anda ona karşı her tespit
-menzili `(1 + güç)^0.25`'e bölünür.
+yorumlanıyor.
+
+**Karıştırıcı (güncel — B-02'nin "hiçbir şey `Jammer` takmıyor" tespiti ÇÖZÜLDÜ).** `Jammer` artık
+gerçekten sahneye takılıyor: hangardaki **"Elektronik Harp"** hattı 0'ın üzerindeyse
+`SimulationBootstrap.SpawnPlayerAircraft` oyuncunun uçağına `Jammer` ekliyor
+(`Configure(güç, 6 sn, 14 sn)`). Seviye 0'da bileşen hiç eklenmiyor, yani taze bir kayıt bugüne
+kadarki uçağı uçmaya devam ediyor ve `RadarSensor`/anlık görüntü yolunun jammer maliyeti sıfır
+kalıyor. Yol hem dost `RadarSensor`'da hem düşman anlık görüntüsünde canlı: emisyon sürerken o
+uçağa karşı her tespit menzili `(1 + güç)^0.25`'e bölünür.
 
 ---
 

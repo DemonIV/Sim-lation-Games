@@ -63,8 +63,12 @@ namespace Sim.Runtime
         /// <summary>Height of the threat readout row drawn under the scope.</summary>
         private const float ScopeInfoH = 18f;
 
-        /// <summary>Height of the signature panel drawn above the scope (header + bar + status tag).</summary>
-        private const float SignatureBlockH = HeaderH + 6f + BarH + 6f + 16f + 6f;
+        /// <summary>
+        /// Height of the signature panel drawn above the scope: header + stealth bar + radar-contact
+        /// tag + jammer tag. The jammer row is always reserved, even on an aircraft that carries no
+        /// emitter, so the panel does not jump around between sorties.
+        /// </summary>
+        private const float SignatureBlockH = HeaderH + 6f + BarH + 6f + 16f + 4f + 16f + 6f;
 
         // ---- gun pipper (the reticle is projected from the bore, not welded to screen centre) ----
 
@@ -978,6 +982,56 @@ namespace Sim.Runtime
             {
                 HudTheme.Draw(tag, "RADAR TEMASI YOK", HudTheme.Small, HudTheme.TextFaint);
             }
+
+            // Jammer row: off / active / cooling, plus the live cut it is making to every hostile
+            // detection range. The stealth bar above already includes it (jamming is folded into
+            // `mult`), so this row only explains WHERE that number is coming from.
+            by += 16f + 4f;
+            DrawJammerRow(new Rect(bx, by, bw, 16f), self);
+        }
+
+        /// <summary>
+        /// One row of the İMZA panel: what the onboard noise jammer is doing. Reads the emitter off
+        /// the aircraft's own <see cref="Jammer"/> component (cached on the Targetable, the same
+        /// reference every hostile sensor reads), so the four states below are literally the four
+        /// states of <see cref="Sim.Core.JammerSystem"/>:
+        /// <list type="bullet">
+        /// <item>no component at all — the "Elektronik Harp" track was never bought;</item>
+        /// <item><see cref="JammerState.Ready"/> — armed, radiating nothing, K spends it;</item>
+        /// <item><see cref="JammerState.Active"/> — radiating, with the live range multiplier;</item>
+        /// <item><see cref="JammerState.Cooling"/> — spent, recharging, with the readiness percentage.</item>
+        /// </list>
+        /// Existing <see cref="HudTheme"/> colours only.
+        /// </summary>
+        private static void DrawJammerRow(Rect r, Targetable self)
+        {
+            // Unity's overloaded == is what reports a destroyed/absent component, so both checks are
+            // written out explicitly (never ?.).
+            Jammer jammer = null;
+            if (self != null) jammer = self.Jammer;
+
+            if (jammer == null || !jammer.IsFitted)
+            {
+                HudTheme.Draw(r, "KARIŞTIRICI YOK", HudTheme.Small, HudTheme.TextFaint);
+                return;
+            }
+
+            switch (jammer.State)
+            {
+                case JammerState.Active:
+                    HudTheme.Tag(r, $"KARIŞTIRICI AKTİF  ×{jammer.DetectionRangeFactor:0.00}  "
+                                    + $"{jammer.SecondsRemaining:0.0} sn", HudTheme.Ok);
+                    return;
+
+                case JammerState.Cooling:
+                    HudTheme.Tag(r, $"KARIŞTIRICI ŞARJ  %{Mathf.RoundToInt(jammer.ReadyFraction * 100f)}",
+                                 HudTheme.Amber);
+                    return;
+
+                default:
+                    HudTheme.Tag(r, "KARIŞTIRICI HAZIR (K)", HudTheme.TextDim);
+                    return;
+            }
         }
 
         /// <summary>Fills a circle out of stacked 1px rows (IMGUI can only draw rectangles).</summary>
@@ -1186,7 +1240,7 @@ namespace Sim.Runtime
                               + (piloting ? (cockpit ? " · V: TAKİP KAMERASI" : " · V: KOKPİT") : string.Empty),
                           HudTheme.Centered, HudTheme.TextFaint);
             HudTheme.Draw(l2, "W/S: GAZ · A/D: DÖNÜŞ · ↑/↓: YUNUSLAMA · SPACE: TOP · F: FÜZE · "
-                              + "Q: FLARE · E: ART YAKICI · X: KAÇIŞ MANEVRASI (SERT KIRIŞ)",
+                              + "Q: FLARE · E: ART YAKICI · X: KAÇIŞ MANEVRASI · K: KARIŞTIRICI",
                           HudTheme.Centered, HudTheme.TextFaint);
             string fleetHint = fleetVisible ? "GİZLE" : "GÖSTER";
             HudTheme.Draw(l3, $"P: {pauseText} · +/−: HIZ (x{scale:0.00}) · R: YENİDEN · "
