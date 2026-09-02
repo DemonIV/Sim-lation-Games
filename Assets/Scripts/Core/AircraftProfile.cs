@@ -124,6 +124,20 @@ namespace Sim.Core
         /// <summary>Hit points.</summary>
         public float Health { get; }
 
+        /// <summary>
+        /// Strength of the onboard noise jammer this aircraft flies with, or 0 when it carries none.
+        ///
+        /// <para>
+        /// This is the ONE field no archetype sets: every catalogue profile leaves it at 0 and it is
+        /// written solely by <see cref="AircraftUpgrades.Apply"/> from the hangar's
+        /// <see cref="UpgradeTrack.ElectronicWarfare"/> track, so an aircraft only ever carries a
+        /// jammer that was BOUGHT. The spawner reads it to decide whether to mount a <c>Jammer</c>
+        /// component at all; <see cref="ElectronicWarfare.EffectiveRange"/> then divides every hostile
+        /// detection range by <c>(1 + strength)^0.25</c> while a burst is radiating.
+        /// </para>
+        /// </summary>
+        public float JammerStrength { get; }
+
         // ---------------------------------------------------------------- display ratings (0..1)
         /// <summary>Comparative speed rating for the selection screen (0..1).</summary>
         public float SpeedRating { get; }
@@ -152,7 +166,8 @@ namespace Sim.Core
                                int missileCapacity, float missileRange,
                                float detectionRange, float radarRange, float radarSignature, float health,
                                float speedRating, float agilityRating,
-                               float firepowerRating, float enduranceRating, float stealthRating)
+                               float firepowerRating, float enduranceRating, float stealthRating,
+                               float jammerStrength = 0f)
         {
             Id = id;
             DisplayName = displayName;
@@ -180,6 +195,9 @@ namespace Sim.Core
             RadarRange = radarRange;
             RadarSignature = radarSignature;
             Health = health;
+            // Optional (defaults to 0) so the three catalogue archetypes below — and every existing
+            // call site — construct a jammer-less airframe without naming the argument at all.
+            JammerStrength = Mathf.Max(0f, jammerStrength);
 
             SpeedRating = Mathf.Clamp01(speedRating);
             AgilityRating = Mathf.Clamp01(agilityRating);

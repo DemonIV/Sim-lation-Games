@@ -367,6 +367,7 @@ namespace Sim.Tests
             Cmp(diff, "DetectionRange", a.DetectionRange, b.DetectionRange);
             Cmp(diff, "RadarRange", a.RadarRange, b.RadarRange);
             Cmp(diff, "RadarSignature", a.RadarSignature, b.RadarSignature);
+            Cmp(diff, "JammerStrength", a.JammerStrength, b.JammerStrength);
             Cmp(diff, "Health", a.Health, b.Health);
             Cmp(diff, "SpeedRating", a.SpeedRating, b.SpeedRating);
             Cmp(diff, "AgilityRating", a.AgilityRating, b.AgilityRating);

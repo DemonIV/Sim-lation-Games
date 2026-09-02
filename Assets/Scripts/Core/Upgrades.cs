@@ -28,7 +28,15 @@ namespace Sim.Core
         Fuel,
 
         /// <summary>Radar: radar picture and targeting range.</summary>
-        Radar
+        Radar,
+
+        /// <summary>
+        /// Elektronik Harp: an onboard noise jammer. LEVEL 0 MEANS NO JAMMER AT ALL, so a save made
+        /// before this track existed (and every fresh one) flies exactly the aircraft it always did.
+        /// Listed LAST so the persisted level array keeps its existing indices — a short saved array
+        /// simply restores this track at 0 (see <see cref="UpgradeState.Restore"/>).
+        /// </summary>
+        ElectronicWarfare
     }
 
     /// <summary>
@@ -62,7 +70,8 @@ namespace Sim.Core
         private static readonly UpgradeTrack[] _all =
         {
             UpgradeTrack.Engine, UpgradeTrack.Gun, UpgradeTrack.Missiles,
-            UpgradeTrack.Agility, UpgradeTrack.Hull, UpgradeTrack.Fuel, UpgradeTrack.Radar
+            UpgradeTrack.Agility, UpgradeTrack.Hull, UpgradeTrack.Fuel, UpgradeTrack.Radar,
+            UpgradeTrack.ElectronicWarfare
         };
 
         /// <summary>Every track, in hangar display order.</summary>
@@ -82,6 +91,7 @@ namespace Sim.Core
                 case UpgradeTrack.Agility: return "Kanat / Çeviklik";
                 case UpgradeTrack.Hull: return "Gövde Zırhı";
                 case UpgradeTrack.Fuel: return "Yakıt Tankı";
+                case UpgradeTrack.ElectronicWarfare: return "Elektronik Harp";
                 default: return "Radar";
             }
         }
@@ -97,6 +107,8 @@ namespace Sim.Core
                 case UpgradeTrack.Agility: return "Dönüş hızını artırır: daha sert manevra.";
                 case UpgradeTrack.Hull: return "Dayanıklılığı (can) artırır.";
                 case UpgradeTrack.Fuel: return "Depo hacmini büyütür: daha uzun sorti.";
+                case UpgradeTrack.ElectronicWarfare:
+                    return "Karıştırıcı: K ile düşman radarını kısa süre kör eder.";
                 default: return "Radar ve tespit menzilini genişletir.";
             }
         }
@@ -109,6 +121,7 @@ namespace Sim.Core
                 case UpgradeTrack.Missiles: return 3;   // each level is a whole extra rack
                 case UpgradeTrack.Fuel: return 4;
                 case UpgradeTrack.Radar: return 4;
+                case UpgradeTrack.ElectronicWarfare: return 3;   // each level is a whole emitter step
                 default: return 5;
             }
         }
@@ -124,6 +137,9 @@ namespace Sim.Core
                 case UpgradeTrack.Agility: return 250;
                 case UpgradeTrack.Hull: return 300;
                 case UpgradeTrack.Fuel: return 200;
+                // The most expensive first level in the shop: it is the only track that buys a piece
+                // of hardware the airframe does not otherwise carry at all.
+                case UpgradeTrack.ElectronicWarfare: return 350;
                 default: return 200;
             }
         }
@@ -143,15 +159,71 @@ namespace Sim.Core
                 case UpgradeTrack.Agility: return 0.07f;
                 case UpgradeTrack.Hull: return 0.10f;
                 case UpgradeTrack.Fuel: return 0.15f;
+                // NOT a percentage: this track's "gain" is raw jammer STRENGTH per level (1.5, 3.0,
+                // 4.5), which ElectronicWarfare turns into a detection-range divisor of
+                // (1 + strength)^0.25 = 1.26, 1.41, 1.53. See JammerStrengthAtLevel.
+                case UpgradeTrack.ElectronicWarfare: return 1.5f;
                 default: return 0.12f;
             }
         }
 
-        /// <summary>The multiplier a track applies at the given level: <c>1 + level × PerLevelGain</c>.</summary>
+        /// <summary>
+        /// The multiplier a track applies at the given level: <c>1 + level × PerLevelGain</c>.
+        ///
+        /// <para>
+        /// For <see cref="UpgradeTrack.ElectronicWarfare"/> this scales nothing on the profile (like
+        /// <see cref="UpgradeTrack.Missiles"/>'s capacity, which is a count rather than a factor).
+        /// It does still mean something, though: <c>1 + strength</c> is exactly the noise ratio
+        /// <see cref="ElectronicWarfare.EffectiveRange"/> takes the fourth root of. Callers that want
+        /// the jammer should use <see cref="JammerStrengthAtLevel"/>.
+        /// </para>
+        /// </summary>
         public static float Multiplier(UpgradeTrack track, int level)
         {
             int l = Mathf.Clamp(level, 0, MaxLevel(track));
             return 1f + l * PerLevelGain(track);
+        }
+
+        // ------------------------------------------------------------------ electronic warfare
+
+        /// <summary>
+        /// How many seconds one jamming burst radiates for. Fixed across the track: buying levels
+        /// makes the jammer STRONGER, never longer — one lever per track, like every other row in the
+        /// hangar.
+        /// </summary>
+        public const float JammerBurstSeconds = 6f;
+
+        /// <summary>
+        /// How many seconds the jammer is unavailable after a burst. With
+        /// <see cref="JammerBurstSeconds"/> this is a 30% duty cycle: jamming is a WINDOW you spend,
+        /// not a state you live in.
+        /// </summary>
+        public const float JammerCooldownSeconds = 14f;
+
+        /// <summary>
+        /// Jamming strength at the given track level — <c>L × PerLevelGain</c> (0, 1.5, 3.0, 4.5).
+        ///
+        /// <para>
+        /// LEVEL 0 IS ZERO, which is what makes a fresh save unchanged: the spawner fits no
+        /// <c>Jammer</c> at all. <see cref="ElectronicWarfare.EffectiveRange"/> turns the rest into a
+        /// detection-range divisor of <c>(1 + strength)^0.25</c> — ×1.26, ×1.41, ×1.53. Level 2 is
+        /// exactly √2, i.e. it cancels the fighter jet's whole 4 m² signature penalty for the length
+        /// of a burst.
+        /// </para>
+        /// </summary>
+        public static float JammerStrengthAtLevel(int level)
+        {
+            int l = Mathf.Clamp(level, 0, MaxLevel(UpgradeTrack.ElectronicWarfare));
+            return l * PerLevelGain(UpgradeTrack.ElectronicWarfare);
+        }
+
+        /// <summary>
+        /// Share of its nominal range a hostile sensor keeps against a carrier jamming at this track
+        /// level: <c>1 / (1 + strength)^0.25</c>. 1 at level 0 (no jammer), 0.80 / 0.71 / 0.65 above.
+        /// </summary>
+        public static float JammerDetectionFactor(int level)
+        {
+            return ElectronicWarfare.EffectiveRange(1f, JammerStrengthAtLevel(level));
         }
 
         /// <summary>
@@ -178,6 +250,14 @@ namespace Sim.Core
 
             if (track == UpgradeTrack.Missiles)
                 return $"+{l} füze  ·  +%{Mathf.RoundToInt(PerLevelGain(track) * l * 100f)} menzil";
+
+            if (track == UpgradeTrack.ElectronicWarfare)
+            {
+                // Stated as what the player actually feels: how much shorter every hostile detection
+                // range gets while the burst is running.
+                int cut = Mathf.RoundToInt((1f - JammerDetectionFactor(l)) * 100f);
+                return $"−%{cut} tespit  ·  {JammerBurstSeconds:0} sn";
+            }
 
             int pct = Mathf.RoundToInt(PerLevelGain(track) * l * 100f);
             switch (track)
@@ -317,6 +397,14 @@ namespace Sim.Core
     /// signature — no upgrade track makes an aircraft physically smaller.
     /// </para>
     ///
+    /// <para>
+    /// <see cref="AircraftProfile.JammerStrength"/> is the one field that is SET rather than scaled,
+    /// because <see cref="UpgradeTrack.ElectronicWarfare"/> fits a piece of hardware the airframe does
+    /// not otherwise have: level 0 writes 0 (no jammer at all, so a stock profile still comes back
+    /// unchanged) and each level above writes that level's emitter strength. It stays a pure function
+    /// of the state, so <c>SimulationBootstrap.Rebuild()</c> re-deriving it can never double-apply.
+    /// </para>
+    ///
     /// Pure logic; no Unity scene dependency.
     /// </summary>
     public static class AircraftUpgrades
@@ -376,7 +464,12 @@ namespace Sim.Core
                 agilityRating: b.AgilityRating,
                 firepowerRating: b.FirepowerRating,
                 enduranceRating: b.EnduranceRating,
-                stealthRating: b.StealthRating);
+                stealthRating: b.StealthRating,
+                // The one field written from a track rather than scaled: the garage does not shrink
+                // the airframe, but it will BOLT A JAMMER ON IT. Level 0 -> 0 -> no jammer is fitted,
+                // which is why a fresh save flies the stock aircraft byte for byte.
+                jammerStrength: UpgradeCatalog.JammerStrengthAtLevel(
+                                    upgrades.LevelOf(UpgradeTrack.ElectronicWarfare)));
         }
 
         /// <summary>
@@ -394,6 +487,7 @@ namespace Sim.Core
                 case UpgradeTrack.Hull: return new[] { "Health" };
                 case UpgradeTrack.Fuel: return new[] { "FuelCapacity" };
                 case UpgradeTrack.Radar: return new[] { "DetectionRange", "RadarRange" };
+                case UpgradeTrack.ElectronicWarfare: return new[] { "JammerStrength" };
                 default: return Array.Empty<string>();
             }
         }
