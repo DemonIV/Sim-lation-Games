@@ -122,6 +122,48 @@ namespace Sim.Tests
         }
 
         [Test]
+        public void Cycle_IsAFourStateLoopEndingInMute()
+        {
+            var s = new SoundSettings();
+            Assert.AreEqual(0.7f, s.MasterVolume, 1e-4f);   // default sits ON the ladder
+
+            s.CycleVolume();
+            Assert.AreEqual(0.4f, s.MasterVolume, 1e-4f);
+            Assert.IsFalse(s.Muted);
+
+            s.CycleVolume();
+            Assert.IsTrue(s.Muted);
+            Assert.IsTrue(s.IsSilent);
+
+            s.CycleVolume();
+            Assert.IsFalse(s.Muted);
+            Assert.AreEqual(1f, s.MasterVolume, 1e-4f);
+
+            s.CycleVolume();
+            Assert.AreEqual(0.7f, s.MasterVolume, 1e-4f);   // back where it started, in four presses
+        }
+
+        [Test]
+        public void Cycle_AlwaysMovesEvenFromAnOffLadderLevel()
+        {
+            var s = new SoundSettings();
+
+            // A restored save (or a future slider) can sit between rungs: the cycle takes the first
+            // rung strictly below, so it can never appear stuck.
+            s.SetVolume(0.55f);
+            s.CycleVolume();
+            Assert.AreEqual(0.4f, s.MasterVolume, 1e-4f);
+
+            s.SetVolume(0.05f);
+            s.CycleVolume();
+            Assert.IsTrue(s.Muted);
+
+            // The ladder itself descends, so "one press = quieter" always holds.
+            for (int i = 1; i < SoundSettings.VolumeLadder.Length; i++)
+                Assert.Less(SoundSettings.VolumeLadder[i], SoundSettings.VolumeLadder[i - 1]);
+        }
+
+        [Test]
         public void Label_ReadsAsTheHudShowsIt()
         {
             var s = new SoundSettings();

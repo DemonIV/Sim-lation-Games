@@ -100,6 +100,45 @@ namespace Sim.Core
             return Muted;
         }
 
+        /// <summary>
+        /// The rungs a single-key volume cycle walks down, loudest first. The last stop of the cycle
+        /// is MUTE, not a fourth rung, which is why silence is not in this list.
+        /// <see cref="DefaultVolume"/> is deliberately one of them, so a player who never touches the
+        /// setting is already ON the ladder and the cycle is a clean four-state loop.
+        /// </summary>
+        public static readonly float[] VolumeLadder = { 1f, 0.7f, 0.4f };
+
+        /// <summary>
+        /// One press of the volume key: steps down the <see cref="VolumeLadder"/>, then to mute, then
+        /// back to the top. A single binding that reaches silence in at most three presses and can
+        /// never get stuck — the game has one free key for audio and this is what it spends it on.
+        ///
+        /// <para>
+        /// Off-ladder levels (a restored save, or a future slider) are handled by taking the first
+        /// rung strictly below the current level, so the cycle always MOVES and always descends.
+        /// </para>
+        /// </summary>
+        public void CycleVolume()
+        {
+            if (Muted)
+            {
+                Muted = false;
+                SetVolume(VolumeLadder[0]);
+                return;
+            }
+
+            for (int i = 0; i < VolumeLadder.Length; i++)
+            {
+                if (VolumeLadder[i] < _volume - 1e-4f)
+                {
+                    SetVolume(VolumeLadder[i]);
+                    return;
+                }
+            }
+
+            Muted = true;
+        }
+
         /// <summary>Explicitly sets the mute flag (used when restoring a saved setting).</summary>
         public void SetMuted(bool muted)
         {

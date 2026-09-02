@@ -56,7 +56,15 @@ namespace Sim.Runtime
                                  Random.Range(1.6f, 2.4f), smokeColor);
             }
 
-            // 6) Camera shake, strongest close up and gone entirely far away.
+            // 6) The bang itself, spatialised: bigger blasts are louder, lower-pitched and carry
+            // further. Pooled source, cached clip — see AudioDirector.
+            float loudness = Mathf.Clamp01(0.45f + s * 0.09f);
+            float pitch = Mathf.Clamp(1.15f - s * 0.05f, 0.7f, 1.3f);
+            AudioDirector.PlayAt(position, AudioLibrary.Explosion, loudness, pitch,
+                                 AudioDirector.DefaultMinDistance + s,
+                                 AudioDirector.DefaultMaxDistance + s * 10f);
+
+            // 7) Camera shake, strongest close up and gone entirely far away.
             Camera cam = Camera.main;
             if (cam != null)
             {

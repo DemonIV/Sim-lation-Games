@@ -298,6 +298,39 @@ namespace Sim.Core
             }
         }
 
+        /// <summary>
+        /// Amplitude modulation ("tremolo"), in place: multiplies the buffer by
+        /// 1 − depth·(1 − cos(2π·rate·t))/2, i.e. a gain that swings between 1 and 1 − depth at
+        /// <paramref name="rateHz"/> Hz and starts at 1.
+        ///
+        /// <para>
+        /// This is what turns a static harmonic stack into a PROPELLER (a chop at blade-pass rate) and
+        /// a low tone into a "denied" buzzer. A depth of 0, a non-positive rate or a bad sample rate
+        /// leaves the buffer untouched.
+        /// </para>
+        ///
+        /// <para>
+        /// SEAMLESS LOOPS: the modulator is a cosine starting at its maximum, so as long as the
+        /// modulation rate divides the buffer's length in whole cycles, the modulated buffer still
+        /// loops without a click — which is exactly how the engine loops are built.
+        /// </para>
+        /// </summary>
+        public static void ApplyTremolo(float[] buffer, int sampleRate, float rateHz, float depth)
+        {
+            if (buffer == null || buffer.Length == 0) return;
+            if (sampleRate <= 0 || rateHz <= 0f) return;
+
+            float d = Mathf.Clamp01(depth);
+            if (d <= 0f) return;
+
+            float step = 2f * Mathf.PI * rateHz / sampleRate;
+            for (int i = 0; i < buffer.Length; i++)
+            {
+                float gain = 1f - d * (1f - Mathf.Cos(step * i)) * 0.5f;
+                buffer[i] *= gain;
+            }
+        }
+
         // ------------------------------------------------------------------ levels
 
         /// <summary>Largest absolute sample in the buffer (0 for a null/empty one).</summary>

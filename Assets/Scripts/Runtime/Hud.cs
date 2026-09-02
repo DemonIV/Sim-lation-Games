@@ -1243,8 +1243,11 @@ namespace Sim.Runtime
                               + "Q: FLARE · E: ART YAKICI · X: KAÇIŞ MANEVRASI · K: KARIŞTIRICI",
                           HudTheme.Centered, HudTheme.TextFaint);
             string fleetHint = fleetVisible ? "GİZLE" : "GÖSTER";
+            // Master volume state comes from the shared (rebuild-proof) SoundSettings, so the strip
+            // shows what the player will actually hear: "SES %70" or "SES KAPALI".
+            string soundHint = AudioDirector.Settings != null ? AudioDirector.Settings.Label() : "SES";
             HudTheme.Draw(l3, $"P: {pauseText} · +/−: HIZ (x{scale:0.00}) · R: YENİDEN · "
-                              + $"M: GÖREV MENÜSÜ · G: FİLO PANELİ ({fleetHint})",
+                              + $"M: GÖREV MENÜSÜ · G: FİLO PANELİ ({fleetHint}) · N: {soundHint}",
                           HudTheme.Centered, HudTheme.TextFaint);
 
             // Bar colour-code legend (design: green >50, amber 20–50, red <20).

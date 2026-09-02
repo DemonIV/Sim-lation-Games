@@ -153,6 +153,11 @@ namespace Sim.Runtime
             // Global keyboard controls: R restart, P pause, +/- time scale.
             director.gameObject.AddComponent<GameControls>();
 
+            // Audio front desk: master volume key (N), the AudioListener the hand-built camera lacks,
+            // and the pooled AudioSources every sound in the game is played through. Its SETTING is
+            // static, so a rebuild cannot un-mute the game.
+            director.gameObject.AddComponent<AudioDirector>();
+
             // Mission-select briefing screen. Added AFTER the ScenarioController above so its Start()
             // can find the controller it has to release with BeginMission(). It holds the sim paused
             // until the player picks a mission, and reopens on M.

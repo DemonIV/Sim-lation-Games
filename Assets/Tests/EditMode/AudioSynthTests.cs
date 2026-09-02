@@ -323,6 +323,37 @@ namespace Sim.Tests
             Assert.Less(buffer[(int)(buffer.Length * 0.9f)], buffer[buffer.Length / 2]);
         }
 
+        [Test]
+        public void Tremolo_SwingsBetweenFullAndTheDepth_AndKeepsTheLoopSeamless()
+        {
+            // DC input, so the buffer IS the modulator.
+            float[] buffer = AudioSynth.CreateBuffer(0.5f, Rate);
+            for (int i = 0; i < buffer.Length; i++) buffer[i] = 1f;
+            AudioSynth.ApplyTremolo(buffer, Rate, 20f, 0.6f);
+
+            // Starts at full gain (and 20 Hz divides 0.5 s in whole cycles, so the loop point matches).
+            Assert.AreEqual(1f, buffer[0], 1e-5f);
+            Assert.AreEqual(1f, buffer[buffer.Length - 1], 5e-3f);
+
+            // Trough is exactly 1 - depth: half a modulation period in.
+            int trough = Mathf.RoundToInt(Rate / 20f / 2f);
+            Assert.AreEqual(0.4f, buffer[trough], 1e-3f);
+
+            for (int i = 0; i < buffer.Length; i++)
+            {
+                Assert.GreaterOrEqual(buffer[i], 0.4f - 1e-4f);
+                Assert.LessOrEqual(buffer[i], 1f + 1e-4f);
+            }
+
+            // Degenerate settings are no-ops, not wipes.
+            float[] untouched = AudioSynth.CreateBuffer(0.05f, Rate);
+            AudioSynth.AddSine(untouched, Rate, 500f, 0.5f);
+            AudioSynth.ApplyTremolo(untouched, Rate, 0f, 0.5f);
+            AudioSynth.ApplyTremolo(untouched, Rate, 10f, 0f);
+            AudioSynth.ApplyTremolo(untouched, 0, 10f, 0.5f);
+            Assert.AreEqual(0.5f, AudioSynth.Peak(untouched), 0.01f);
+        }
+
         // ------------------------------------------------------------------ levels
 
         [Test]
