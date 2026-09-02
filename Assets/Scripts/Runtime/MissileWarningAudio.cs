@@ -37,18 +37,18 @@ namespace Sim.Runtime
 
         private void Start()
         {
-            _pilot = FindAnyObjectByType<PlayerDroneController>();
+            // Resolved ONCE. SimulationBootstrap puts both components on the same manager object, so
+            // the local lookup normally answers; the scene scan is the hand-authored-scene fallback.
+            // With no pilot component at all there is nothing to warn about, so the component switches
+            // itself off instead of scanning the scene every frame (finding B-06).
+            _pilot = GetComponent<PlayerDroneController>();
+            if (_pilot == null) _pilot = FindAnyObjectByType<PlayerDroneController>();
+            if (_pilot == null) enabled = false;
         }
 
         private void Update()
         {
-            if (_pilot == null)
-            {
-                // The pilot component lives on the manager object built by SimulationBootstrap; after a
-                // rebuild this may be a different instance, so re-resolve rather than going dead.
-                _pilot = FindAnyObjectByType<PlayerDroneController>();
-                if (_pilot == null) return;
-            }
+            if (_pilot == null) return;
 
             // Only the aircraft the player is actually flying gets a warning receiver.
             if (!_pilot.IsActive || !_pilot.MissileIncoming)

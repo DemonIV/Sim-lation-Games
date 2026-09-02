@@ -2,7 +2,7 @@
 
 > Bu dosya, projede yapılan tüm işleri ve kararları kaydeder; oturumlar arası bağlamı (context) korumak ve projeyi hızlı anlamak içindir.
 
-**Son güncelleme:** 2026-09-01
+**Son güncelleme:** 2026-09-02
 **Branch:** `claude/slack-session-f6uh9g`
 **Unity sürümü:** 6000.5.9f1
 
@@ -79,6 +79,15 @@ bunu oyuncunun uçağına (ve dost YZ İHA'larına) `RcsComponent` olarak takıy
 avcıların ayarlı tespit menzilleri **değişmedi** — artık 1 m² hedefe karşı referans menzil, yani
 SİHA bugünkü mesafede, jet ×√2 daha uzaktan, keşif İHA ÷√2 daha yakından görülüyor. HUD'da pilot
 modunda **İMZA** paneli, seçim kartlarında **GİZLİ** çubuğu var.
+En son iki tur **denge + ses** oldu. (1) Bir önceki turda bayraklanan **seviye 2 boşluğu** kapandı:
+AAA **tespit** menzili 60 → **67 m** (atış menzili 50 m'de sabit), çünkü boşluğu yaratan terim
+tespitti — keşif İHA'ya cevap mesafesi 42.4 → **47.4 m** oldu (kendi topu 45 m), jet ve SİHA'nın
+bandı ise atış-kırpımlı oldukları için **hiç değişmedi**. (2) Oyun artık **sesli**: projede ses
+varlığı olmadığı ve içe aktarılamadığı için her ses kodla üretiliyor — sentez matematiği
+`Sim.Core.AudioSynth`'te (testli), `AudioClip`/`AudioSource` tarafı `AudioLibrary` +
+`AudioDirector`'da. Motor (gaza bağlı, arketipe göre pervane/türbin), top, füze atışı, gelen füze
+uyarı tonu (kaçış penceresinde değişiyor), patlama ve menü/hangar sesleri var; ana ses/sessiz
+**N** tuşunda ve `PlayerPrefs`'te saklanıyor. Ayrıntı `## 9`'un son iki maddesinde.
 
 ### Yeni oturum için okuma sırası
 1. Bu bölüm.
@@ -113,7 +122,7 @@ modunda **İMZA** paneli, seçim kartlarında **GİZLİ** çubuğu var.
 | 1 | **B-10…B-18** | `docs/SCENE.md`'deki kalan **düşük** öncelikli bulgular (ölü `ApplyColor`, üs konumu ile `BasePosition` uyumsuzluğu, ölü alanlar, waypoint GameObject'leri, sis/dünya sınırı, skybox materyali, HUD string'leri). **B-19 kapandı**; **B-16** kısmen kapandı — palet yapıldı, `MaterialLibrary.Create` içinde `enableInstancing` hâlâ açık iş. |
 | 2 | — | **Bilinen küçük hata:** görev kazanıldıktan sonra `MissionState.ElapsedTime` saymaya devam ediyor (director'ın örneği bilerek hiç bitmiyor); debrief saati director tarafında durdurulmalı. |
 | 3 | ~~**Denge (bayraklandı, ayarlanmadı)**~~ | ✅ **Kapandı.** Seviye 2 boşluğu `AaaDetectionRange` 60 → **67 m** ile kapatıldı (atış menzili 50 m'de sabit). Gerekçe ve yeni bantlar `## 9`'un son maddesinde. |
-| 4 | — | **Henüz karar verilmedi:** gerçek 3D modeller (render hattı kararı + çalışan bir glTF içe aktarıcı gerekir), ses, zorluk seviyeleri. |
+| 4 | — | **Henüz karar verilmedi:** gerçek 3D modeller (render hattı kararı + çalışan bir glTF içe aktarıcı gerekir), zorluk seviyeleri. **Ses artık var** (kodla üretilen); eksikleri `## 9`'un son maddesindeki "Yapılmayanlar" listesinde. |
 
 > **B-01…B-09 kapandı.** Yüksek/orta öncelikli bulguların tamamı çözüldü; ayrıntı için
 > `docs/SCENE.md` → `## 5. Bulgular` (✅ işaretli satırlar).
@@ -206,6 +215,8 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `AircraftUpgrades` | `Apply(baseProfile, upgradeState) → AircraftProfile`: yükseltmeleri taban profilin üstüne ÇARPANLA uygular (taban profiller otoriter kalır), sıfır yükseltmede taban profile birebir eşit döner, tabanı asla mutasyona uğratmaz. Tek sayısal istisna füze yuvası (adet); topu olup füzesi olmayan gövdede yeni yuvanın menzili tespit menzilinden türer. `AffectedFields` hangi hattın hangi alanı oynattığını söyler. |
 | `ThreatEnvelope` | Sahanın **yatay zarfı** (`FlightEnvelope`'un yatay muadili): saha yarı-genişliği 40 m, spawn keep-out 32 m, köşe-köşe **113 m**, tipik düşman mevzisinden en uzak noktaya **96.6 m** (`MaxEngagementDistance`). Her düşman arketipinin tespit ve atış menzili tek yerde ve arenaya bağlı olarak tanımlı; `DetectionRangeAgainst`/`FireDistanceAgainst`/`CoversWholeField` denge tablosunu tek çağrıyla ifade eder. Değişmezler (tespit > atış; taban SİHA'ya karşı tespit sahayı KAPLAMAMALI; keşif İHA atış menzilinin dışından görülmemeli) `ThreatEnvelopeTests` tarafından doğrulanır. |
 | `JammerSystem` | Karıştırıcının **görev döngüsü**: yayın süresi, soğuma ve şu an yayılan güç (`Ready`/`Active`/`Cooling`). Karıştırmanın fiziği tekrar edilmez — `ElectronicWarfare.EffectiveRange`'e delege eder; bu sınıf yalnız "açık mı?" sorusunu sahiplenir. Yayın iptal edilemez, tuşa basmak süreyi uzatmaz, tek uzun kare soğumayı atlatamaz. `BurstSeconds <= 0` = sürekli yayın (elle kurulmuş sahnelerdeki eski davranış). |
+| `AudioSynth` | **Projenin ses sentezi matematiği:** `float[]` PCM tamponu üzerinde toplamalı üretim — sinüs, tek harmonikli ton, analitik fazlı doğrusal süpürme (chirp), deterministik xorshift gürültüsü, tek kutuplu alçak/yüksek geçiren filtre, tremolo, normalize zamanlı ADSR ve vurmalı zarf, tepe/ölçek/normalize/kırp. Projede ses varlığı olmadığı için **her ses buradan** doğar; `AudioClip`/`AudioSource` bilmez. Bozuk girdi (null tampon, 0 uzunluk/örnekleme hızı, negatif frekans) istisna atmaz, hiçbir şey yapmaz. |
+| `SoundSettings` | Ana ses seviyesi + sessize alma kuralları. Sessize alma "seviyeyi 0 yap" DEĞİL, altındaki seviyeyi hatırlar; `CycleVolume` tek tuşluk merdiveni (%100 → %70 → %40 → KAPALI) yürütür ve merdiven dışı bir seviyeden bile mutlaka hareket eder; `Restore` bozuk/NaN değerde varsayılana düşer. `EffectiveVolume` Runtime'ın mixer'a yazdığı tek sayı. |
 
 ### Sim.Runtime (ince MonoBehaviour'lar)
 | Bileşen | Görevi |
@@ -243,9 +254,14 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `PropellerSpinner` | "Propeller" parçasını hıza bağlı olarak kendi Z ekseninde döndürür. |
 | `BankingVisual` | Dönüşlerde yalnızca "Model" çocuğunu yatırır (kök transform'a asla dokunmaz). |
 | `TurretVisual` | SAM/AAA'da "Turret" hedefi takip eder, "Radar" tabağı sürekli döner (yalnız çocuk transform'lar). |
+| `AudioLibrary` | Asset'siz **ses fabrikası** (`MaterialLibrary`/`VfxLibrary` kalıbı): on klip tarifi (patlama, top, füze atışı, füze uyarısı, kaçış uyarısı, UI tık/onay/ret, pervane ve türbin motor ilmeği) `AudioSynth` ile üretilip önbelleklenir. Klip **ilk kullanımda bir kez** kurulur, atış başına asla; başarısız üretim null olarak hatırlanır ve tekrar denenmez. Motor ilmekleri dikişsiz: 0.5 sn tamponda yalnız 2 Hz'in katı kısmi frekanslar, gürültüsüz ve zarfsız. |
+| `AudioDirector` | Sesin ön bürosu: `AudioListener`'ı garantiler (elle kurulan kameranın dinleyicisi yoktur), **12 uzamsal + 1 iki boyutlu** `AudioSource`'u bir kez kurup dönüşümlü kullanır (olay başına bileşen yok; havuz doluysa en eskisini çalar), `PlayAt`/`Play2D` tek giriş noktasıdır ve **N** ana ses tuşunu taşır. Ayar statiktir, `Rebuild()` sesi geri açmaz; sessizken çalma çağrıları hemen döner. |
+| `AudioSave` | Ses ayarının `PlayerPrefs` katmanı — kampanya kaydından **ayrı iki anahtar** (`sim.audio.volume`/`sim.audio.muted`), çünkü kampanya blob'unun sürüm çakışması "sıfırdan başla" demektir ve bir ses ayarı kimsenin kampanyasına mal olmamalıdır. Okuma/yazma istisna atmaz. |
+| `EngineAudio` | Uçak başına tek döngüsel kaynak; ses yüksekliği ve perdesi hız/azami hız oranını takip eder. Arketip karakteri gövdeden gelir: `"Propeller"` parçası olan (keşif İHA / SİHA) pervane uğultusu, olmayan (savaş uçağı) türbin ıslığı alır. Oyuncu o uçağı uçarken **2D**, diğer hâllerde uzamsal; duraklamada ve yakıt bitince sıfıra iner. |
+| `MissileWarningAudio` | Kokpit füze uyarı tonu. HUD'un `FÜZE!` bandı ve `KAÇIŞ MANEVRASI` satırıyla **aynı iki bayrağı** okur (`MissileIncoming` / `BreakWindowOpen`), böylece göz ile kulak çelişemez: 0.6 sn aralıklı alçak bip, kaçış penceresi açılınca anında 0.2 sn aralıklı yüksek/sert bip. 2D ve ölçekli zamanda (duraklamada susar). |
 
 ### Testler (Sim.Tests.EditMode)
-Her Core sistemi için bir test dosyası. Toplam **44** test dosyası. Çalıştırma:
+Her Core sistemi için bir test dosyası. Toplam **46** test dosyası. Çalıştırma:
 `Window > General > Test Runner > EditMode > Run All`.
 
 ---
@@ -357,7 +373,12 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
 | `b5912d3` | `ThreatEnvelope` (Core, testli): düşman tespit/atış menzilleri saha ölçeğine çekildi — SAM 160→85 / 120→70, AAA 80→60 / 60→50, düşman avcı 130→65 (top 55 sabit). |
 | `32aae95` | Hangara **Elektronik Harp** hattı (3 seviye, 350/550/900 kredi, güç 1.5/3.0/4.5) + `AircraftProfile.JammerStrength` + `JammerSystem` görev döngüsü; 21 yeni EditMode testi. |
 | `bddf4f9` | Karıştırıcı sahneye takıldı: `SimulationBootstrap` seviye > 0 iken `Jammer` ekliyor, **K** atım tuşu, yayın sürerken yakıt ×1.5, HUD İMZA panelinde karıştırıcı satırı. |
-| `bu tur` | Denge: `ThreatEnvelope.AaaDetectionRange` 60 → **67 m** (atış 50 sabit) — seviye 2'deki "keşif İHA bedava" bandı kapandı; jet/SİHA bantları değişmedi. +2 EditMode testi. |
+| `cc75866` | Denge: `ThreatEnvelope.AaaDetectionRange` 60 → **67 m** (atış 50 sabit) — seviye 2'deki bedava bant kapandı. |
+| `90f4610` | `AudioSynth` + `SoundSettings` (Core, testli): prosedürel ses sentezi ve ana ses ayarı; 20 yeni EditMode testi. |
+| `867327e` | Ses altyapısı: `AudioLibrary` (önbellekli klip fabrikası), `AudioDirector` (havuzlanmış kaynaklar + **N** tuşu), `AudioSave`, patlama sesi. |
+| `77e4bbc` | Motor sesi: gaza bağlı döngü, `"Propeller"` parçasına göre pervane/türbin, uçulurken 2D. |
+| `d0edca9` | Top raporu, füze atış sesi (dost/düşman ayrı) ve gelen füze uyarı tonu (kaçış penceresinde değişiyor). |
+| `312685f` | Menü/hangar arayüz sesleri: tık, onay ve ret. |
 
 ---
 
@@ -1236,3 +1257,78 @@ değerlerinin hiçbiri değişmedi. Değişmezler korunuyor: AAA tespit (67) > a
 ve iki yeni test eklendi: `NoPlayerGun_OutRangesTheAaaItCannotBeAnsweredBy` (boşluğun kendisi bir
 değişmez olarak) ve `AaaDetectionChange_LeftTheOtherArchetypesUntouched` (jet/SİHA bandı tam 50 m'de
 kalıyor + AAA sahayı kaplamıyor).
+
+---
+
+### Tur — oyunun sesi (tamamı kodla üretilen)
+
+**Kısıt.** Depoda **hiç ses varlığı yok ve içe aktarılamıyor**. Dolayısıyla her ses çalışma zamanında
+`AudioClip.Create` ile bir `float[]` örnek tamponu doldurularak **sayıdan üretiliyor**. Mimari kural
+gereği sentez matematiği `Sim.Core`'da (`AudioSynth`, EditMode testli), `AudioClip`/`AudioSource`
+tarafı `Sim.Runtime`'da ince bir katman.
+
+**Core (testli).**
+- `AudioSynth`: toplamalı üreticiler (sinüs, tek harmonikli ton, **analitik fazlı** doğrusal süpürme,
+  deterministik xorshift gürültüsü), tek kutuplu alçak/yüksek geçiren filtre, tremolo, normalize
+  zamanlı ADSR, vurmalı üstel zarf, tepe/ölçek/normalize/kırp. Testler DSP'nin *gerçekten* doğru
+  olduğunu doğruluyor: 100 Hz sinüs saniyede 200 işaret değiştiriyor, 100→300 Hz süpürme **ortalama
+  frekansı** kadar salınıyor (faz analitik integre edilmezse tutmaz), zarf 0'da başlayıp 1'e çıkıp
+  0'da bitiyor ve hiçbir yerde [0,1] dışına çıkmıyor, filtreler doğru tarafı kesiyor, aynı tohum
+  aynı gürültüyü veriyor, bozuk istek (0 uzunluk / 0 örnekleme hızı / null tampon) **boş dönüyor,
+  fırlatmıyor**.
+- `SoundSettings`: ana ses seviyesi + sessize alma. Sessize alma altındaki seviyeyi hatırlıyor,
+  `CycleVolume` tek tuşluk merdiveni yürütüyor, `Restore` bozuk değerde varsayılana düşüyor.
+
+**Runtime.** `AudioLibrary` (önbellekli klip fabrikası, `MaterialLibrary`/`VfxLibrary` kalıbı),
+`AudioDirector` (dinleyici garantisi + havuzlanmış kaynaklar + ana ses tuşu), `AudioSave`
+(PlayerPrefs), `EngineAudio`, `MissileWarningAudio` ve mevcut yollara eklenen çağrılar.
+
+**Sesler ve nasıl üretildikleri.**
+
+| Ses | Tarif | Nerede |
+|---|---|---|
+| Patlama | 650 Hz'den alçak geçirilmiş gürültü + 140→24 Hz düşen süpürme, vurmalı zarf | `ExplosionEffect.Spawn` (uzamsal; boyutla yükseklik/perde/menzil) |
+| Top | 850 Hz'den yüksek geçirilmiş gürültü (çatlama) + 420→70 Hz gövde, çok hızlı sönüm | `GunTurret.MuzzleFlash` — her iki atış yolu buradan geçer, mermi başına, ±%9 perde |
+| Füze atışı | 2.4 kHz'den alçak geçirilmiş gürültü + 60→280 Hz **yükselen** süpürme, ADSR | `SihaController.LaunchMunition` (0.55) ve `AirDefenseSite.LaunchMunition` (0.7, perde 0.85 — düşman atışı daha pes) |
+| Füze uyarısı | 760 Hz harmonik ton + 1520 Hz, kısa ADSR bip | `MissileWarningAudio`, 0.6 sn aralık |
+| Kaçış uyarısı | 1180 + 2360 Hz, vurmalı ve daha sert | Aynı bileşen, kaçış penceresinde 0.2 sn aralık |
+| UI tık | 1400 + 2100 Hz, çok kısa vurmalı, kasıtlı olarak kısık | Sayfa değişimi, uçak kartı, ←/→ |
+| UI onay | 660→990 Hz yükselen süpürme + 1320 Hz | Yükseltme alındı, seviye başlatıldı |
+| UI ret | 150 Hz harmonik ton + 18 Hz tremolo (vızıltı) | Kredi yetmiyor / azami seviye / kilitli seviye / kampanya sıfırlama |
+| Motor (pervane) | 60/120/180/240 Hz yığın + 20 Hz kanat çırpma tremolosu | `EngineAudio`, keşif İHA ve SİHA |
+| Motor (türbin) | 110/220/440 Hz gürleme + 3300/4400 Hz kompresör ıslığı | `EngineAudio`, savaş uçağı |
+
+**Dikişsiz ilmek nasıl garantilendi.** Motor ilmekleri 0.5 sn ve **yalnız 2 Hz'in katı** kısmi
+frekanslardan oluşuyor (60/120/180/240/1200 ve 110/220/440/3300/4400), tremolo da tepe noktasında
+başlıyor. Böylece tampon tam sayıda çevrimle bitiyor ve ilmek noktasında tık olmuyor — bu yüzden
+motor seslerinde gürültü ve zarf **yok**.
+
+**Uzamsallık.** Patlama, top, füze atışı ve başkasının motoru **3D** (logaritmik rolloff, min 4–8 m,
+maks 90–200 m; arena köşe-köşe 113 m). **2D kalanlar:** arayüz sesleri, füze uyarı tonu ve oyuncunun
+**uçtuğu** uçağın motoru (kokpittesiniz; kamera dönünce solmamalı) — `EngineAudio` bunu
+`ManualControl` bayrağına bakarak kendisi değiştiriyor.
+
+**Ana ses / sessize alma: N tuşu.** `Assets/Scripts/Runtime/` içindeki **her** `KeyCode` yeniden
+tarandı; kullanımdakiler: W/A/S/D, Q/E/R/P/M/G/H/C/V/F/X/K, Tab, Space, LeftShift, LeftControl,
+LeftAlt/RightAlt, ok tuşları, +/− (üst sıra ve keypad). Ses için akla gelen bütün mnemonik harfler
+(**S**es, **K**ıs, **M**ute, **V**olume, **C**) doluydu; **N boş**. Tek tuş bütün merdiveni
+yürütüyor: **%100 → %70 → %40 → KAPALI → %100** (susmak en fazla üç basış). Her basış küçük bir tık
+ile onaylanıyor, HUD kontrol şeridinde `N: SES %70` / `N: SES KAPALI` yazıyor. Ayar `PlayerPrefs`'te
+**kampanya kaydından ayrı** iki anahtarda saklanıyor: kampanya blob'unun sürüm çakışması "sıfırdan
+başla" demektir ve bir ses ayarı kimsenin kampanyasına mal olmamalı.
+
+**Bütçe.** Klipler ilk kullanımda bir kez üretilip oturum boyunca saklanıyor (atış başına asla).
+Tek seferlik sesler `AudioDirector`'ın **12 uzamsal + 1 iki boyutlu** kaynaklık havuzundan geçiyor;
+havuz doluysa en eski ses çalınıyor, havuz **büyümüyor** — `VfxLibrary`'nin efekt bütçesiyle aynı
+mantık. Sürekli sesler (motor, uyarı tonu) kendi tek kaynağını `Start`'ta kurup ömür boyu yeniden
+kullanıyor. Sessizken (`IsSilent`) çalma çağrıları hemen dönüyor, hiçbir şey konumlandırılmıyor.
+
+**Dayanıklılık.** Klip üretilemezse `null` dönüyor ve her çağrı sessizce no-op oluyor; `AudioDirector`
+yoksa (elle kurulmuş sahne) çağrılar yine no-op; `AudioListener` yoksa `AudioDirector` onu ana
+kameraya kendisi ekliyor — bu olmadan oyun, hiçbir ses ayarının açıklayamayacağı biçimde tamamen
+sessiz kalırdı.
+
+**Yapılmayanlar (bilinçli).** Müzik yok; çarpma/isabet sesi ayrı değil (patlama yolunu kullanıyor);
+düşman avcılarının motor sesi yok (uçak başına bir kaynak, kalabalık dalgada bütçeyi bozar);
+karıştırıcı/flare/art yakıcı için ayrı ses yok; ses seviyesi ekranda kaydırıcı değil, tek tuşluk
+merdiven.
