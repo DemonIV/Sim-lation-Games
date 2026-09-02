@@ -41,6 +41,12 @@ Dağılımdaki binalar tek kutu yerine **üç çok katlı arketip** (depo / blok
 **üç tür** (kozalaklı / geniş yapraklı / çalı) oldu; yaprak ve duvar renkleri kuantalanmış palete
 alındı. `docs/SCENE.md` bulgusu **B-19** kapandı, **B-16**'nın palet yarısı yapıldı. Hiçbir oyun
 değeri değişmedi.
+En son tur **düşman tespit menzilleri saha ölçeğine çekildi** (`ThreatEnvelope`, Core, testli) ve
+**karıştırıcı gerçek, satın alınabilir bir sistem** oldu: hangara sekizinci hat olarak *Elektronik
+Harp* geldi, seviye 0 = karıştırıcı yok, üstünde `SimulationBootstrap` oyuncunun uçağına `Jammer`
+takıyor ve **K** tek bir 6 sn'lik yayın atımı başlatıyor (14 sn soğuma, yayın sürerken yakıt ×1.5).
+`docs/SCENE.md`'deki "hiçbir şey `Jammer` takmıyor" notu kapandı. Ayrıntı ve menzil tabloları
+`## 9. Değişiklik günlüğü`'nün son iki maddesinde.
 En son tur bir **oynanış hatası** düzeltildi (kullanıcı: "manevra hareketi ile kaçamıyorum
 roketlerden"). Kök neden X tuşunun uçuş modeline ulaşmaması **değil**, füzenin **tanımı gereği
 yenilemez** olmasıydı: PN komutu hiç kırpılmıyordu, arayıcı başlık güdümü kapıya almıyordu ve güdüm
@@ -106,7 +112,8 @@ modunda **İMZA** paneli, seçim kartlarında **GİZLİ** çubuğu var.
 |---|---|---|
 | 1 | **B-10…B-18** | `docs/SCENE.md`'deki kalan **düşük** öncelikli bulgular (ölü `ApplyColor`, üs konumu ile `BasePosition` uyumsuzluğu, ölü alanlar, waypoint GameObject'leri, sis/dünya sınırı, skybox materyali, HUD string'leri). **B-19 kapandı**; **B-16** kısmen kapandı — palet yapıldı, `MaterialLibrary.Create` içinde `enableInstancing` hâlâ açık iş. |
 | 2 | — | **Bilinen küçük hata:** görev kazanıldıktan sonra `MissionState.ElapsedTime` saymaya devam ediyor (director'ın örneği bilerek hiç bitmiyor); debrief saati director tarafında durdurulmalı. |
-| 3 | — | **Henüz karar verilmedi:** gerçek 3D modeller (render hattı kararı + çalışan bir glTF içe aktarıcı gerekir), ses, zorluk seviyeleri. |
+| 3 | **Denge (bayraklandı, ayarlanmadı)** | `ThreatEnvelope` turundan sonra **seviye 2 keşif İHA ile bedava**: tek AAA'nın İHA'ya karşı etkin atış mesafesi 42.4 m, İHA topu 45 m. Kaldıraç: AAA atış menzili 50 → 55 m **veya** seviye 2'ye ikinci AAA. Detay `## 9`'un ilgili maddesinde. |
+| 4 | — | **Henüz karar verilmedi:** gerçek 3D modeller (render hattı kararı + çalışan bir glTF içe aktarıcı gerekir), ses, zorluk seviyeleri. |
 
 > **B-01…B-09 kapandı.** Yüksek/orta öncelikli bulguların tamamı çözüldü; ayrıntı için
 > `docs/SCENE.md` → `## 5. Bulgular` (✅ işaretli satırlar).
@@ -186,7 +193,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `RadarScope` | Dünya konumunu burun-yukarı radar skopu koordinatına (−1..1, +Y burun, +X sağ) yansıtır; irtifayı yok sayar (PPI), menzil dışını reddeder. |
 | `GunPipper` | Namlu ekseninde belirli bir menzilde merminin vardığı dünya noktası (uçuş süresi = menzil/ağız hızı, düşüş = ½·g·t²); ağız hızı ≤ 0 veya menzil ≤ 0 ise hitscan gibi doğrudan namlu ekseni. |
 | `AircraftKind` | Uçulabilir arketipler: Savaş uçağı (`FighterJet`) / SİHA (`Siha`) / Keşif İHA (`Iha`). |
-| `AircraftProfile` | Bir arketipin değiştirilemez performans profili: hız/dönüş/pilot hız tavanı, seyir irtifası, yakıt, top (5 değer), füze (adet + menzil), tespit ve radar menzili, **radar imzası (`RadarSignature`, m²)**, can + seçim ekranı için **beş** 0–1 gösterge puanı (beşincisi `StealthRating`). Her alanın Runtime'da gerçek bir tüketicisi vardır; imzayı `SimulationBootstrap` `RcsComponent`'e yazar, düşman sensörleri oradan okur. |
+| `AircraftProfile` | Bir arketipin değiştirilemez performans profili: hız/dönüş/pilot hız tavanı, seyir irtifası, yakıt, top (5 değer), füze (adet + menzil), tespit ve radar menzili, **radar imzası (`RadarSignature`, m²)**, **karıştırıcı gücü (`JammerStrength`, kataloğun üçünde de 0)**, can + seçim ekranı için **beş** 0–1 gösterge puanı (beşincisi `StealthRating`). Her alanın Runtime'da gerçek bir tüketicisi vardır; imzayı `SimulationBootstrap` `RcsComponent`'e yazar, düşman sensörleri oradan okur. |
 | `AircraftCatalog` | Üç profilin kataloğu: `All`, `Default` (SİHA temel değerleri), `TryGet`/`GetOrDefault` (bilinmeyen id'de hata değil varsayılan) ve klavyeyle sağa/sola dönen `Cycle`. |
 | `MissileAgility` | Bir füzenin **yapısal çeviklik sınırı**: `maxTurnRate = maxG · 9.81 / hız` (hızlı füze daha az çevik), dönüş yarıçapı ve komut edilen yönü bu hıza göre bir adımda ulaşılabilir yöne kırpan saf `ClampTurn`. Sıfır/negatif girdilerde dönüş yetkisi yok — asla sıfıra bölme. |
 | `CampaignLevel` | Bir kampanya seviyesinin tanımı: 1 tabanlı index, Türkçe ad/brifing, hangi `ScenarioKind`'ı kaç dalga ve dalga rampasının kaçıncı adımından (`StartWaveOffset`) başlatarak uçtuğu, zorluk çarpanı ve ödül parametreleri. `Composition(w)` doğrudan `ScenarioLibrary.Composition`'a iner — paralel senaryo sistemi yok. |
@@ -194,9 +201,11 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `CampaignProgress` | Kilit/tamamlanma/en iyi derece. Seviye 1 hep açık, N biterse N+1 açılır, tamamlanan tekrar oynanabilir, derece yalnız yükselir, geçersiz index reddedilir. `Restore` kilitleri kayıttan güvenmez, tamamlanmalardan yeniden türetir. |
 | `CampaignReward` | Görev sonu parası: `(taban·yıldızÇarpanı + imha·killÖdülü − kayıp·ceza)·zorluk`, negatife düşmez. `IsFullRate(won, alreadyCompleted)` — tam ödeme yalnız ilk BAŞARILI geçişte; tekrar oynayış ve başarısız sorti `ReplayFactor` (%25) ile ödenir (para musluğu engeli). |
 | `Wallet` | Kredi kesesi: `Earn` (pozitif olmayanı yok sayar), `TrySpend` (negatif/yetersizde `false` döner ve bakiyeyi HİÇ değiştirmez), `CanAfford`, `LifetimeEarned`. |
-| `UpgradeCatalog` | Yedi yükseltme hattı (Motor/hız, Namlu Gücü/hasar, Füze Yuvası/yeni silah, Kanat-Çeviklik, Gövde Zırhı, Yakıt Tankı, Radar). Maliyet tablo değil FORMÜL: `round(BaseCost·1.6^(L−1)/25)·25`; etki de formül: `1 + L·PerLevelGain`. Her hat için Türkçe ad/açıklama ve `EffectSummary`. |
+| `UpgradeCatalog` | **Sekiz** yükseltme hattı (Motor/hız, Namlu Gücü/hasar, Füze Yuvası/yeni silah, Kanat-Çeviklik, Gövde Zırhı, Yakıt Tankı, Radar, **Elektronik Harp**). Maliyet tablo değil FORMÜL: `round(BaseCost·1.6^(L−1)/25)·25`; etki de formül: `1 + L·PerLevelGain`. Her hat için Türkçe ad/açıklama ve `EffectSummary`. Elektronik Harp hattı ölçekleyen değil **takan** tek hat: `JammerStrengthAtLevel` (0/1.5/3.0/4.5) + `JammerDetectionFactor` + sabit `JammerBurstSeconds`/`JammerCooldownSeconds`. **Listenin sonunda** durur, böylece kayıtlı seviye dizisinin indeksleri bozulmaz. |
 | `UpgradeState` | Hangi hat kaçıncı seviyede. `TryPurchase` önce tavanı ve bakiyeyi kontrol eder, sonra ATOMİK olarak harcayıp seviye atlatır — reddedilen alışveriş ne cüzdanı ne durumu kıpırdatır. `Restore`/`Snapshot` kayıt katmanı için, bozuk diziye karşı kırpmalı. |
 | `AircraftUpgrades` | `Apply(baseProfile, upgradeState) → AircraftProfile`: yükseltmeleri taban profilin üstüne ÇARPANLA uygular (taban profiller otoriter kalır), sıfır yükseltmede taban profile birebir eşit döner, tabanı asla mutasyona uğratmaz. Tek sayısal istisna füze yuvası (adet); topu olup füzesi olmayan gövdede yeni yuvanın menzili tespit menzilinden türer. `AffectedFields` hangi hattın hangi alanı oynattığını söyler. |
+| `ThreatEnvelope` | Sahanın **yatay zarfı** (`FlightEnvelope`'un yatay muadili): saha yarı-genişliği 40 m, spawn keep-out 32 m, köşe-köşe **113 m**, tipik düşman mevzisinden en uzak noktaya **96.6 m** (`MaxEngagementDistance`). Her düşman arketipinin tespit ve atış menzili tek yerde ve arenaya bağlı olarak tanımlı; `DetectionRangeAgainst`/`FireDistanceAgainst`/`CoversWholeField` denge tablosunu tek çağrıyla ifade eder. Değişmezler (tespit > atış; taban SİHA'ya karşı tespit sahayı KAPLAMAMALI; keşif İHA atış menzilinin dışından görülmemeli) `ThreatEnvelopeTests` tarafından doğrulanır. |
+| `JammerSystem` | Karıştırıcının **görev döngüsü**: yayın süresi, soğuma ve şu an yayılan güç (`Ready`/`Active`/`Cooling`). Karıştırmanın fiziği tekrar edilmez — `ElectronicWarfare.EffectiveRange`'e delege eder; bu sınıf yalnız "açık mı?" sorusunu sahiplenir. Yayın iptal edilemez, tuşa basmak süreyi uzatmaz, tek uzun kare soğumayı atlatamaz. `BurstSeconds <= 0` = sürekli yayın (elle kurulmuş sahnelerdeki eski davranış). |
 
 ### Sim.Runtime (ince MonoBehaviour'lar)
 | Bileşen | Görevi |
@@ -206,7 +215,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `AirDefenseSite` | Düşman hava savunması: drone'ları tespit edip güdümlü mühimmat fırlatır, kendisi de imha edilebilir (SEAD). `Configure(...)` ile uzun menzilli SAM veya kısa menzilli hızlı-ateşli AAA varyantı kurulur. Tespiti **imza duyarlı** (ayarlı menzil = 1 m² hedefe karşı referans); temas kaybı kilidi sıfırlar ve atışı keser. `IsLocked` HUD için salt okunur. |
 | `RadarSensor` | RadarSystem + RCS + EW + TargetTracker ile gerçekçi tespit/izleme. |
 | `RcsComponent` | Bir birimin radar imzası. `NominalRcs` (açıdan bağımsız) düşman sensörlerinin okuduğu değerdir; `RcsFrom(radarPos)` dost `RadarSensor` için açıya bağlı imzayı verir. `Configure(nominalRcs)` `RadarCrossSection`'ın burun/yan oranlarını koruyarak eğriyi ölçekler. |
-| `Jammer` | Gemi üstü gürültü karıştırıcı (EW menzil düşürme). Yol uçtan uca çalışır (hem `RadarSensor` hem düşman tespit anlık görüntüsü okur); sahnede hiçbir birime takılı **değil**, o yüzden şimdilik atıl. |
+| `Jammer` | Gemi üstü gürültü karıştırıcı. `Sim.Core.JammerSystem` üzerine ince sarmalayıcı (tembel `EnsureSystem` + `Configure`, `CountermeasureDispenser` kalıbı). `Strength` **yalnız yayın sürerken** sıfırdan farklıdır, yani boşta duran karıştırıcı hiç yokmuş gibi davranır. Varsayılan (`burstSeconds <= 0`) sürekli yayın = eski davranış. **Artık gerçekten takılıyor:** hangardaki Elektronik Harp hattı 0'ın üstündeyse `SimulationBootstrap` oyuncunun uçağına ekliyor. |
 | `GuidedMunition` | PN güdümü + arayıcı başlık + balistik ile güdümlü mühimmat, yakınlık tapası. **Sınırlı takipçi:** güdüm komutu `MissileAgility` ile `maxLoadG`'ye kırpılır, arayıcı başlık güdümü gerçekten kapıya alır (koniden çıkan hedefte `lostLockGraceSeconds` sonra balistik), hedef hızı konum farkından kestirilip **gerçek** PN'e beslenir; `IsGuiding` kancası. |
 | `TargetRegistry` / `Targetable` | Canlı hedeflerin kaydı; controller'lar her kare sorgular. |
 | `SimulationBootstrap` | Play'de sahneyi primitive'lerden kurar (kamera, ışık, zemin, drone'lar, ScenarioController). Üretilen her şey tek bir `Simulation` kökünün altındadır; `Rebuild()` bu kökü yıkıp yeniden kurar (yerinde yeniden başlatma). |
@@ -236,7 +245,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `TurretVisual` | SAM/AAA'da "Turret" hedefi takip eder, "Radar" tabağı sürekli döner (yalnız çocuk transform'lar). |
 
 ### Testler (Sim.Tests.EditMode)
-Her Core sistemi için bir test dosyası. Toplam ~18 test dosyası. Çalıştırma:
+Her Core sistemi için bir test dosyası. Toplam **44** test dosyası. Çalıştırma:
 `Window > General > Test Runner > EditMode > Run All`.
 
 ---
@@ -344,6 +353,10 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
 | `7cfcc3d` | `SignatureDetection` (tek kopya tespit yasası) + `AircraftProfile.RadarSignature`/`StealthRating` + imza taşıyan `DetectableTarget`; hepsi oran tabanlı EditMode testli. |
 | `3705689` | Düşman sensörleri dost uçağın imzasını okuyor: `RcsComponent.Configure/NominalRcs`, imza+karıştırma taşıyan `TargetRegistry.GetSnapshot`, oyuncunun ve dost YZ uçaklarının imzası. |
 | `315fa0c` | HUD İMZA paneli (canlı GİZLİ göstergesi + RADAR TEMASI/KİLİDİ) ve uçak kartlarında GİZLİ çubuğu; `AirDefenseSite.IsLocked`. |
+| `2f4a97f` | DEVLOG + SCENE: imza duyarlı tespit turu. |
+| `b5912d3` | `ThreatEnvelope` (Core, testli): düşman tespit/atış menzilleri saha ölçeğine çekildi — SAM 160→85 / 120→70, AAA 80→60 / 60→50, düşman avcı 130→65 (top 55 sabit). |
+| `32aae95` | Hangara **Elektronik Harp** hattı (3 seviye, 350/550/900 kredi, güç 1.5/3.0/4.5) + `AircraftProfile.JammerStrength` + `JammerSystem` görev döngüsü; 21 yeni EditMode testi. |
+| `bddf4f9` | Karıştırıcı sahneye takıldı: `SimulationBootstrap` seviye > 0 iken `Jammer` ekliyor, **K** atım tuşu, yayın sürerken yakıt ×1.5, HUD İMZA panelinde karıştırıcı satırı. |
 
 ---
 
@@ -1051,3 +1064,125 @@ kart satırı bir çubuk boyu büyüdü (120 → 134 px).
 `docs/SCENE.md`: "sahnede hiçbir nesneye `Jammer` eklenmiyor" notu (B-02'nin içinde) hâlâ geçerli,
 ama artık **bedelsiz ve işlevsel** — dost uçaklar `RcsComponent` taşıdığı için nesne envanteri
 güncellendi.
+
+---
+
+### Tur — düşman tespit menzilleri saha ölçeğine çekildi (`ThreatEnvelope`)
+
+**Sorun (önceki turun kendi notu).** İmza duyarlı tespit çalışıyordu ama hissedilmiyordu: düşman
+tespit menzilleri sahayı zaten baştan kaplıyordu, yani "113 m'den görülüyorum" = "her zaman
+görülüyorum" demekti ve ±√2'lik imza farkının gösterecek yeri yoktu.
+
+**Arenanın gerçek boyu (kaynaktan doğrulandı, hiçbir sayıya güvenilmedi).**
+`ScenarioController.fieldHalfExtent` = **40 m** (80×80 m kutu), `spawnMinRadius` = **32 m**, yani
+düşmanlar 32 m ≤ r ≤ 56.6 m halkasında; tipik mevzi merkezden ~40 m. Köşeden köşeye
+**2·40·√2 ≈ 113 m**; tipik bir mevziden oyuncunun uçabileceği en uzak noktaya
+**40 + 40·√2 ≈ 96.6 m** (`ThreatEnvelope.MaxEngagementDistance`). Karşılaştırma: eski SAM tespiti
+160 m = sahanın **1.4 katı**.
+
+**Yeni `ThreatEnvelope` (Core, testli).** Sayılar tek yerde ve arenaya bağlı; `ThreatEnvelopeTests`
+elle aritmetik yapmak yerine ilişkileri doğruluyor: tespit > atış (taban SİHA), taban tespit sahayı
+kaplamamalı, keşif İHA atış menzilinin dışından görülmemeli.
+
+| Sensör | Tespit (eski → yeni) | Atış (eski → yeni) | Gerekçe |
+|---|---|---|---|
+| SAM bataryası | 160 → **85 m** | 120 → **70 m** | 85 m kabaca mevzinin kendi yarısını kaplar; 70 m hâlâ her oyuncu topundan uzun (İHA 45 / SİHA 60 / jet 70), yani SAM uzun menzilli tehdit kimliğini koruyor. |
+| AAA | 80 → **60 m** | 60 → **50 m** | Yerel sensör: yalnız kendi mahallesine gireni fark eder. |
+| Düşman avcı | 130 → **65 m** | 55 (değişmedi) | 130 m tüm gökyüzüydü; her avcı doğar doğmaz oyuncuya dönüyordu ve loiter yörüngesi hiç uçulmuyordu. |
+
+**Atış menzilleri neden de indi?** Değişmez kural "tespit > atış" — göremediğini vuramazsın
+(`AirDefenseSite`'taki erken dönüş). Eski SAM'de 160 > 120 sağlanıyordu ama 120 m zaten saha
+çapından uzundu: batarya arenanın her noktasından her noktasına ateş edebiliyordu, yani "standoff"
+diye bir konum yoktu. Tespit 85'e inince atışın 120'de kalması onu ölü harfe çevirirdi (etkin atış
+mesafesi min(120, 85) = 85 olurdu). 70 m hem tespitin altında kalıyor hem de standoff'u gerçek bir
+konum yapıyor. Aynı gerekçeyle AAA 60 → 50. Düşman avcının 55 m'lik topu zaten saha ölçeğindeydi;
+yeni tespit menzili **onun etrafında** seçildi, o yüzden değişmedi.
+
+**Sonuçta ortaya çıkan zarf** (`tespit = menzil·RCS^0.25`, `etkin atış = min(atış, tespit)`):
+
+| Sensör | Jet (4 m²) tespit / atış | SİHA (1 m²) tespit / atış | Keşif İHA (0.25 m²) tespit / atış |
+|---|---|---|---|
+| SAM (85 / 70) | **120 m** / 70 m | **85 m** / 70 m | **60 m** / 60 m |
+| AAA (60 / 50) | **85 m** / 50 m | **60 m** / 50 m | **42 m** / 42 m |
+| Düşman avcı (65 / 55) | **92 m** / 55 m | **65 m** / 55 m | **46 m** / 46 m |
+
+Arenaya oranla (96.6 m): jet SAM'e karşı %124 (hâlâ her yerden görülür — **göze batan ama
+yaşayabilir**, çünkü atış zarfı 70 m'de sabit), SİHA %88, keşif İHA %62 → AAA'ya karşı %44.
+Keşif İHA **gizli ama görünmez değil**: SAM onu hâlâ 60 m'den yakalıyor, ama üç sensörün de
+**etkin atış mesafesi** tespitine kırpılıyor — yani küçük imza artık doğrudan "daha yakından
+vurulurum"a çevriliyor.
+
+**Kampanya kontrolü (aritmetik, hiçbir şey sessizce ayarlanmadı).** `CampaignLevel.cs` menzil
+içermiyor — seviyeler yalnız senaryo/dalga/ofset seçiyor, ekonomi değerleri de düşman istatistiği
+değil. Yani doğrudan bir tutarsızlık yok. Bayraklanan tek gerçek sonuç:
+
+> **Seviye 2 ("Saha Taraması"), keşif İHA ile artık bedava.** Kompozisyonu Recon dalga 0 + 1 =
+> 5 sabit hedef + **1 AAA**. AAA'nın keşif İHA'ya karşı etkin atış mesafesi
+> `min(50, 60·0.25^0.25)` = **42.4 m**, keşif İHA'nın topu ise **45 m** → oyuncu, AAA'nın cevap
+> veremediği 2.6 m'lik bir bantta duruyor. SİHA'da fark daha ılımlı (top 60 m, AAA cevabı 50 m),
+> jette yok (top 70, AAA 50, ama jet 85 m'den görülüyor). Bu bir ayar kararıdır; görev kapsamı
+> "kampanyayı yeniden dengele" olmadığı için **hiçbir kampanya değeri değiştirilmedi**, kayda
+> geçiriliyor: doğru kaldıraç ya AAA atış menzilini 50 → 55 m'ye çekmek ya da seviye 2'ye ikinci
+> bir AAA koymaktır.
+
+---
+
+### Tur — karıştırıcı gerçek, kazanılabilir bir sistem oldu (Elektronik Harp)
+
+**Sorun.** `Jammer`/`ElectronicWarfare` uçtan uca çalışıyordu ama **hiçbir sahne nesnesi `Jammer`
+takmıyordu** (`docs/SCENE.md` → B-02'nin içindeki not). Tamamen ölü bir katmandı.
+
+**(1) Hangarda sekizinci hat: "Elektronik Harp".** Mevcut yedi hattın kalıbına birebir uyar
+(Türkçe ad/açıklama, seviye sayısı, aynı `BaseCost · 1.6^(L−1)` eğrisi, seviye başına etki).
+`UpgradeTrack` listesinin **sonuna** eklendi: kayıtlı seviye dizisinin indeksleri korunuyor ve
+hattın var olmadığı zamandan kalan (bir kısa) dizi `Restore` tarafından bu hat için **0** okunuyor.
+
+| Seviye | Bedel | Karıştırma gücü | Tespit menzili çarpanı `1/(1+güç)^0.25` |
+|---|---|---|---|
+| 0 | — | **0 — karıştırıcı yok** | ×1.00 (taze kayıt hiç değişmez) |
+| 1 | 350 | 1.5 | **×0.795** (−%20) |
+| 2 | 550 | 3.0 | **×0.707** (−%29) |
+| 3 | 900 | 4.5 | **×0.653** (−%35) |
+
+Seviye 2 tam olarak **√2**, yani savaş uçağının 4 m²'lik imza cezasını bir yayın boyunca **tamamen
+siler**: yayın yapan bir jet, temiz bir SİHA kadar geç fark edilir (SAM'e karşı 120 → 85 m).
+Taban SİHA'da seviye 3'le SAM tespiti 85 → **55.5 m**, AAA 60 → **39.2 m**, düşman avcı 65 →
+**42.4 m** düşer.
+
+**(2) `JammerStrength` ölçeklenen değil YAZILAN tek alan.** Kataloğun üç arketipi de 0 ile doğar;
+değeri yalnız `AircraftUpgrades.Apply` hattan yazar — garaj gövdeyi küçültmez ama **donanım takar**.
+`Apply` durumun saf fonksiyonu olduğu için `SimulationBootstrap.Rebuild()` (tüm kökü yok edip
+profili `CampaignSession.PlayerProfile`'dan yeniden türetir) ne çift uygulayabilir ne de bayat bir
+karıştırıcı bırakabilir.
+
+**(3) Sürekli mi, tetiklemeli mi? → Tetiklemeli, ve bu bir karar.** Sürekli açık bir karıştırıcı
+kalıcı bir istatistiktir (imza hattı gibi), tetiklemeli olan ise **ne zaman** sorusudur — pilotun
+mevcut X kaçış manevrasıyla aynı dilde. Görev döngüsü Core'da: `JammerSystem`, `EvasiveManeuver`'ın
+yanında, 12 + 9 EditMode testiyle. **6 sn yayın / 14 sn soğuma = %30 duty**; yayın iptal edilemez,
+tuşa basmak süreyi uzatmaz, tek uzun kare soğumayı atlatamaz.
+
+**Tuş: K.** `Assets/Scripts/Runtime/` içindeki **her** `KeyCode` tarandı — kullanımda olanlar
+W/A/S/D, Q/E/R/P/M/G/H/C/V/F/X, Tab, Space, LeftShift, LeftControl, RightAlt, ok tuşları, Keypad
++/−. **K boş** ve "karıştırıcı"nın baş harfi. Bağlama yeri `PlayerDroneController.HandleAbilities`,
+yani Q/E/X'in tam yanı: `GameControls` global sim tuşlarını (yeniden başlat / duraklat / hız /
+panel) taşır ve pilot edilen uçağı hiç tanımaz; yetenek tuşlarının bağlama katmanı bu metottur.
+
+**(4) Bedeli var: yayın sürerken yakıt ×1.5.** Mevcut sistemlerin üstüne temiz oturan tek gerçek
+dezavantaj bu: art yakıcı zaten aynı `FuelTank` yolundan ×3 yakıyor, karıştırıcı de aynı yoldan
+×1.5 yakıyor (`JammerFuelMultiplier`). "Karıştırıcı kendisi bir fenerdir" fikrinin diğer okuması
+(seni zaten yakalamış bir düşman izi daha uzun tutar) bunun için **yeni bir hafıza sistemi**
+gerektirirdi; kapsam dışı bırakıldı. Boşta duran ya da hiç takılı olmayan karıştırıcının bedeli
+sıfırdır.
+
+**(5) HUD.** İMZA panelinde dördüncü satır (yalnız mevcut `HudTheme` renkleri):
+`KARIŞTIRICI YOK` (soluk) / `KARIŞTIRICI HAZIR (K)` (gri) / `KARIŞTIRICI AKTİF ×0.71 4.2 sn`
+(yeşil) / `KARIŞTIRICI ŞARJ %63` (amber). Panelin üstündeki `GİZLİ` çubuğu ve `×` okuması zaten
+canlı karıştırmayı içeriyordu (`Jammer.Strength` yalnız yayın sürerken sıfırdan farklı), bu satır
+o sayının **nereden geldiğini** söylüyor. Alt kontrol şeridine `K: KARIŞTIRICI` eklendi.
+
+**(6) Yaşam döngüsü.** `IhaController` karıştırıcıyı `_cm` (flare kutusu) ile birebir aynı şekilde
+taşıyor: `Start`'ta `GetComponent`, `Update`'te `Tick` (pilot uçarken de akar), `Resupply`'da
+`Rearm`. Elle kurulmuş bir sahneye bırakılan `Jammer` varsayılan olarak **sürekli** yayın yapar
+(`burstSeconds <= 0`), yani hiç tick edilmesine gerek yoktur ve eskisi gibi davranır.
+
+`docs/SCENE.md`: "`Jammer` hiçbir birime takılı değil" notu **kapandı**.
