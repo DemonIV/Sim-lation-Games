@@ -114,15 +114,29 @@ namespace Sim.Runtime
             rootGo.transform.position = Vector3.zero;
             Root = rootGo.transform;
 
-            EnsureCameraAndLight();
-            CreateGround();
+            // WHICH WORLD is being built. Free flight is a different world, not a flag on this one:
+            // a 1200 m terrain with its own relief and landmarks, no hostiles, no wingmen and no
+            // fuel clock (see Sim.Core.FreeFlightRules). Read once here so every branch below asks
+            // the same question.
+            SimMode mode = CampaignSession.SelectedMode;
+            bool sandbox = FreeFlightRules.IsSandbox(mode);
+
+            EnsureCameraAndLight(sandbox);
+            CreateGround(sandbox);
 
             // Two recon İHA drones (blue) with rectangular patrol routes. Their spawn altitude IS
             // their cruise altitude (IhaController holds BasePosition.y), so it has to clear the
             // skyline: 18 / 20 m instead of the old 10 / 12 m, which sat inside the 14 m scenery
             // ceiling. See Sim.Core.FlightEnvelope for where those numbers come from.
-            SpawnIha("IHA_1", new Vector3(-20f, 18f, -20f), RectangleRoute(new Vector3(-20f, 18f, -20f), 30f, 25f), Color.blue);
-            SpawnIha("IHA_2", new Vector3(20f, 20f, 20f), RectangleRoute(new Vector3(20f, 20f, 20f), 25f, 30f), new Color(0.2f, 0.5f, 1f));
+            //
+            // The sandbox flies solo: a wingman holding a 30 m patrol box in a 1.2 km world is
+            // scenery, and the fleet panel reads more honestly with one aircraft in it than with
+            // three that are not doing anything.
+            if (FreeFlightRules.SpawnsWingmen(mode))
+            {
+                SpawnIha("IHA_1", new Vector3(-20f, 18f, -20f), RectangleRoute(new Vector3(-20f, 18f, -20f), 30f, 25f), Color.blue);
+                SpawnIha("IHA_2", new Vector3(20f, 20f, 20f), RectangleRoute(new Vector3(20f, 20f, 20f), 25f, 30f), new Color(0.2f, 0.5f, 1f));
+            }
 
             // The PLAYER's aircraft slot, in the place the armed SİHA always held. WHICH airframe
             // stands here — and every performance number on it — comes from the archetype picked on
@@ -132,7 +146,16 @@ namespace Sim.Runtime
             // yields the same aircraft, not a doubly upgraded one. With the default SİHA profile and
             // an empty garage this spawns exactly the drone it always did. The two recon İHA above
             // are untouched AI wingmen: no profile is ever applied to them.
-            IhaController playerAircraft = SpawnPlayerAircraft(CampaignSession.PlayerProfile);
+            //
+            // In the sandbox the profile is the JET instead of the menu's pick (the mode was asked
+            // for as "a jet to fly around in"), the spawn is higher so the hill cluster reads as
+            // ground below the aircraft, and the tank never empties. CampaignSession.ActiveProfile
+            // owns the first of those; the other two are passed in here.
+            AircraftProfile playerProfile = CampaignSession.ActiveProfile;
+            Vector3 playerSpawn = sandbox ? FreeFlightWorld.SpawnPosition
+                                          : new Vector3(0f, playerProfile.CruiseAltitude, -30f);
+
+            IhaController playerAircraft = SpawnPlayerAircraft(playerProfile, playerSpawn, mode);
 
             // Wave-based scenario. The ScenarioController (created after the drones) now owns ALL enemy
             // spawning — escalating waves of three hostile archetypes (plain target / SAM / AAA) — and
@@ -169,6 +192,12 @@ namespace Sim.Runtime
             var playerPilot = director.gameObject.AddComponent<PlayerDroneController>();
             playerPilot.SetPreferredAircraft(playerAircraft);
 
+            // The sandbox starts IN the cockpit: there is no briefing to read and no AI to take the
+            // aircraft from, so making the player press C first would only be a step. The request is
+            // honoured on the pilot's next Update, i.e. after every Start in the scene has run — see
+            // PlayerDroneController.RequestImmediateControl for why it cannot happen here.
+            if (FreeFlightRules.StartsUnderPlayerControl(mode)) playerPilot.RequestImmediateControl();
+
             // Cockpit missile-warning tone, driven by the same two flags as the HUD's FÜZE! band and
             // KAÇIŞ MANEVRASI row. Added after the pilot component so its Start() finds it.
             director.gameObject.AddComponent<MissileWarningAudio>();
@@ -184,7 +213,7 @@ namespace Sim.Runtime
         /// Both live OUTSIDE the Simulation root, so a rebuild keeps them — which is also why both
         /// creations are guarded: on the second pass the existing camera/sun are simply reused.
         /// </summary>
-        private void EnsureCameraAndLight()
+        private void EnsureCameraAndLight(bool sandbox)
         {
             if (Camera.main == null)
             {
@@ -207,7 +236,20 @@ namespace Sim.Runtime
             }
 
             // Sky, fog, ambient light and sun tuning for the procedural landscape (cosmetic only).
-            EnvironmentBuilder.ApplyAtmosphere(Camera.main, sun);
+            // The sandbox gets thinner haze and a far clip past its own diagonal, because its whole
+            // proposition is seeing a landmark 400 m away and flying at it; the combat field's fog is
+            // tuned for an 80 m arena and would hide them. Both values are stated in
+            // Sim.Core.FreeFlightWorld next to the extent they are derived from.
+            if (sandbox)
+            {
+                EnvironmentBuilder.ApplyAtmosphere(Camera.main, sun,
+                                                   FreeFlightWorld.FogDensity,
+                                                   FreeFlightWorld.FarClipPlane);
+            }
+            else
+            {
+                EnvironmentBuilder.ApplyAtmosphere(Camera.main, sun);
+            }
         }
 
         /// <summary>
@@ -226,12 +268,48 @@ namespace Sim.Runtime
             return null;
         }
 
-        /// <summary>Creates the procedural landscape: terrain mesh, airbase pad and scenery props.</summary>
-        private void CreateGround()
+        /// <summary>
+        /// Creates the procedural landscape: terrain mesh, airbase pad and scenery props — the
+        /// combat field's, or the free-flight sandbox's.
+        ///
+        /// <para>
+        /// THE SANDBOX IS THE SAME BUILDER WITH DIFFERENT NUMBERS. Nothing here is a second
+        /// environment system: the terrain and the scatter are handed the sandbox's height field and
+        /// placement filter (<see cref="FreeFlightWorld"/>), its wider extents and its scaled prop
+        /// counts, plus the three built landmarks. The airbase pad is built at the origin either way,
+        /// so the sandbox still has a runway to take off over.
+        /// </para>
+        ///
+        /// <para>
+        /// SCALE AND COST. Combat: 300 × 300 m terrain on a 5 m grid (3 721 vertices) with 220 / 70 /
+        /// 18 props between 55 m and 150 m out. Sandbox: 1200 × 1200 m on a 12 m grid (10 201
+        /// vertices) with 510 / 162 / 42 props out to 560 m. That is 15.5× the ground for ~2.3× the
+        /// props, because <see cref="FreeFlightWorld.PropDensityFactor"/> thins the scatter as the
+        /// area grows instead of multiplying the count — see <c>FreeFlightWorldTests</c>.
+        /// </para>
+        /// </summary>
+        private void CreateGround(bool sandbox)
         {
-            Parent(EnvironmentBuilder.BuildTerrain());
+            if (!sandbox)
+            {
+                Parent(EnvironmentBuilder.BuildTerrain());
+                Parent(EnvironmentBuilder.BuildAirbase(Vector3.zero));
+                Parent(EnvironmentBuilder.ScatterProps(FreeFlightWorld.CombatPropHalfExtent));
+                return;
+            }
+
+            Parent(EnvironmentBuilder.BuildTerrain(FreeFlightWorld.TerrainHalfExtent,
+                                                   FreeFlightWorld.TerrainCellSize,
+                                                   FreeFlightWorld.Height));
             Parent(EnvironmentBuilder.BuildAirbase(Vector3.zero));
-            Parent(EnvironmentBuilder.ScatterProps(150f));
+            Parent(EnvironmentBuilder.BuildLandmarks());
+            Parent(EnvironmentBuilder.ScatterProps(
+                FreeFlightWorld.PropHalfExtent,
+                FreeFlightWorld.ScaleCount(EnvironmentBuilder.DefaultTreeCount),
+                FreeFlightWorld.ScaleCount(EnvironmentBuilder.DefaultRockCount),
+                FreeFlightWorld.ScaleCount(EnvironmentBuilder.DefaultBuildingCount),
+                FreeFlightWorld.Height,
+                FreeFlightWorld.IsScatterable));
         }
 
         /// <summary>Moves a generated object under the Simulation root, keeping its world pose.</summary>
@@ -307,13 +385,24 @@ namespace Sim.Runtime
         /// under the "Model" child, carry no colliders and never touch the numbers above.
         /// </para>
         /// </summary>
-        private IhaController SpawnPlayerAircraft(AircraftProfile profile)
+        /// <param name="profile">Performance profile to fly (see <see cref="CampaignSession.ActiveProfile"/>).</param>
+        /// <param name="position">
+        /// Where to put it. The campaign uses the slot the armed SİHA always held, at the profile's
+        /// own cruise altitude; the sandbox uses <see cref="FreeFlightWorld.SpawnPosition"/>, which
+        /// is higher so the landscape reads below the aircraft on the first frame.
+        /// </param>
+        /// <param name="mode">
+        /// Which mode is being built. It decides the endurance (the sandbox's tank never empties —
+        /// see <see cref="FreeFlightRules.ConsumesFuel"/> and
+        /// <see cref="IhaController.UnlimitedFuel"/>) and the size of the fallback patrol box.
+        /// </param>
+        private IhaController SpawnPlayerAircraft(AircraftProfile profile, Vector3 position,
+                                                  SimMode mode)
         {
             // Defensive: an unknown/empty stored id must never reach this method, but never fly a
             // null profile either.
             if (profile == null) profile = AircraftCatalog.Default;
 
-            Vector3 position = new Vector3(0f, profile.CruiseAltitude, -30f);
             Color color = PlayerAircraftColor(profile.Kind);
 
             var go = GameObject.CreatePrimitive(PrimitiveType.Capsule);
@@ -391,7 +480,16 @@ namespace Sim.Runtime
 
             // ApplyProfile runs BEFORE Start, so every pure-logic core is built from these values.
             ctrl.ApplyProfile(profile);
-            AssignRoute(ctrl, RectangleRoute(position, 40f, 20f));
+
+            // Endurance. Set AFTER ApplyProfile, which rebuilds the tank: the flag gates the two
+            // consumption sites rather than the tank, so the HUD's fuel gauge stays pinned full
+            // instead of going blank in the sandbox.
+            ctrl.UnlimitedFuel = !FreeFlightRules.ConsumesFuel(mode);
+
+            // Patrol box, flown only if the player ever hands this aircraft back to its AI with C.
+            // The sandbox gets a much wider one, sized to its world rather than to the arena.
+            if (FreeFlightRules.IsSandbox(mode)) AssignRoute(ctrl, RectangleRoute(position, 320f, 240f));
+            else AssignRoute(ctrl, RectangleRoute(position, 40f, 20f));
 
             // Realistic radar sensor (hostileFaction defaults to 1); the profile sizes its picture.
             go.AddComponent<RadarSensor>().ConfigureRange(profile.RadarRange);
