@@ -129,7 +129,11 @@ namespace Sim.Core
         /// <summary>Planar position of the tall lattice mast landmark.</summary>
         public static Vector2 MastCentre => new Vector2(120f, 420f);
 
-        /// <summary>Overall height of the mast above its own footing, in metres — the tallest built thing in the world.</summary>
+        /// <summary>
+        /// Height of the mast's lattice shaft above its own footing, in metres — the tallest built
+        /// thing in the world by a wide margin (the scenery props top out at 11 m). The spire and the
+        /// beacon the runtime builder puts on top add another ~7 m above this.
+        /// </summary>
         public const float MastHeight = 88f;
 
         /// <summary>Clear radius kept around the mast's footing, so the scatter never swallows it.</summary>
