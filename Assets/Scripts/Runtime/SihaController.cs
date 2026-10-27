@@ -34,6 +34,19 @@ namespace Sim.Runtime
         public override float AmmoFraction =>
             Weapon != null && Weapon.MagazineSize > 0 ? (float)Weapon.Ammo / Weapon.MagazineSize : 0f;
 
+        /// <summary>
+        /// Damage one NORMAL guided missile from this airframe delivers — the exact value handed to
+        /// <see cref="GuidedMunition.Launch(Targetable, Vector3, float)"/> below.
+        ///
+        /// <para>
+        /// Exposed so the jet's balistik füze can DERIVE its own warhead from it
+        /// (<see cref="BallisticLauncher.Damage"/> = <see cref="Sim.Core.BallisticMissile.Damage"/> =
+        /// ×2) instead of carrying a duplicate number that would silently drift out of step whenever
+        /// this one is retuned. Read-only: the ballistic launcher never writes it.
+        /// </para>
+        /// </summary>
+        public float MissileDamage => damagePerHit;
+
         protected override void Start()
         {
             base.Start();

@@ -18,7 +18,9 @@ namespace Sim.Runtime
     /// <c>A</c>/<c>D</c> yaw · <c>↑</c>/<c>↓</c> (or Left-Alt + mouse Y) pitch · <c>Space</c> guns ·
     /// <c>F</c> guided munition (SİHA only) · <c>Q</c> flares/chaff · <c>E</c> (held) afterburner ·
     /// <c>X</c> evasive break turn (an over-g burst onto the beam, on a cooldown) ·
-    /// <c>K</c> karıştırıcı (one jamming burst, only on an aircraft that bought the emitter).
+    /// <c>K</c> karıştırıcı (one jamming burst, only on an aircraft that bought the emitter) ·
+    /// <c>B</c> balistik füze (arms the jet's centreline launcher; <c>←</c>/<c>→</c> then pick the
+    /// numbered hostile and <c>F</c> releases the round — see <see cref="HandleBallisticTargeting"/>).
     ///
     /// This is a GAME / EDUCATIONAL flight feel with abstract, gamified parameters.
     /// </summary>
@@ -147,8 +149,33 @@ namespace Sim.Runtime
         /// </summary>
         public bool BreakWindowOpen => EvasiveManeuver.InBreakWindow(TimeToImpact);
 
+        /// <summary>
+        /// Key that arms and safes the balistik füze launcher (targeting mode). Exposed as a constant
+        /// so the HUD's Turkish controls strip names the real binding instead of a hard-coded letter,
+        /// the same way <see cref="AudioDirector.VolumeKey"/> is.
+        ///
+        /// <para>
+        /// <c>B</c> was picked by auditing every <see cref="KeyCode"/> in <c>Sim.Runtime</c>: the
+        /// pilot holds W/S/A/D, ↑/↓, Alt, Space, F, Q, E, X, K, Tab and C; the camera adds V and the
+        /// free-fly WASD/Q/E/Space/Ctrl/Shift; the shell adds R, P, G, M, H, N and +/−. <c>B</c> was
+        /// unbound, and it is the initial of "balistik" — which is as close to self-documenting as a
+        /// key gets.
+        /// </para>
+        /// </summary>
+        public const KeyCode BallisticArmKey = KeyCode.B;
+
         /// <summary>True when a munition is homing on the piloted drone. False when nobody is piloting.</summary>
         public bool MissileIncoming => Controlled != null && Controlled.MissileIncoming;
+
+        /// <summary>
+        /// True for a few seconds after the pilot pressed <see cref="BallisticArmKey"/> on an airframe
+        /// that carries NO launcher. Drives the HUD line that explains the balistik füze is the
+        /// fighter jet's alone, so the key is never a silent no-op. Unscaled time, so the message does
+        /// not freeze with a paused game.
+        /// </summary>
+        public bool BallisticDenied =>
+            _ballisticDeniedTime > 0f &&
+            Time.unscaledTime - _ballisticDeniedTime <= BallisticLauncher.ResultDisplaySeconds;
 
         /// <summary>Seconds until the incoming munition arrives, or PositiveInfinity when there is none.</summary>
         public float TimeToImpact => Controlled != null ? Controlled.TimeToImpact : float.PositiveInfinity;
@@ -177,6 +204,14 @@ namespace Sim.Runtime
         // Remaining seconds of the one-shot evasive maneuver (X), and of its lock-out afterwards.
         private float _evadeTimer;
         private float _evadeCooldown;
+
+        // Unscaled time the arm key was last pressed on an airframe with no launcher (see
+        // BallisticDenied). 0 = never pressed.
+        private float _ballisticDeniedTime;
+
+        // The mission briefing / hangar, resolved lazily so the targeting keys can stand down while
+        // it owns ←/→ for its aircraft selector. May be null in a hand-authored scene.
+        private ScenarioMenu _menu;
 
         private void Update()
         {
@@ -313,6 +348,11 @@ namespace Sim.Runtime
             // The pilot is the only writer of Breaking while flying manually; clear it on the way out
             // so the AI does not inherit a stale break state.
             drone.Breaking = false;
+
+            // Targeting mode is a PILOT state: safe the balistik füze launcher on the way out so the
+            // numbers do not stay on screen over a drone nobody is flying.
+            BallisticLauncher launcher = drone.Ballistic;
+            if (launcher != null) launcher.Disarm();
             Transform t = drone.transform;
             drone.SyncFlightTo(t.position, t.forward, _speed);
         }
@@ -497,7 +537,12 @@ namespace Sim.Runtime
             return flown.sqrMagnitude > 1e-6f ? flown.normalized : forward;
         }
 
-        /// <summary>Space fires the gun down the nose; F launches a guided munition from a SİHA.</summary>
+        /// <summary>
+        /// <c>Space</c> fires the gun down the nose. <c>B</c> arms the balistik füze launcher
+        /// (targeting mode); while it is armed <c>←</c>/<c>→</c> step the designated hostile and
+        /// <c>F</c> releases the ballistic round. Safed, <c>F</c> launches the guided munition exactly
+        /// as it always did.
+        /// </summary>
         private void HandleWeapons()
         {
             if (Controlled == null) return;
@@ -513,11 +558,78 @@ namespace Sim.Runtime
                 }
             }
 
+            BallisticLauncher launcher = Controlled.Ballistic;
+            bool armed = HandleBallisticTargeting(launcher);
+
             if (Input.GetKeyDown(KeyCode.F))
             {
+                // WEAPON SELECT, not a second trigger: with the heavy store selected the release key
+                // drops THAT, the way picking a station changes what the button lets go of. TryFire
+                // safes the launcher on success, so the very next F is back on the guided missile and
+                // the pilot never has to remember which weapon is live.
+                if (armed)
+                {
+                    launcher.TryFire();
+                    return;
+                }
+
                 var siha = Controlled as SihaController;
                 if (siha != null) siha.TryManualLaunch();
             }
+        }
+
+        /// <summary>
+        /// The balistik füze TARGETING MODE. <see cref="BallisticArmKey"/> arms and safes it; while it
+        /// is armed <c>←</c>/<c>→</c> step the designation through the numbered hostiles. Returns
+        /// whether the launcher is armed right now, i.e. whether <c>F</c> should release the heavy
+        /// store instead of a guided missile.
+        ///
+        /// <para>
+        /// WHY A MODE, AND WHY ONLY ←/→. The pilot already flies with the arrow keys — <c>↑</c>/<c>↓</c>
+        /// are pitch (see <see cref="FlyControlled"/>) — so the arrows cannot simply be taken over.
+        /// <c>←</c>/<c>→</c>, however, are bound to NOTHING in flight: the audit of every
+        /// <see cref="KeyCode"/> in <c>Sim.Runtime</c> finds them only in <see cref="ScenarioMenu"/>'s
+        /// aircraft selector, which lives in a different game state. So the elevator stays the pilot's
+        /// at all times and the aircraft keeps flying completely normally while the numbers are up —
+        /// only the two unused arrows are borrowed, and only while the launcher is armed.
+        /// </para>
+        /// </summary>
+        private bool HandleBallisticTargeting(BallisticLauncher launcher)
+        {
+            // The briefing / hangar owns ←/→ for its aircraft selector AND keeps running its own
+            // Update while the sim is frozen, so no targeting key may be read while it is up —
+            // otherwise one arrow press would both change the aircraft and cycle the designation.
+            if (MenuIsOpen()) return false;
+
+            if (launcher == null)
+            {
+                // This archetype carries no launcher at all (everything but the jet). The key is a
+                // deliberate no-op, but it must not be a SILENT one: record the press so the HUD can
+                // explain that the balistik füze is the fighter jet's alone.
+                if (Input.GetKeyDown(BallisticArmKey)) _ballisticDeniedTime = Time.unscaledTime;
+                return false;
+            }
+
+            if (Input.GetKeyDown(BallisticArmKey)) launcher.Toggle();
+
+            // An empty rack refuses to arm and records why (see BallisticLauncher.TryArm), so the key
+            // still "does nothing" with a reason on screen.
+            if (!launcher.Armed) return false;
+
+            if (Input.GetKeyDown(KeyCode.RightArrow)) launcher.CycleNext();
+            if (Input.GetKeyDown(KeyCode.LeftArrow)) launcher.CyclePrevious();
+
+            return true;
+        }
+
+        /// <summary>
+        /// True while the mission briefing / hangar is open. Resolved lazily and cached, the same way
+        /// <see cref="Hud"/> resolves it.
+        /// </summary>
+        private bool MenuIsOpen()
+        {
+            if (_menu == null) _menu = FindAnyObjectByType<ScenarioMenu>();
+            return _menu != null && _menu.IsOpen;
         }
 
         /// <summary>Maps a 0..360 Euler angle into a signed -180..180 range for clamping.</summary>

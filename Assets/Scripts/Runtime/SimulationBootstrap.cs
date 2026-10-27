@@ -373,6 +373,17 @@ namespace Sim.Runtime
             // Flare/chaff dispenser, added before the controller so its Start() picks it up.
             go.AddComponent<CountermeasureDispenser>();
 
+            // Centreline balistik füze launcher, fitted ONLY when this archetype actually carries the
+            // station — which is the fighter jet alone (AircraftProfile.BallisticRounds is 2 on the
+            // jet and 0 on the SİHA and the recon İHA, and AircraftUpgrades.Apply only ever ADDS to a
+            // non-zero rack). Added before the controller so IhaController.EnsureInitialized resolves
+            // it, which is what gets its cooldown ticked and its rack refilled on resupply. The rack
+            // size already includes every level bought on the hangar's "Balistik Füze" track, and
+            // AircraftUpgrades.Apply is a pure function of the save, so a Rebuild() can neither
+            // double-count the rounds nor leave a stale launcher behind.
+            if (profile.BallisticRounds > 0)
+                go.AddComponent<BallisticLauncher>().Configure(profile.BallisticRounds);
+
             // A missile carrier needs the armed controller; the recon archetype flies gun-only.
             IhaController ctrl;
             if (profile.MissileCapacity > 0) ctrl = go.AddComponent<SihaController>();

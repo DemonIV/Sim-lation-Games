@@ -92,6 +92,11 @@ namespace Sim.Runtime
         // has been bought). Null on every stock airframe. May be null.
         protected Jammer _jammer;
 
+        // Optional centreline balistik füze launcher (added by the spawner ONLY when the archetype's
+        // AircraftProfile.BallisticRounds is above zero, which is the fighter jet alone). Null on the
+        // SİHA, the recon İHA and every AI-spawned drone. May be null.
+        protected BallisticLauncher _ballistic;
+
         // World position of the nearest munition currently homing on this drone (valid only while
         // MissileIncoming is true), and whether a salvo was already fired against the current threat.
         private Vector3 _missilePos;
@@ -178,6 +183,14 @@ namespace Sim.Runtime
         /// track — a stock airframe returns null and the whole ability is simply absent.
         /// </summary>
         public Jammer Jammer => _jammer;
+
+        /// <summary>
+        /// Optional centreline balistik füze launcher, or null when this airframe carries none. ONLY
+        /// the fighter jet ever gets one (see <see cref="Sim.Core.AircraftProfile.BallisticRounds"/>),
+        /// so on every other archetype this is null and the whole weapon is simply absent — the key
+        /// does nothing and the HUD says why.
+        /// </summary>
+        public BallisticLauncher Ballistic => _ballistic;
 
         /// <summary>True while at least one live <see cref="GuidedMunition"/> is homing on this drone.</summary>
         public bool MissileIncoming { get; private set; }
@@ -355,6 +368,10 @@ namespace Sim.Runtime
             // track). Null on every stock airframe, which is what keeps a fresh save unchanged.
             _jammer = GetComponent<Jammer>();
 
+            // Optional balistik füze launcher (added by the spawner only on the fighter jet). Null
+            // everywhere else, so the weapon costs nothing on the other two archetypes.
+            _ballistic = GetComponent<BallisticLauncher>();
+
             // Remember the spawn point so ReturnToBase can steer home.
             BasePosition = transform.position;
             // Hold the spawn altitude as the cruise altitude.
@@ -408,6 +425,9 @@ namespace Sim.Runtime
             if (_gun != null) _gun.Tick(dt);
             if (_cm != null) _cm.Tick(dt);
             if (_jammer != null) _jammer.Tick(dt);
+            // The balistik füze launcher's inter-shot cooldown, and — while the pilot has it ARMED —
+            // the hostile numbering the HUD draws. Only the jet carries one (see Ballistic).
+            if (_ballistic != null) _ballistic.Tick(dt);
 
             // Missile warning: refresh MissileIncoming/TimeToImpact from the live munitions. Runs for
             // the human pilot too, so the HUD can warn them.
@@ -607,6 +627,11 @@ namespace Sim.Runtime
 
             // Jamming burst, when this drone carries an emitter: servicing hands it straight back.
             if (_jammer != null) _jammer.Rearm();
+
+            // Balistik füze rack, when this airframe carries the launcher (the jet). This is the ONLY
+            // place the rack refills — there is no timer and no trickle, so the rounds come back
+            // exactly the way the missile magazine above does: by dwelling on station.
+            if (_ballistic != null) _ballistic.Rearm();
         }
 
         /// <summary>

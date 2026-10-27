@@ -138,8 +138,9 @@ namespace Sim.Runtime
         /// <summary>
         /// The player's fighter jet (Savaş Uçağı): an area-ruled single-engine airframe with a
         /// pointed radome, a raked bubble canopy, cranked-delta wings with leading-edge root
-        /// extensions, twin canted fins, side intakes, four underwing stores and a ventral sensor
-        /// ball.
+        /// extensions, twin canted fins, side intakes, four underwing stores, the centreline
+        /// BALİSTİK FÜZE store (the jet's exclusive heavy weapon — see
+        /// <see cref="BallisticLauncher"/>) and a ventral sensor ball.
         ///
         /// <para>Layout notes (model space, +Z forward, +Y up, ~6.8 long by ~5.2 span):</para>
         /// <list type="bullet">
@@ -223,6 +224,20 @@ namespace Sim.Runtime
             Part(model, PrimitiveType.Cube, "PylonOuterR", new Vector3(1.75f, -0.20f, -0.95f), new Vector3(0.08f, 0.22f, 0.42f), Vector3.zero, trim);
             Part(model, PrimitiveType.Capsule, "MissileOuterL", new Vector3(-1.75f, -0.40f, -0.90f), new Vector3(0.13f, 0.42f, 0.13f), new Vector3(90f, 0f, 0f), dark);
             Part(model, PrimitiveType.Capsule, "MissileOuterR", new Vector3(1.75f, -0.40f, -0.90f), new Vector3(0.13f, 0.42f, 0.13f), new Vector3(90f, 0f, 0f), dark);
+
+            // ---- centreline BALİSTİK FÜZE store: the jet's exclusive heavy weapon, and the one part
+            // of the fit that has to be unmistakable from the four underwing missiles. It is made
+            // distinct three ways: it sits on the BELLY CENTRELINE rather than under a wing panel, it
+            // is roughly twice their diameter and length (0.34 x 1.05 against their 0.16 x 0.50), and
+            // it is finished in ACCENT rather than dark metal so it reads as a different store at a
+            // glance. Parked aft of the ventral sensor ball at z = 1.30 so nothing intersects.
+            Part(model, PrimitiveType.Cube, "BallisticPylon", new Vector3(0f, -0.36f, -0.30f), new Vector3(0.16f, 0.22f, 1.10f), Vector3.zero, trim);
+            Part(model, PrimitiveType.Capsule, "BallisticStore", new Vector3(0f, -0.62f, -0.30f), new Vector3(0.34f, 1.05f, 0.34f), new Vector3(90f, 0f, 0f), accent);
+            // Pointed nose + tail fins, so the store reads as a rocket rather than a fuel tank.
+            Part(model, PrimitiveType.Cylinder, "BallisticNose", new Vector3(0f, -0.62f, 0.86f), new Vector3(0.16f, 0.18f, 0.16f), new Vector3(90f, 0f, 0f), dark);
+            Part(model, PrimitiveType.Cube, "BallisticFinL", new Vector3(-0.22f, -0.62f, -1.08f), new Vector3(0.36f, 0.05f, 0.34f), Vector3.zero, dark);
+            Part(model, PrimitiveType.Cube, "BallisticFinR", new Vector3(0.22f, -0.62f, -1.08f), new Vector3(0.36f, 0.05f, 0.34f), Vector3.zero, dark);
+            Part(model, PrimitiveType.Cube, "BallisticFinTop", new Vector3(0f, -0.40f, -1.08f), new Vector3(0.05f, 0.34f, 0.34f), Vector3.zero, dark);
 
             // ---- ventral sensor ball on the same unscaled-pivot convention the SAM/AAA turrets
             // use, so a TurretVisual attached here would slew it without shearing anything.
