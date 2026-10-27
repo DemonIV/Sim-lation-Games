@@ -136,12 +136,30 @@ namespace Sim.Runtime
         public bool IsOutOfFuel => FuelFraction <= 0f;
 
         /// <summary>
+        /// When true this airframe burns no fuel at all: the tank stays full, the governor never
+        /// tapers the throttle and <see cref="IsOutOfFuel"/> never becomes true.
+        ///
+        /// <para>
+        /// Set ONLY by the free-flight sandbox (see <c>Sim.Core.FreeFlightRules.ConsumesFuel</c>),
+        /// where a session that ends in a dead-stick crash at minute eleven is still a session with a
+        /// timer on it. Every campaign spawn leaves it false, so endurance remains a real constraint
+        /// in the mode that is about endurance. It gates the two consumption sites (this method, which
+        /// the human pilot drives, and the AI burn in <see cref="Update"/>) rather than the tank
+        /// itself, so <see cref="FuelFraction"/> keeps reading 1 and the HUD's fuel gauge stays full
+        /// instead of going blank.
+        /// </para>
+        /// </summary>
+        public bool UnlimitedFuel { get; set; }
+
+        /// <summary>
         /// Burns fuel from this drone's tank at the given normalized throttle. Lets an external driver
         /// (the human pilot in <see cref="PlayerDroneController"/>) spend the same tank the AI uses.
-        /// Null-safe: a no-op before <see cref="Start"/> has built the tank.
+        /// Null-safe: a no-op before <see cref="Start"/> has built the tank, and a deliberate no-op
+        /// while <see cref="UnlimitedFuel"/> is set.
         /// </summary>
         public void ConsumeFuel(float throttle01, float dt)
         {
+            if (UnlimitedFuel) return;
             if (_fuel == null) return;
             _fuel.Consume(throttle01, dt);
         }
@@ -400,7 +418,7 @@ namespace Sim.Runtime
             // While a human pilot flies this drone the PlayerDroneController owns the burn (it knows
             // the pilot's own throttle and afterburner), so the AI-side burn is skipped to avoid
             // consuming the same tank twice in one frame.
-            if (_fuel != null && !ManualControl) _fuel.Consume(effThrottle, dt);
+            if (_fuel != null && !ManualControl && !UnlimitedFuel) _fuel.Consume(effThrottle, dt);
 
             // Base servicing: dwell inside baseRadius of the spawn point for the full cycle to be
             // refuelled and rearmed. Deliberately NOT gated on fuel — a dead-stick drone that manages

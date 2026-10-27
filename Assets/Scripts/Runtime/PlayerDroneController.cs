@@ -196,6 +196,40 @@ namespace Sim.Runtime
             if (_selected == null) _selected = drone;
         }
 
+        /// <summary>
+        /// Asks for the preferred aircraft to be taken over on the next frame, without the player
+        /// pressing <c>C</c>. Used by the free-flight sandbox, which has nothing to brief and nobody
+        /// to hand over from, so it simply starts in the cockpit (see
+        /// <c>Sim.Core.FreeFlightRules.StartsUnderPlayerControl</c>).
+        ///
+        /// <para>
+        /// It sets a FLAG rather than taking control here and now, because the spawner calls it from
+        /// <c>Awake</c>: at that point the aircraft's own <see cref="IhaController.Start"/> has not
+        /// run, so its <see cref="FlightModel"/> does not exist yet and
+        /// <see cref="IhaController.Speed"/> would read 0 — the pilot state would be seeded from an
+        /// uninitialised airframe. Deferring to <see cref="Update"/> puts the takeover after every
+        /// <c>Start</c> in the scene, which is exactly where <c>C</c> would have put it.
+        /// </para>
+        ///
+        /// <para>
+        /// Harmless while the menu holds <c>Time.timeScale</c> at 0: the takeover happens, and
+        /// <see cref="FlyControlled"/> returns immediately on a zero time step, so the aircraft sits
+        /// still until the player is actually in the world.
+        /// </para>
+        /// </summary>
+        public void RequestImmediateControl()
+        {
+            _autoTakeoverPending = true;
+        }
+
+        /// <summary>
+        /// Minimum airspeed the pilot is handed when control is taken over automatically, as a
+        /// fraction of the airframe's pilot cap. A sandbox that begins with the throttle at zero
+        /// starts with the aircraft hanging motionless in the air, which reads as a broken spawn
+        /// rather than as a flight; two thirds of the cap is a cruise.
+        /// </summary>
+        private const float AutoTakeoverThrottle01 = 0.66f;
+
         // Pilot flight state.
         private float _speed;
         private float _yaw;
@@ -209,6 +243,10 @@ namespace Sim.Runtime
         // BallisticDenied). 0 = never pressed.
         private float _ballisticDeniedTime;
 
+        // Set by RequestImmediateControl and consumed on the next Update: take over the preferred
+        // aircraft without waiting for the C key (free-flight sandbox).
+        private bool _autoTakeoverPending;
+
         // The mission briefing / hangar, resolved lazily so the targeting keys can stand down while
         // it owns ←/→ for its aircraft selector. May be null in a hand-authored scene.
         private ScenarioMenu _menu;
@@ -218,6 +256,8 @@ namespace Sim.Runtime
             // Drop a stale reference if the piloted drone was destroyed under us.
             if (Controlled == null) Controlled = null;
             if (_selected == null) _selected = null;
+
+            if (_autoTakeoverPending) ApplyAutoTakeover();
 
             if (Input.GetKeyDown(KeyCode.Tab)) CycleSelection();
             if (Input.GetKeyDown(KeyCode.C)) ToggleControl();
@@ -244,6 +284,30 @@ namespace Sim.Runtime
         public void ReleasePlayerControl()
         {
             ReleaseControl();
+        }
+
+        /// <summary>
+        /// Consumes the <see cref="RequestImmediateControl"/> request: takes over the preferred
+        /// aircraft exactly as <c>C</c> would, then nudges the throttle up to
+        /// <see cref="AutoTakeoverThrottle01"/> if the airframe handed over a standing start.
+        ///
+        /// <para>
+        /// The flag is cleared whatever happens, so a sandbox with no flyable aircraft in it (which
+        /// should not exist) retries nothing and simply leaves the player as a spectator — <c>C</c>
+        /// still works from there.
+        /// </para>
+        /// </summary>
+        private void ApplyAutoTakeover()
+        {
+            _autoTakeoverPending = false;
+            if (IsActive) return;
+
+            if (_selected == null) CycleSelection();
+            TakeControl(_selected);
+            if (Controlled == null) return;
+
+            float cruise = MaxSpeed * AutoTakeoverThrottle01;
+            if (_speed < cruise) _speed = cruise;
         }
 
         /// <summary>Takes control of the selected drone, or hands the current one back to its AI.</summary>

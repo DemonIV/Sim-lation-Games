@@ -165,6 +165,13 @@ namespace Sim.Runtime
         {
             if (_missionBooked) return;
 
+            // The free-flight sandbox has no result to book: no hostiles, no waves, no win/lose and
+            // no economy. In practice the scenario controller is never started in that mode, so the
+            // status below stays InProgress and this method would fall out anyway — but the mode's
+            // promise is "touches nothing", and a promise that depends on another component staying
+            // idle is not one. See Sim.Core.FreeFlightRules.TouchesCampaignSave.
+            if (!FreeFlightRules.TouchesCampaignSave(CampaignSession.SelectedMode)) return;
+
             MissionState m = _director != null ? _director.Mission : null;
             if (m == null) return;
 

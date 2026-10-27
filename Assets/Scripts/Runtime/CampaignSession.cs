@@ -46,6 +46,56 @@ namespace Sim.Runtime
         public static CampaignLevel SelectedLevel => CampaignLibrary.GetOrFirst(SelectedLevelIndex);
 
         /// <summary>
+        /// What the player is doing right now: flying a campaign level, or free-flying the sandbox
+        /// (see <see cref="SimMode"/> and <see cref="FreeFlightRules"/>).
+        ///
+        /// <para>
+        /// STATIC for the same reason as <see cref="SelectedLevelIndex"/>: entering or leaving the
+        /// sandbox goes through <see cref="SimulationBootstrap.Rebuild"/> (the two modes need
+        /// different worlds), which destroys every component, so the choice has to outlive it.
+        /// </para>
+        ///
+        /// <para>
+        /// DELIBERATELY NOT PERSISTED. It is absent from <see cref="CampaignSaveData"/> and from
+        /// <see cref="Save"/>, so a sandbox flight leaves no trace in <c>PlayerPrefs</c> and a
+        /// relaunch always comes up on the campaign. That is the first of the two things that keep
+        /// the mode out of the save; the second is that <see cref="CompleteMission"/> is never
+        /// reached in it (see the guard there).
+        /// </para>
+        /// </summary>
+        public static SimMode SelectedMode = SimMode.Campaign;
+
+        /// <summary>True while the free-flight sandbox is the active mode.</summary>
+        public static bool IsFreeFlight => FreeFlightRules.IsSandbox(SelectedMode);
+
+        /// <summary>
+        /// The profile the sandbox flies: <see cref="FreeFlightRules.AircraftId"/> (the fighter jet)
+        /// with the garage's purchased upgrades folded in, exactly as <see cref="PlayerProfile"/>
+        /// does for the campaign.
+        ///
+        /// <para>
+        /// It READS the garage and never writes it, and it deliberately ignores — and leaves intact —
+        /// the archetype the player picked on the menu for their campaign sorties. So the sandbox
+        /// always puts the player in their own jet, upgrades included, without the mode becoming a
+        /// second place where the aircraft choice is stored.
+        /// </para>
+        /// </summary>
+        public static AircraftProfile FreeFlightProfile
+        {
+            get
+            {
+                return AircraftUpgrades.Apply(
+                    AircraftCatalog.GetOrDefault(FreeFlightRules.AircraftId), Upgrades);
+            }
+        }
+
+        /// <summary>
+        /// The profile to actually spawn: the sandbox's jet in free flight, the player's campaign
+        /// aircraft otherwise. One call site for the spawner, one place where the rule lives.
+        /// </summary>
+        public static AircraftProfile ActiveProfile => IsFreeFlight ? FreeFlightProfile : PlayerProfile;
+
+        /// <summary>
         /// The profile the player's aircraft actually flies: the archetype picked on the menu with
         /// every purchased upgrade folded in. With an empty garage this is byte-for-byte the base
         /// profile, so a brand-new player flies exactly what <see cref="AircraftCatalog"/> defines.
@@ -119,6 +169,13 @@ namespace Sim.Runtime
         public static int CompleteMission(int levelIndex, bool won, int hostilesDestroyed,
                                           int friendliesLost, int stars)
         {
+            // THE SANDBOX NEVER BOOKS. Free flight has no hostiles, no waves and no win/lose, so the
+            // caller should never get here in that mode — the scenario simply stays InProgress
+            // forever. This is the belt to that braces: even if some future path did reach this
+            // method during a sandbox flight, it pays no credits, completes no level (and so unlocks
+            // nothing) and writes no save. See FreeFlightRules.TouchesCampaignSave.
+            if (!FreeFlightRules.TouchesCampaignSave(SelectedMode)) return 0;
+
             EnsureLoaded();
 
             CampaignLevel level = CampaignLibrary.Get(levelIndex);
