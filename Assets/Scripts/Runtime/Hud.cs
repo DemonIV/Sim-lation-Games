@@ -231,6 +231,13 @@ namespace Sim.Runtime
         /// <summary>Top-left mission panel. Returns the panel's bottom edge.</summary>
         private float DrawMissionPanel(float x, float y)
         {
+            // The free-flight sandbox has no mission: the rows below (status, wave, hostile count,
+            // kills, losses, score) would all read 0 / 1-of-1 / IN PROGRESS forever. They are
+            // CONDITIONED on the mode rather than deleted, so the campaign panel is byte-for-byte
+            // the one it always was. See Sim.Core.FreeFlightRules.ShowsMissionRows.
+            if (!FreeFlightRules.ShowsMissionRows(CampaignSession.SelectedMode))
+                return DrawFreeFlightPanel(x, y);
+
             MissionState m = _director != null ? _director.Mission : null;
             float h = m == null ? 94f : 206f;
 
@@ -286,6 +293,50 @@ namespace Sim.Runtime
             // Live head-count, kept from the previous HUD ("sahada" figures).
             HudTheme.Draw(new Rect(cx, cy, cw, 14f),
                           $"SAHADA · DÜŞMAN {_director.HostilesAlive} · DOST {_director.FriendliesAlive}",
+                          HudTheme.Small, HudTheme.TextFaint);
+
+            return y + h;
+        }
+
+        /// <summary>
+        /// The free-flight sandbox's replacement for the mission panel: the mode's name, the flight
+        /// clock and a one-line reminder of what the mode is. Returns the panel's bottom edge, so
+        /// the radar panel below stacks exactly as it does in the campaign.
+        ///
+        /// <para>
+        /// Everything mission-shaped is gone — no status, no wave, no hostile count, no kills, no
+        /// losses and no score, because every one of those would be a frozen zero. Everything
+        /// FLIGHT-shaped is untouched: the pilot overlay, the radar scope, the signature block, the
+        /// fuel and ammo gauges and the fleet panel are drawn by the same code in both modes.
+        /// </para>
+        /// </summary>
+        private float DrawFreeFlightPanel(float x, float y)
+        {
+            MissionState m = _director != null ? _director.Mission : null;
+            const float h = 118f;
+
+            HudTheme.Panel(new Rect(x, y, ColWidth, h));
+            HudTheme.Header(new Rect(x, y, ColWidth, HeaderH), "MOD", "SERBEST");
+
+            float cx = x + 10f;
+            float cw = ColWidth - 20f;
+            float cy = y + HeaderH + 8f;
+
+            HudTheme.Draw(new Rect(cx, cy, cw, 36f), FreeFlightRules.Title,
+                          HudTheme.Title, HudTheme.Text);
+            cy += 40f;
+
+            // The flight clock. The director's MissionState is a pure counter here (it can never
+            // terminate itself — see SimulationDirector.Start), so with no hostiles on the field it
+            // is exactly a stopwatch.
+            StatBox(new Rect(cx, cy, cw * 0.5f - 6f, 36f), "UÇUŞ SÜRESİ",
+                    Clock(m != null ? m.ElapsedTime : 0f), HudTheme.Text);
+            StatBox(new Rect(cx + cw * 0.5f + 6f, cy, cw * 0.5f - 6f, 36f), "TEHDİT",
+                    "YOK", HudTheme.Ok);
+            cy += 42f;
+
+            HudTheme.Draw(new Rect(cx, cy, cw, 14f),
+                          "GÖREV YOK · SKOR YOK · YAKIT SINIRSIZ",
                           HudTheme.Small, HudTheme.TextFaint);
 
             return y + h;
@@ -1503,7 +1554,7 @@ namespace Sim.Runtime
             // shows what the player will actually hear: "SES %70" or "SES KAPALI".
             string soundHint = AudioDirector.Settings != null ? AudioDirector.Settings.Label() : "SES";
             HudTheme.Draw(l3, $"P: {pauseText} · +/−: HIZ (x{scale:0.00}) · R: YENİDEN · "
-                              + $"M: GÖREV MENÜSÜ · G: FİLO PANELİ ({fleetHint}) · N: {soundHint}",
+                              + $"M veya ESC: GÖREV MENÜSÜ · G: FİLO PANELİ ({fleetHint}) · N: {soundHint}",
                           HudTheme.Centered, HudTheme.TextFaint);
 
             // Bar colour-code legend (design: green >50, amber 20–50, red <20).
@@ -1531,6 +1582,11 @@ namespace Sim.Runtime
         /// </summary>
         private void DrawEndScreen()
         {
+            // No mission, no report. The sandbox's scenario is never started, so the status below
+            // stays InProgress and this would fall out anyway — but "the sandbox cannot end" is a
+            // promise of the mode, not a side effect of another component staying idle.
+            if (!FreeFlightRules.ShowsMissionRows(CampaignSession.SelectedMode)) return;
+
             MissionState m = _director != null ? _director.Mission : null;
             if (m == null) return;
 

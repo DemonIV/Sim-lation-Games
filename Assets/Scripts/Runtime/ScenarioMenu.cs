@@ -79,6 +79,11 @@ namespace Sim.Runtime
         private const int LevelColumns = 4;
         private const float MinLevelCardH = 104f;
 
+        // The free-flight band between the level grid and the aircraft row. ONE full-width band, not
+        // a ninth card in the grid: the grid is the numbered campaign and this is not part of it, so
+        // the layout has to say so before the text does.
+        private const float SandboxRowH = 64f;
+
         // Hangar: one row per upgrade track. HangarRowH is the PREFERRED height; DrawHangar shrinks
         // the rows toward HangarRowMinH when the track list does not fit the panel, which it stopped
         // doing on a short window once the balistik füze hattı made nine tracks.
@@ -146,7 +151,18 @@ namespace Sim.Runtime
                 _missionStarted = true;
                 IsOpen = false;
                 Time.timeScale = 1f;
-                if (_controller != null) _controller.BeginMission();
+
+                // ...unless the rebuild was for the free-flight sandbox, which has no mission to
+                // begin. Leaving the ScenarioController UNSTARTED is precisely what makes the mode
+                // hostile-free: its Update does nothing at all until BeginMission, so no wave
+                // spawns, no squad-effectiveness check runs and the status never leaves InProgress —
+                // which in turn keeps the HUD's end screen and the campaign booking out of it.
+                // See Sim.Core.FreeFlightRules.SpawnsHostiles.
+                if (_controller != null &&
+                    FreeFlightRules.SpawnsHostiles(CampaignSession.SelectedMode))
+                {
+                    _controller.BeginMission();
+                }
                 return;
             }
 
@@ -171,9 +187,13 @@ namespace Sim.Runtime
                 return;
             }
 
-            // M reopens the briefing mid-mission (and pauses). Only handled while closed, so the key
-            // can never dismiss the menu without a level being chosen.
-            if (Input.GetKeyDown(KeyCode.M))
+            // M — or Esc, the key everybody tries first — reopens this screen mid-session (and
+            // pauses). Only handled while closed, so neither key can dismiss the menu without
+            // something being chosen. Esc is bound NOWHERE else in Sim.Runtime (audited against
+            // every KeyCode in the project), so it costs no existing binding; it matters more now
+            // that the free-flight sandbox has no end screen of its own, and leaving it is the only
+            // way back to the campaign.
+            if (Input.GetKeyDown(KeyCode.M) || Input.GetKeyDown(KeyCode.Escape))
             {
                 IsOpen = true;
                 _page = MenuPage.Levels;
@@ -292,9 +312,11 @@ namespace Sim.Runtime
 
             float aircraftH = Mathf.Clamp(body.height * 0.3f, AircraftRowH, 164f);
             // The grid never shrinks below MinLevelCardH per ROW (gaps included), even if that means
-            // spilling into the aircraft row on a very short window.
+            // spilling into the aircraft row on a very short window. The free-flight band is
+            // reserved out of the grid's share first, exactly like the aircraft row below it.
             float gridH = Mathf.Max(rows * MinLevelCardH + CardGap * (rows - 1),
-                                    body.height - aircraftH - AircraftLabelH - 20f);
+                                    body.height - aircraftH - AircraftLabelH
+                                    - SandboxRowH - CardGap - 20f);
 
             float cellW = (body.width - CardGap * (LevelColumns - 1)) / LevelColumns;
             float cellH = (gridH - CardGap * (rows - 1)) / rows;
@@ -319,11 +341,117 @@ namespace Sim.Runtime
                 }
             }
 
+            // ---- free-flight sandbox, on its own band under the campaign grid
+            float sandboxY = body.y + gridH + CardGap;
+            if (DrawFreeFlightCard(new Rect(body.x, sandboxY, body.width, SandboxRowH)))
+            {
+                ChooseFreeFlight();
+                // ChooseFreeFlight rebuilds the world; stop drawing this frame.
+                return;
+            }
+
             // ---- aircraft selection
-            float aircraftLabelY = body.y + gridH + 12f;
+            float aircraftLabelY = sandboxY + SandboxRowH + 12f;
             DrawEyebrow(new Rect(0f, aircraftLabelY, Screen.width, 14f), "UÇAK SEÇ  ·  ←/→ İLE DEĞİŞTİR");
             DrawAircraftRow(new Rect(body.x, aircraftLabelY + AircraftLabelH + 4f,
                                      body.width, aircraftH));
+        }
+
+        /// <summary>
+        /// The free-flight band: a single full-width card under the level grid. Returns true when it
+        /// was clicked.
+        ///
+        /// <para>
+        /// Its eyebrow line spells out the three things a player needs to know BEFORE clicking —
+        /// that it is outside the campaign, that it flies the jet, and that it cannot touch their
+        /// credits or progress. A sandbox the player is not sure is safe is a sandbox they will not
+        /// use.
+        /// </para>
+        ///
+        /// <para>
+        /// Drawn with the same <see cref="HudTheme"/> vocabulary as the level cards (panel fill,
+        /// hairline border, amber hover, action strip) so it reads as part of the same screen; the
+        /// difference is the layout — one band rather than a numbered cell — and a green rail on its
+        /// left edge.
+        /// </para>
+        /// </summary>
+        private bool DrawFreeFlightCard(Rect r)
+        {
+            bool hover = r.Contains(Event.current.mousePosition);
+            Color accent = hover ? HudTheme.Amber : HudTheme.Line;
+
+            HudTheme.Fill(r, hover ? Tint(HudTheme.Amber, 0.12f, 0.96f) : HudTheme.PanelBg);
+            HudTheme.Border(r, accent);
+            HudTheme.Fill(new Rect(r.x + 1f, r.y + 1f, 3f, r.height - 2f),
+                          hover ? HudTheme.Amber : HudTheme.Ok);
+
+            const float actionW = 170f;
+            float x = r.x + 14f;
+            float textW = Mathf.Max(80f, r.width - 28f - actionW - 14f);
+
+            HudTheme.Draw(new Rect(x, r.y + 7f, textW, 14f),
+                          "KAMPANYA DIŞI  ·  SAVAŞ UÇAĞI  ·  YAKIT SINIRSIZ  ·  KREDİ VE İLERLEME ETKİLENMEZ",
+                          HudTheme.Small, HudTheme.TextFaint);
+            HudTheme.Draw(new Rect(x, r.y + 22f, textW, 20f), FreeFlightRules.Title,
+                          HudTheme.SectionLabel, hover ? HudTheme.Amber : HudTheme.Text);
+            HudTheme.Draw(new Rect(x, r.y + 42f, textW, 18f), FreeFlightRules.Brief,
+                          _brief, hover ? HudTheme.Text : HudTheme.TextDim);
+
+            var action = new Rect(r.xMax - 14f - actionW, r.y + (r.height - 24f) * 0.5f, actionW, 24f);
+            if (hover)
+            {
+                HudTheme.Fill(action, HudTheme.Amber);
+                HudTheme.Draw(action, "KALKIŞ", HudTheme.TagText, HudTheme.Bg);
+            }
+            else
+            {
+                HudTheme.Border(action, HudTheme.Line);
+                HudTheme.Draw(action, "SEÇMEK İÇİN TIKLA", HudTheme.TagText, HudTheme.TextFaint);
+            }
+
+            // Invisible hit area over the whole band — same contract as the level cards.
+            return GUI.Button(r, GUIContent.none, GUIStyle.none);
+        }
+
+        /// <summary>
+        /// Enters the free-flight sandbox.
+        ///
+        /// <para>
+        /// ALWAYS through a rebuild, unlike <see cref="ChooseLevel"/>, which only rebuilds when a
+        /// mission is already running. The reason is that the sandbox needs a DIFFERENT WORLD — a
+        /// 1200 m terrain with its own relief, its landmarks and no wingmen — and the world standing
+        /// when this screen opens is the campaign's, even on a fresh launch. The mode flag lives in
+        /// the static <see cref="CampaignSession"/>, so it survives the rebuild that destroys this
+        /// component, and the freshly built menu consumes <see cref="_autoBegin"/> without starting
+        /// a mission.
+        /// </para>
+        ///
+        /// <para>
+        /// Nothing here reads or writes the campaign: no level is selected, no save is written and
+        /// the aircraft the player picked for their sorties is left exactly as it was.
+        /// </para>
+        /// </summary>
+        private void ChooseFreeFlight()
+        {
+            AudioDirector.Play2D(AudioLibrary.UiConfirm);
+            CampaignSession.SelectedMode = SimMode.FreeFlight;
+
+            SimulationBootstrap boot = SimulationBootstrap.Instance;
+            if (boot == null) boot = FindAnyObjectByType<SimulationBootstrap>();
+
+            if (boot != null)
+            {
+                IsOpen = false;
+                _autoBegin = true;
+                boot.Rebuild();
+                return;
+            }
+
+            // No bootstrap to rebuild with (hand-authored scene): the sandbox world cannot be built,
+            // so the best available behaviour is to simply unpause on whatever field is standing.
+            _missionStarted = true;
+            Time.timeScale = 1f;
+            IsOpen = false;
         }
 
         /// <summary>
@@ -818,7 +946,7 @@ namespace Sim.Runtime
                           + " (←/→ HEDEF SEÇ, F ATEŞ) · Q: FLARE · E: ART YAKICI · X: KAÇIŞ",
                           HudTheme.Small, HudTheme.TextDim);
             HudTheme.Draw(new Rect(x, y + 54f, w, 18f),
-                          "P: DURAKLAT · +/−: HIZ · R: YENİDEN · M: MENÜ · H: HANGAR",
+                          "P: DURAKLAT · +/−: HIZ · R: YENİDEN · M veya ESC: MENÜ · H: HANGAR",
                           HudTheme.Small, HudTheme.TextDim);
         }
 
@@ -896,6 +1024,11 @@ namespace Sim.Runtime
             }
 
             AudioDirector.Play2D(AudioLibrary.UiConfirm);
+
+            // Picking a level is also how the player LEAVES the sandbox, so the mode is reset here
+            // rather than only being set in ChooseFreeFlight. Without this, Esc out of free flight
+            // and into a level would fly the campaign mission in a hostile-free sandbox world.
+            CampaignSession.SelectedMode = SimMode.Campaign;
 
             SimulationBootstrap boot = SimulationBootstrap.Instance;
             if (boot == null) boot = FindAnyObjectByType<SimulationBootstrap>();
