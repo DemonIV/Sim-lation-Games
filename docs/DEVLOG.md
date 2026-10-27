@@ -2,7 +2,7 @@
 
 > Bu dosya, projede yapılan tüm işleri ve kararları kaydeder; oturumlar arası bağlamı (context) korumak ve projeyi hızlı anlamak içindir.
 
-**Son güncelleme:** 2026-09-02
+**Son güncelleme:** 2026-10-27
 **Branch:** `claude/slack-session-f6uh9g`
 **Unity sürümü:** 6000.5.9f1
 
@@ -102,6 +102,17 @@ tetikleniyor). (3) yakıt — tam gaz menzili jette **21.9 sn** idi (art yakıc�
 seviye 1 bile bitmiyordu; tüm depolar **×3** oldu (65.6 / 150 / 385.7 sn), yakım hızlarına
 dokunulmadı, sıralama ve oranlar korundu. Ayrıntı `## 9`'un son maddesinde.
 
+En son tur **savaş uçağına özel balistik füze fırlatıcısı** geldi (kullanıcı isteği). Görünen
+düşmanlar ekranda **1, 2, 3 …** diye numaralanıyor; numaralandırma kuralı **artan hedef ID**'si,
+çünkü menzil/kerteriz gibi atıcıya bağlı bir ölçüt uçak biraz ilerleyince tüm numaraları oyuncunun
+parmağı altında kaydırırdı. Girdi çakışması (pilot zaten oklarla uçuyor) bir **hedefleme moduyla**
+çözüldü: **B** fırlatıcıyı kurar, kuruluyken **←/→** hedefi seçer ve **F** ağır mermiyi bırakır;
+**↑/↓ hiç alınmadı**, yunuslama her an pilotun. Hasar TÜRETİLMİŞ: normal füzenin 2 katı (40 → **80**),
+projede ikinci bir sayı yok. Jet **2** füzeyle kalkıyor, stok yalnızca füze şarjörü gibi (üste ikmal)
+yenileniyor ve hangarın dokuzuncu hattı **Balistik Füze** (450/725/1150/1850, seviye başına +1, azami
+6 füze) ile artırılıyor. Mermi yay çizen, yavaş ve güdümsüz: nişan NOKTASINA varır, kıvrak hedef
+ıskalanır. Ayrıntı `## 9`'un son maddesinde.
+
 ### Yeni oturum için okuma sırası
 1. Bu bölüm.
 2. `CLAUDE.md` → `## Worker kuralları`.
@@ -181,7 +192,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `DetectableTarget` | Hedef anlık görüntüsü (id, konum, hız) + **radar imzası ve karıştırma gücü**. `Signature` özelliği ayarlanmamış (≤ 0) imzayı taban 1 m² olarak okur, böylece `default(DetectableTarget)` ve eski kurucular eski menzille aynı davranır. |
 | `SignatureDetection` | **Projenin tespit yasası, tek kopya:** menzil ∝ RCS^0.25 (`RangeForRcs`), üstüne `ElectronicWarfare` gürültü karıştırması (`EffectiveRange`), üstüne görüş konisi (`CanDetect`). `RadarSystem` ve `TargetingSystem` buraya delege eder. `DetectionRangeMultiplier` = "şu an ne kadar görünürüm" (sensörden bağımsız tek sayı, HUD bunu gösterir). Bozuk girdiler (≤ 0 RCS/menzil/FOV, ≤ 0 referans RCS) istisna atmadan makul cevap verir. |
 | `WeaponSystem` | Atış kontrolü: mühimmat, atış hızı, soğuma, yeniden doldurma. |
-| `Ballistics` | Hareketli hedefe önleme (lead) noktası. |
+| `Ballistics` | Hareketli hedefe önleme (lead) noktası; ayrıca **yay çizen balistik atış çözümü**: `TryLoftedLaunchVelocity` sabit hızda verilen noktaya düşen atış açısının kapalı-form (sürüklemesiz) çözümünü verir — `tan θ = (v² ± √(v⁴ − g(g d² + 2 y v²))) / (g d)` — yüksek (+) ya da alçak (−) yay seçilebilir, menzil dışı atış **uydurulmaz, `false` döner**. `LoftedTimeOfFlight` uçuş süresini verir. Mermi yine `BallisticProjectile` ile uçurulur: projede **ikinci bir balistik uygulaması yok**. |
 | `Health` | Can havuzu, hasar, imha ve `SetMax` ile **yerinde yeniden boyutlandırma** (mevcut can oranını korur; yok edilmiş havuz dirilmez). |
 | `Atmosphere` | İrtifaya bağlı hava yoğunluğu (ρ = ρ₀·e^(−h/H)). |
 | `BallisticProjectile` | Yerçekimi + sürükleme + rüzgâr + irtifa ile mermi entegrasyonu. |
@@ -223,13 +234,15 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `CampaignProgress` | Kilit/tamamlanma/en iyi derece. Seviye 1 hep açık, N biterse N+1 açılır, tamamlanan tekrar oynanabilir, derece yalnız yükselir, geçersiz index reddedilir. `Restore` kilitleri kayıttan güvenmez, tamamlanmalardan yeniden türetir. |
 | `CampaignReward` | Görev sonu parası: `(taban·yıldızÇarpanı + imha·killÖdülü − kayıp·ceza)·zorluk`, negatife düşmez. `IsFullRate(won, alreadyCompleted)` — tam ödeme yalnız ilk BAŞARILI geçişte; tekrar oynayış ve başarısız sorti `ReplayFactor` (%25) ile ödenir (para musluğu engeli). |
 | `Wallet` | Kredi kesesi: `Earn` (pozitif olmayanı yok sayar), `TrySpend` (negatif/yetersizde `false` döner ve bakiyeyi HİÇ değiştirmez), `CanAfford`, `LifetimeEarned`. |
-| `UpgradeCatalog` | **Sekiz** yükseltme hattı (Motor/hız, Namlu Gücü/hasar, Füze Yuvası/yeni silah, Kanat-Çeviklik, Gövde Zırhı, Yakıt Tankı, Radar, **Elektronik Harp**). Maliyet tablo değil FORMÜL: `round(BaseCost·1.6^(L−1)/25)·25`; etki de formül: `1 + L·PerLevelGain`. Her hat için Türkçe ad/açıklama ve `EffectSummary`. Elektronik Harp hattı ölçekleyen değil **takan** tek hat: `JammerStrengthAtLevel` (0/1.5/3.0/4.5) + `JammerDetectionFactor` + sabit `JammerBurstSeconds`/`JammerCooldownSeconds`. **Listenin sonunda** durur, böylece kayıtlı seviye dizisinin indeksleri bozulmaz. |
+| `UpgradeCatalog` | **Dokuz** yükseltme hattı (Motor/hız, Namlu Gücü/hasar, Füze Yuvası/yeni silah, Kanat-Çeviklik, Gövde Zırhı, Yakıt Tankı, Radar, **Elektronik Harp**, **Balistik Füze**). Maliyet tablo değil FORMÜL: `round(BaseCost·1.6^(L−1)/25)·25`; etki de formül: `1 + L·PerLevelGain`. Her hat için Türkçe ad/açıklama ve `EffectSummary`. Elektronik Harp hattı ölçekleyen değil **takan** tek hat: `JammerStrengthAtLevel` (0/1.5/3.0/4.5) + `JammerDetectionFactor` + sabit `JammerBurstSeconds`/`JammerCooldownSeconds`. Balistik Füze hattı da ölçekleyen değil **sayan** bir hat: seviye başına +1 füze, `BaseCost` 450 → **450 / 725 / 1150 / 1850** (azami için toplam 4175 kredi, 2 → 6 füze). İkisi de sırayla **listenin sonuna** eklendi, böylece kayıtlı seviye dizisinin mevcut indeksleri anlamını korur (kısa dizi yeni hattı 0'dan başlatır). |
 | `UpgradeState` | Hangi hat kaçıncı seviyede. `TryPurchase` önce tavanı ve bakiyeyi kontrol eder, sonra ATOMİK olarak harcayıp seviye atlatır — reddedilen alışveriş ne cüzdanı ne durumu kıpırdatır. `Restore`/`Snapshot` kayıt katmanı için, bozuk diziye karşı kırpmalı. |
 | `AircraftUpgrades` | `Apply(baseProfile, upgradeState) → AircraftProfile`: yükseltmeleri taban profilin üstüne ÇARPANLA uygular (taban profiller otoriter kalır), sıfır yükseltmede taban profile birebir eşit döner, tabanı asla mutasyona uğratmaz. Tek sayısal istisna füze yuvası (adet); topu olup füzesi olmayan gövdede yeni yuvanın menzili tespit menzilinden türer. `AffectedFields` hangi hattın hangi alanı oynattığını söyler. |
 | `ThreatEnvelope` | Sahanın **yatay zarfı** (`FlightEnvelope`'un yatay muadili): saha yarı-genişliği 40 m, spawn keep-out 32 m, köşe-köşe **113 m**, tipik düşman mevzisinden en uzak noktaya **96.6 m** (`MaxEngagementDistance`). Her düşman arketipinin tespit ve atış menzili tek yerde ve arenaya bağlı olarak tanımlı; `DetectionRangeAgainst`/`FireDistanceAgainst`/`CoversWholeField` denge tablosunu tek çağrıyla ifade eder. Değişmezler (tespit > atış; taban SİHA'ya karşı tespit sahayı KAPLAMAMALI; keşif İHA atış menzilinin dışından görülmemeli) `ThreatEnvelopeTests` tarafından doğrulanır. |
 | `JammerSystem` | Karıştırıcının **görev döngüsü**: yayın süresi, soğuma ve şu an yayılan güç (`Ready`/`Active`/`Cooling`). Karıştırmanın fiziği tekrar edilmez — `ElectronicWarfare.EffectiveRange`'e delege eder; bu sınıf yalnız "açık mı?" sorusunu sahiplenir. Yayın iptal edilemez, tuşa basmak süreyi uzatmaz, tek uzun kare soğumayı atlatamaz. `BurstSeconds <= 0` = sürekli yayın (elle kurulmuş sahnelerdeki eski davranış). |
 | `AudioSynth` | **Projenin ses sentezi matematiği:** `float[]` PCM tamponu üzerinde toplamalı üretim — sinüs, tek harmonikli ton, analitik fazlı doğrusal süpürme (chirp), deterministik xorshift gürültüsü, **dikişsiz ilmeklenen bant sınırlı gürültü** (`AddLoopableNoise`: filtre ısınma bölgesi + ilmek sonrası örneklerin başa çapraz geçişi, böylece `buffer[0]` tam olarak `buffer[N-1]`'i izleyen örnek olur), **`SnapToLoop`** (bir frekansı ilmek içinde tam çevrim tamamlayacak şekilde oturtur), tek kutuplu alçak/yüksek geçiren filtre, tremolo, normalize zamanlı ADSR ve vurmalı zarf, tepe/ölçek/normalize/kırp. Projede ses varlığı olmadığı için **her ses buradan** doğar; `AudioClip`/`AudioSource` bilmez. Bozuk girdi (null tampon, 0 uzunluk/örnekleme hızı, negatif frekans) istisna atmaz, hiçbir şey yapmaz. |
 | `SoundSettings` | Ana ses seviyesi + sessize alma kuralları. Sessize alma "seviyeyi 0 yap" DEĞİL, altındaki seviyeyi hatırlar; `CycleVolume` tek tuşluk merdiveni (%100 → %70 → %40 → KAPALI) yürütür ve merdiven dışı bir seviyeden bile mutlaka hareket eder; `Restore` bozuk/NaN değerde varsayılana düşer. `EffectiveVolume` Runtime'ın mixer'a yazdığı tek sayı. |
+| `TargetDesignator` | Görünen düşmanları **1, 2, 3 …** diye numaralandırır ve pilotun seçimini tutar (savaş uçağının balistik füzesi için). Sıralama kuralı **ARTAN HEDEF ID**'sidir ve bütün espri budur: menzil ya da burun kerterizi gibi ATICIYA bağlı bir ölçüt kullanılsaydı uçak biraz ilerleyince tüm numaralar oyuncunun parmağı altında kayardı. `Targetable.Id` `TargetRegistry.NextId()`'den bir kez verilir ve asla değişmez, dolayısıyla numaralandırma kare kare **kararlı**: yeni düşman listenin SONUNA eklenir ve ekrandaki hiçbir numarayı oynatmaz, ölen düşman yalnızca kendisinden sonrakileri bir basamak yukarı çeker. Seçim indeksle değil **ID ile** tutulur, böylece liste şekil değiştirince hayatta kalır; seçili hedef ölünce aynı SLOT'a (yani bir sonraki düşmana) düşülür, asla boşluğa nişan alınmaz ve asla bayat ID'de kalınmaz. `CycleNext`/`CyclePrevious` iki yönde de sarar. |
+| `BallisticMissile` | Savaş uçağının balistik füzesinin **ortak tanımı**. Hasar TÜRETİLİR, hiçbir yere yazılmaz: `Damage(normalFüzeHasarı) = DamageMultiplier (2) × hasar`, yani "iki kat hasar" sözü inşa gereği doğru kalır ve normal füze ayarlanınca bu da onunla gelir. Fırlatma hızı **70 m/s** (güdümlü füzenin 180'inin çok altında: ağır, yay çizen, geç varan mermi), yerçekimi `GunPipper.EarthGravity`, tapa yarıçapı 7 m, azami menzil **400 m** (düz azami menzil v²/g ≈ 499 m olduğu için dürüst sınır), atışlar arası 2 sn. |
 
 ### Sim.Runtime (ince MonoBehaviour'lar)
 | Bileşen | Görevi |
@@ -273,9 +286,11 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `AudioSave` | Ses ayarının `PlayerPrefs` katmanı — kampanya kaydından **ayrı iki anahtar** (`sim.audio.volume`/`sim.audio.muted`), çünkü kampanya blob'unun sürüm çakışması "sıfırdan başla" demektir ve bir ses ayarı kimsenin kampanyasına mal olmamalıdır. Okuma/yazma istisna atmaz. |
 | `EngineAudio` | Uçak başına tek döngüsel kaynak; ses yüksekliği ve perdesi hız/azami hız oranını takip eder. Arketip karakteri gövdeden gelir: `"Propeller"` parçası olan (keşif İHA / SİHA) pervane uğultusu, olmayan (savaş uçağı) turbofan kükremesi alır. Oyuncu o uçağı uçarken **2D**, diğer hâllerde uzamsal; duraklamada ve yakıt bitince sıfıra iner. **Art yakıcı** motorun ALTINA bindirilen ikinci bir ilmek: kaynak yalnız o uçak ilk kez art yakıcı yaktığında (yani pratikte sadece oyuncunun uçağında) TEMBEL kuruluyor, ses sönünce durduruluyor. Tetik, kameranın FOV tekmesiyle birebir aynı kaynak: `PlayerDroneController.AfterburnerActive` + uçulan uçağın eşleşmesi. |
 | `MissileWarningAudio` | Kokpit füze uyarı tonu. HUD'un `FÜZE!` bandı ve `KAÇIŞ MANEVRASI` satırıyla **aynı iki bayrağı** okur (`MissileIncoming` / `BreakWindowOpen`), böylece göz ile kulak çelişemez: 0.6 sn aralıklı alçak bip, kaçış penceresi açılınca anında 0.2 sn aralıklı yüksek/sert bip. 2D ve ölçekli zamanda (duraklamada susar). |
+| `BallisticLauncher` | Savaş uçağının **gövde altı balistik füze fırlatıcısı** — iki Core çekirdeğinin üstünde ince kapak: `TargetDesignator` (numaralandırma + seçim) ve `WeaponSystem` (stok + atışlar arası bekleme; top, füze ve hava savunmasının kullandığı aynı atış kontrolü, `rps = 1 / BallisticMissile.ReloadSeconds`). Yeni bir stok sınıfı yazılmadı. Hasar **fırlatma anında** türetiliyor: kardeş `SihaController.MissileDamage` × 2 = **80**. **Jete özel inşa gereği:** bileşen yalnızca `AircraftProfile.BallisticRounds > 0` olduğunda takılıyor, bu da yalnız savaş uçağı. Stok **yalnızca füze şarjörü gibi** yenileniyor — zamanlayıcı/damlama yok, tek çağrı yeri `IhaController.Resupply`. Her ret yolu bir `BallisticFireResult` kaydeder, böylece HUD boşa giden tuşun sebebini söyleyebilir. |
+| `BallisticRound` | Merminin kendisi: `Ballistics.TryLoftedLaunchVelocity`'nin **YÜKSEK** yayı ile fırlatılıp Core'un `BallisticProjectile`'ı ile uçar. Güdümlü füzeden dört farkı: **hiç güdüm yok** (fırlatışta tek hız, düzeltme yapmaz), **yay çizer** (yatık hat değil), **yavaştır** (70 m/s, saniyeler sürer) ve **görünür şekilde ağırdır** (2.8 s / 0.95 genişlikte iz — füzenin 1.1 s / 0.38'ine karşı —, yoğun duman ve `NormalMissileBlastSize × DamageMultiplier = 6` büyüklüğünde patlama, füzenin 3'üne karşı). Güdümsüz olduğu için **nişan NOKTASINA** varır: hedef oradan çekilmişse ıskalar — sabit yer hedefi/SAM/AAA'ya karşı isabetli, kıvrak bir avcıya karşı değil. Ağır kafanın bilinçli bedeli. |
 
 ### Testler (Sim.Tests.EditMode)
-Her Core sistemi için bir test dosyası. Toplam **46** test dosyası. Çalıştırma:
+Her Core sistemi için bir test dosyası. Toplam **47** test dosyası. Çalıştırma:
 `Window > General > Test Runner > EditMode > Run All`.
 
 ---
@@ -397,6 +412,11 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
 | `a9bf6c6` | `HostilePalette`: düşman fraksiyonuna açık, ortak ve okunur bir livre (gri yer hedefi + karanlık SAM kalktı); SAM kanister kapakları koyulaştı. |
 | `e348035` | `AudioSynth.AddLoopableNoise` + `SnapToLoop` (Core, testli); geniş bantlı turbofan ilmeği, yeni art yakıcı ilmeği ve `EngineAudio`'nun tembel art yakıcı katmanı. |
 | `6bb43d9` | Denge: tüm yakıt depoları ×3 (jet 70→210, SİHA 100→300, keşif İHA 180→540), yakım hızları sabit; YZ kanat uçaklarının varsayılanı da 300. |
+| `31d7df2` | DEVLOG: cila turu (düşman paleti, jet/art yakıcı sesi, yakıt ×3). |
+| `1394bea` | `TargetDesignator` + `Ballistics.TryLoftedLaunchVelocity`/`LoftedTimeOfFlight` (Core, testli): kararlı hedef numaralandırma ve yay çizen atış çözümü. |
+| `b618f0e` | `AircraftProfile.BallisticRounds` (jet 2, diğerleri 0), `BallisticMissile` (hasar = 2 × normal füze, TÜRETİLMİŞ) ve dokuzuncu hangar hattı **Balistik Füze** (450/725/1150/1850, seviye başına +1 füze, listenin sonunda). |
+| `0989b0c` | `BallisticLauncher` + `BallisticRound` (Runtime): hedefleme modu (**B**, ←/→ seç, **F** ateş), yay çizen ağır mermi, jete özel stok, `BuildFighterJet`'e görünür gövde altı istasyonu. |
+| `2c5101d` | Balistik füze HUD'u: ekrandaki hedef numaraları (seçili olan dört işaretle ayrışıyor), ekran dışı/kamera arkası kenetlemesi, dördüncü silah satırı, gerekçe satırı, Türkçe tuş şeridi; hangar satır yüksekliği artık kalan yerden türetiliyor (dokuz hat). |
 
 ---
 
@@ -1461,3 +1481,104 @@ bilerek elden geçirilmedi.
 
 `ResupplyPoint`, yakıtsız süzülme yolu ve `FlightEnvelope`/irtifa mantığı **hiç değişmedi**.
 
+
+---
+
+### Tur — savaş uçağına özel balistik füze fırlatıcısı (numaralandırma + hedefleme modu + ekonomi)
+
+Kullanıcı isteği: *"özel balistik füze fırlatıcı ekleyelim savaş uçağına — o füze düşmanları
+numaralandırsın 1, 2, 3 diye, oyuncu istediği hedefi yön tuşları ile seçip ateşlesin, normal
+füzelerin iki katı hasarı olsun, savaş uçağında 2 stok olsun, oyun sonrası kazanılan puan ve
+paralarla daha fazla alabilelim o füzeden."*
+
+Dört dilimde yapıldı; her dilim ayrı commit, her commit kendi başına derlenebilir.
+
+**1) Numaralandırma neden KARARLI (`TargetDesignator`, Core, testli).** İşin asıl zorluğu bu.
+Numaralandırmanın sıralama kuralı **artan hedef ID**'sidir. Akla ilk gelen iki alternatif —
+menzile göre ya da burun kerterizine göre sıralama — burada işe yaramaz, çünkü ikisi de
+**atıcının nerede olduğunun** fonksiyonudur: uçak biraz ileri gitti diye tüm numaralar oyuncunun
+parmağı altında, iki kare arasında yer değiştirir ve nişan aldığı hedef kayar.
+`Targetable.Id` ise `TargetRegistry.NextId()`'den doğarken bir kez verilir ve asla değişmez.
+Sonuç: aynı düşman kümesi, atıcı nerede olursa olsun ve anlık görüntü hangi sırada gelirse gelsin,
+**her zaman aynı numaralandırmayı** üretir; yeni doğan düşmanın ID'si en büyük olduğu için listenin
+SONUNA eklenir ve ekranda duran hiçbir numarayı oynatmaz; ölen düşman yalnızca kendisinden
+sonrakileri bir basamak yukarı çeker. Seçim indeksle değil **ID ile** tutulur, böylece liste şekil
+değiştirince hayatta kalır; seçili hedef ölürse aynı SLOT'a düşülür (yani numaranın yeni sahibine),
+liste sonuna kırpılarak — vurulacak bir şey varken asla "hiçbir şey" seçili kalmaz, bayat ID'ye de
+asla nişan alınmaz.
+
+**2) Hasar TÜRETİLDİ, yazılmadı.** `BallisticMissile.Damage(normalFüzeHasarı) = 2 × hasar`.
+Fırlatma anında kardeş `SihaController.MissileDamage` okunuyor — normal füzenin `GuidedMunition`'a
+geçirdiği değerin ta kendisi (40) — ve ikiye katlanıyor: **80**. Projede hiçbir yerde ikinci bir
+`80` yok; normal füze ayarlandığı an balistik füze de onunla geliyor, unutulacak ikinci bir sayı
+yok.
+
+**3) GİRDİ ÇAKIŞMASI — bilinçli çözüm.** Pilot zaten oklarla uçuyor, dolayısıyla "yön tuşları ile
+seç" isteği doğrudan uygulanamazdı. `Assets/Scripts/Runtime/` içindeki **her `KeyCode` denetlendi**:
+pilot W/S (gaz), A/D (dönüş), **↑/↓ (yunuslama)**, Alt (fare trimi), Space (top), F (füze),
+Q (flare), E (art yakıcı), X (kaçış), K (karıştırıcı), Tab, C tutuyor; kamera V ve serbest uçuş
+WASD/Q/E/Space/Ctrl/Shift; kabuk R, P, G, M, H, N ve +/−. **←/→ ise uçuşta hiçbir şeye bağlı
+değildi** — yalnızca `ScenarioMenu`'nün uçak seçicisinde, yani bambaşka bir oyun durumunda.
+Çözüm bir **hedefleme modu**:
+
+- **B** fırlatıcıyı kurar / emniyete alır (B = "balistik"; denetimde boştu).
+- Kuruluyken **←/→** numaralı hedefi gezer (sararak), **F** ağır mermiyi bırakır.
+- F bir **silah seçimi** gibi davranır: mod açıkken ağır kafayı, kapalıyken normal füzeyi atar.
+  Ateş sonrası mod kendiliğinden kapanır, böylece sıradaki F yine normal füzedir ve pilotun hangi
+  silahın canlı olduğunu akılda tutması gerekmez. B'ye ikinci basış da iptal eder.
+- **↑/↓ HİÇ alınmadı.** Yunuslama her an pilotun; uçak, numaralar ekranda dururken tamamen
+  normal uçuyor. Yalnızca uçuşta boş olan iki ok ödünç alınıyor, o da sadece mod açıkken.
+- Brifing/hangar açıkken hiçbir hedefleme tuşu okunmuyor (orada ←/→ uçak seçicisi; menü kendi
+  `Update`'ini zaman donmuşken de çalıştırdığı için bu şart).
+
+**4) Yörünge normal füzeden nasıl farklı.** Mermi `Ballistics.TryLoftedLaunchVelocity`'nin
+**YÜKSEK** yayı ile fırlatılıp Core'un `BallisticProjectile`'ı ile uçuyor (yerçekimi + sürüklenme +
+rüzgâr + hava yoğunluğu) — **ikinci bir balistik uygulaması yazılmadı**, bu yalnızca var olanın
+çağıranı. Dört fark: (a) **hiç güdüm yok** — `GuidedMunition` her adımda arayıcı başlıkla PN
+koşarken bu mermi fırlatışta tek hız alır ve bir daha düzeltmez; (b) **yay çizer**, 180 m/s'lik
+füzenin yatık hattını değil; (c) **yavaştır** — 70 m/s'den çıkar, varması saniyeler sürer;
+(d) **görünür şekilde ağırdır** — 2.8 s / 0.95 genişlikte iz (füzenin 1.1 s / 0.38'ine karşı),
+yoğun duman kolonu ve `NormalMissileBlastSize × DamageMultiplier = 6` büyüklüğünde patlama
+(füzenin 3'üne karşı).
+Güdümsüz olmanın bedeli dürüstçe ödeniyor: mermi **nişan NOKTASINA** varır, hedef oradan
+çekilmişse ıskalar. Sabit yer hedefi / SAM / AAA'ya karşı isabetli, kıvrak bir düşman avcısına
+karşı değil — ağır kafanın karşılığı bu.
+
+**5) Stok ve ekonomi.** `AircraftProfile.BallisticRounds`: savaş uçağı **2**, SİHA ve keşif İHA
+**0** — fırlatıcı yalnızca jette var, `AircraftUpgrades.Apply` satın alınan füzeleri yalnızca
+istasyonu OLAN gövdeye ekler, yani hat SİHA/İHA'ya silah takamaz. Stok **yalnızca mevcut füze
+şarjörü gibi** yenilenir: zamanlayıcı ya da damlama yok, tek çağrı yeri `IhaController.Resupply`
+(üs yarıçapında tam `ResupplyPoint` turu) — gun belt'i, flare'leri ve füzeleri dolduran aynı yer.
+Hangarın dokuzuncu hattı **Balistik Füze**: 4 seviye, seviye başına +1 füze, `BaseCost` 450 →
+ortak `round(BaseCost·1.6^(L−1)/25)·25` eğrisinde **450 / 725 / 1150 / 1850** (azamiye toplam
+**4175 kredi**, 2 → 6 füze). Hat **listenin sonuna** eklendi, böylece kayıtlı seviye dizisinin
+mevcut indeksleri anlamını koruyor; seviye 0 taze kaydı bire bir aynı bırakıyor ve iki kez
+uygulamak sayıyı ikiye katlamıyor (saf fonksiyon).
+
+**6) HUD.** Fırlatıcı kuruluyken her görünen düşmanın numarası kendi ekran konumuna çiziliyor;
+dünya→ekran yolu top imlecinin (`DrawGunPipper`) yolunun aynısı ve numaralar Core'un
+designator'ından okunuyor, HUD'da yeniden hesaplanmıyor — pilotun okuduğu numara ←/→'nin gezdiği
+numaranın tam olarak aynısı. **Seçili** hedef tek bir işaretle değil dört birden ayrışıyor: 28 pt'ye
+karşı 12 pt, DOLGU amber kutu içinde koyu numara (HUD'daki her işaretin tersi), köşe parantezleri +
+halka ve altında "[F] ATEŞ". Ekranda olmayan numaralı düşman yok sayılmıyor: seçili olmayanlar kenar
+kalabalığı olacağı için düşürülüyor, **seçili** olan "DIŞARIDA"/"ARKADA" etiketiyle görüntü kenarına
+kenetleniyor (kamera arkasındaki nokta merkez üzerinden aynalı yansıdığı için kenetlemeden önce geri
+çevriliyor). Silah bloğu dört satır — BALİSTİK satırı yüzde değil **sayı** ("2/2"). Boşa giden tuş
+gerekçeli: boş raf, dolan fırlatıcı, menzil dışı hedef, çözümsüz geometri ve "bu uçakta fırlatıcı
+yok" için kısa ömürlü Türkçe sebep satırı.
+
+**7) Hangar yerleşimi.** Bir önceki tur sekiz satırda kalabalık olduğunu bildirmişti; bu dokuz
+yapıyor ve kısa pencerede satırlar alt bilgiyi taşıyordu. Satır adımı artık panelde **gerçekten
+kalan yerden** türetiliyor: altındaki her şey önce ayrılıyor, kalan satır sayısına bölünüyor ve
+okunur bir banda kırpılıyor. Sığdığı yerde eski 34+4'e kırpılıp hiçbir şey oynamıyor; sığmadığında
+satırlar daralıyor ve satır içindeki iki metin satırının taban çizgileri de yüksekliğe bağlı olduğu
+için daralan satır kendi ikinci satırını kırpmıyor. Onuncu bir hat eklenirse satırlar daralır, alt
+bilgi panelden taşmaz.
+
+**Görsel:** `BuildFighterJet`'e görünür gövde altı istasyonu eklendi — kanat altı dört füzeden üç
+yolla ayrılıyor: gövde ORTA HATTINDA, çapı/boyu ~iki katı (0.34×1.05'e karşı 0.16×0.50) ve dark
+metal değil ACCENT boyalı; sivri konili ve kuyruk kanatçıklı. Karın sensörünün arkasına park edildi.
+
+**Hiçbir mevcut oyun değeri değişmedi** (menzil, hasar, can, atış hızı, irtifa, spawn konumu).
+Mevcut füze/top/flare/karıştırıcı yolları ve `ResupplyPoint` mantığı **hiç değişmedi**; eklenen her
+şey yeni.
