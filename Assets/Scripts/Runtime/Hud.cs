@@ -537,6 +537,7 @@ namespace Sim.Runtime
             float cy = Screen.height * 0.5f;
 
             DrawGunPipper(drone);
+            DrawBallisticDesignation(drone);
 
             // HIZ (left of the crosshair) + the fuel gauge under it.
             var speedBox = new Rect(cx - 250f, cy - 24f, 130f, 46f);
@@ -553,8 +554,13 @@ namespace Sim.Runtime
             var siha = drone as SihaController;
             CountermeasureDispenser cm = drone.Countermeasures;
 
+            BallisticLauncher launcher = drone.Ballistic;
+
             const float wpnW = 380f;
-            float wpnH = HeaderH + 3f * (BarH + 5f) + 8f;
+            // FOUR rows now: top, füze, flare and the jet's balistik füze rack. The row is drawn on
+            // every archetype (as "YOK" where there is no launcher) so the block does not change
+            // height when the player switches aircraft.
+            float wpnH = HeaderH + 4f * (BarH + 5f) + 8f;
             float wpnY = Screen.height - StripH - 12f - wpnH;
             var wpn = new Rect(cx - wpnW * 0.5f, wpnY, wpnW, wpnH);
 
@@ -581,10 +587,71 @@ namespace Sim.Runtime
                 HudTheme.Bar(new Rect(bx, by, bw, BarH), cm.ChargeFraction, "FLARE", Pct(cm.ChargeFraction));
             else
                 HudTheme.Draw(new Rect(bx, by, bw, BarH), "FLARE: YOK", HudTheme.Small, HudTheme.TextFaint);
+            by += BarH + 5f;
+
+            // Balistik füze rack. A COUNT, not a percentage: there are only a handful of rounds, so
+            // "2/2" is the number the pilot actually needs. Absent on every archetype but the jet.
+            if (launcher != null)
+                HudTheme.Bar(new Rect(bx, by, bw, BarH), launcher.StockFraction, "BALİSTİK",
+                             $"{launcher.Rounds}/{launcher.MaxRounds}");
+            else
+                HudTheme.Draw(new Rect(bx, by, bw, BarH), "BALİSTİK FÜZE: YOK (YALNIZCA SAVAŞ UÇAĞI)",
+                              HudTheme.Small, HudTheme.TextFaint);
 
             // Active special abilities (E afterburner / X evasive break turn). The break turn also
             // reports its cooldown, so the pilot can tell "not ready yet" from "did nothing".
             float ax = Screen.width - Margin - 150f;
+
+            // Balistik füze state, above the other two chips. Three states the pilot can act on:
+            // armed (pick a number and press F), ready to arm, or empty.
+            if (launcher != null)
+            {
+                string ballisticText;
+                Color ballisticAccent;
+                if (launcher.Armed)
+                {
+                    // Confirmation flash, exactly like the evade chip's: the mode is visibly live.
+                    float flash = 0.6f + 0.4f * Mathf.Abs(Mathf.Sin(Time.unscaledTime * 8f));
+                    int number = launcher.Designator.SelectedNumber;
+                    ballisticText = number > 0 ? $"BALİSTİK · HEDEF {number}" : "BALİSTİK · HEDEF ARA";
+                    ballisticAccent = new Color(HudTheme.Ok.r, HudTheme.Ok.g, HudTheme.Ok.b, flash);
+                }
+                else if (!launcher.HasRounds)
+                {
+                    ballisticText = "BALİSTİK · BOŞ";
+                    ballisticAccent = HudTheme.TextFaint;
+                }
+                else
+                {
+                    ballisticText =
+                        $"BALİSTİK · {launcher.Rounds} HAZIR [{PlayerDroneController.BallisticArmKey}]";
+                    ballisticAccent = HudTheme.Amber;
+                }
+
+                HudTheme.Tag(new Rect(ax, wpnY - 28f, 150f, 22f), ballisticText, ballisticAccent);
+            }
+
+            // Reason line for a key press that did nothing: an empty rack, a cooling launcher, a
+            // target out of reach, or an archetype with no launcher at all. Centred over the weapon
+            // block and short-lived (see BallisticLauncher.ResultDisplaySeconds), so the pilot always
+            // learns WHY instead of pressing a dead key.
+            string reason = string.Empty;
+            if (launcher != null && launcher.HasRecentResult &&
+                launcher.LastResult != BallisticFireResult.Fired)
+            {
+                reason = BallisticResultText(launcher.LastResult);
+            }
+            else if (launcher == null && _pilot.BallisticDenied)
+            {
+                reason = BallisticResultText(BallisticFireResult.NoLauncher);
+            }
+
+            if (!string.IsNullOrEmpty(reason))
+            {
+                HudTheme.Draw(new Rect(cx - 260f, wpnY - 26f, 520f, 18f), reason,
+                              HudTheme.Centered, HudTheme.Critical);
+            }
+
             HudTheme.Tag(new Rect(ax, wpnY, 150f, 22f), "ART YAKICI",
                          _pilot.AfterburnerActive ? HudTheme.Amber : HudTheme.TextFaint);
 
@@ -622,6 +689,180 @@ namespace Sim.Runtime
 
             HudTheme.Draw(new Rect(ax, wpnY + 54f, 150f, 14f), "YANIK = ETKİN · SÖNÜK = PASİF",
                           HudTheme.Small, HudTheme.TextFaint);
+        }
+
+        // ------------------------------------------------------------------ balistik füze numbering
+
+        /// <summary>
+        /// Draws the balistik füze target numbers: the number <see cref="Sim.Core.TargetDesignator"/>
+        /// gave each visible hostile, painted over that hostile's own screen position. Only while the
+        /// launcher is ARMED (<c>B</c>), so the picture is clean the rest of the time.
+        ///
+        /// <para>
+        /// The world→screen path is the gun pipper's, reused verbatim: project through the camera the
+        /// <see cref="CameraRig"/> drives and work in IMGUI's downward-growing Y. The numbers
+        /// themselves are the Core designator's and are NOT recomputed here — the HUD only draws what
+        /// the launcher already decided, which is what keeps the number the pilot reads identical to
+        /// the one <c>CycleNext</c> steps through.
+        /// </para>
+        ///
+        /// <para>
+        /// OFF-SCREEN AND BEHIND-CAMERA TARGETS. A hostile that is numbered but not on screen still
+        /// exists and can still be shot, so it cannot just vanish from the picture. Unselected ones
+        /// are dropped (they would only be edge clutter), but the SELECTED one — the one the round is
+        /// actually going at — is clamped to the viewport edge with a "DIŞARIDA" / "ARKADA" caption, so
+        /// the pilot can always tell which way to look. A point behind the camera projects MIRRORED
+        /// through the centre, so it is flipped back before clamping; without that the cue slides to
+        /// the wrong side of the screen.
+        /// </para>
+        ///
+        /// Presentation only.
+        /// </summary>
+        private void DrawBallisticDesignation(IhaController drone)
+        {
+            if (drone == null) return;
+
+            BallisticLauncher launcher = drone.Ballistic;
+            if (launcher == null) return;
+            if (!launcher.Armed) return;
+
+            Camera cam = ResolveCamera();
+            if (cam == null) return;
+
+            TargetDesignator designator = launcher.Designator;
+            IReadOnlyList<DetectableTarget> targets = designator.Targets;
+            int selectedIndex = designator.SelectedIndex;
+
+            for (int i = 0; i < targets.Count; i++)
+            {
+                bool selected = i == selectedIndex;
+                Vector3 sp = cam.WorldToScreenPoint(targets[i].Position);
+                string number = (i + 1).ToString();
+
+                bool behind = sp.z <= 0f;
+                bool outside = behind
+                               || sp.x < 0f || sp.x > Screen.width
+                               || sp.y < 0f || sp.y > Screen.height;
+
+                if (outside)
+                {
+                    if (selected) DrawOffscreenDesignation(sp, behind, number);
+                    continue;
+                }
+
+                // IMGUI's Y axis grows downward, the camera's upward.
+                DrawDesignationNumber(new Vector2(sp.x, Screen.height - sp.y), number, selected);
+            }
+        }
+
+        /// <summary>
+        /// One hostile's number at its screen position. The SELECTED target is deliberately
+        /// unmistakable and is distinguished four ways at once, not one: it is more than twice the
+        /// size (28 pt against 12), its chip is FILLED amber with a dark number — inverted against
+        /// every other marker on this HUD — it is wrapped in target brackets, and it carries a ring
+        /// plus a "[F] ATEŞ" prompt naming the key that releases the round.
+        /// </summary>
+        private static void DrawDesignationNumber(Vector2 p, string number, bool selected)
+        {
+            if (!selected)
+            {
+                // Unselected: a small, quiet, hollow chip. Present but never competing with the
+                // designated target for attention.
+                var chip = new Rect(p.x - 12f, p.y - 10f, 24f, 20f);
+                HudTheme.Fill(chip, new Color(HudTheme.Bg.r, HudTheme.Bg.g, HudTheme.Bg.b, 0.72f));
+                HudTheme.Border(chip, HudTheme.TextDim);
+                HudTheme.Draw(chip, number, HudTheme.Centered, HudTheme.TextDim);
+                return;
+            }
+
+            var box = new Rect(p.x - 23f, p.y - 20f, 46f, 40f);
+            HudTheme.Fill(box, HudTheme.Amber);
+            HudTheme.Border(box, HudTheme.Text);
+            HudTheme.Draw(box, number, HudTheme.Verdict28C(), HudTheme.Bg);
+
+            // Target brackets: four corner ticks sitting just outside the chip.
+            const float bracket = 13f;
+            const float thick = 2f;
+            float left = box.x - 7f;
+            float right = box.xMax + 7f;
+            float top = box.y - 7f;
+            float bottom = box.yMax + 7f;
+
+            HudTheme.Fill(new Rect(left, top, bracket, thick), HudTheme.Amber);
+            HudTheme.Fill(new Rect(left, top, thick, bracket), HudTheme.Amber);
+            HudTheme.Fill(new Rect(right - bracket, top, bracket, thick), HudTheme.Amber);
+            HudTheme.Fill(new Rect(right - thick, top, thick, bracket), HudTheme.Amber);
+            HudTheme.Fill(new Rect(left, bottom - thick, bracket, thick), HudTheme.Amber);
+            HudTheme.Fill(new Rect(left, bottom - bracket, thick, bracket), HudTheme.Amber);
+            HudTheme.Fill(new Rect(right - bracket, bottom - thick, bracket, thick), HudTheme.Amber);
+            HudTheme.Fill(new Rect(right - thick, bottom - bracket, thick, bracket), HudTheme.Amber);
+
+            Ring(p, 34f, HudTheme.Amber, 36);
+
+            HudTheme.Draw(new Rect(p.x - 50f, bottom + 3f, 100f, 14f), "[F] ATEŞ",
+                          HudTheme.Centered, HudTheme.Amber);
+        }
+
+        /// <summary>
+        /// Edge cue for a designated target that is off the viewport (or behind the camera): the same
+        /// number, clamped inside the margins so it never hides under the bottom control strip, with a
+        /// caption saying which of the two cases it is.
+        /// </summary>
+        private static void DrawOffscreenDesignation(Vector3 screenPoint, bool behind, string number)
+        {
+            float x = screenPoint.x;
+            float y = screenPoint.y;
+
+            // A point behind the camera projects mirrored through the centre; flip it back so the cue
+            // ends up on the side the target actually is.
+            if (behind)
+            {
+                x = Screen.width - x;
+                y = Screen.height - y;
+            }
+
+            var p = new Vector2(x, Screen.height - y);
+
+            const float pad = 40f;
+            p.x = Mathf.Clamp(p.x, pad, Mathf.Max(pad, Screen.width - pad));
+            p.y = Mathf.Clamp(p.y, pad, Mathf.Max(pad, Screen.height - StripH - pad));
+
+            var chip = new Rect(p.x - 17f, p.y - 14f, 34f, 28f);
+            HudTheme.Fill(chip, new Color(HudTheme.Bg.r, HudTheme.Bg.g, HudTheme.Bg.b, 0.85f));
+            HudTheme.Border(chip, HudTheme.Amber);
+            HudTheme.Draw(chip, number, HudTheme.Centered, HudTheme.Amber);
+            HudTheme.Draw(new Rect(chip.x - 23f, chip.yMax + 1f, 80f, 13f),
+                          behind ? "ARKADA" : "DIŞARIDA", HudTheme.Centered, HudTheme.TextFaint);
+        }
+
+        /// <summary>
+        /// True while the piloted aircraft's balistik füze launcher is armed. Every reference is
+        /// null-checked with Unity's own <c>==</c> (never <c>?.</c>), because any of the pilot, the
+        /// flown aircraft or the launcher may be absent or already destroyed.
+        /// </summary>
+        private bool BallisticArmed()
+        {
+            if (_pilot == null) return false;
+            IhaController drone = _pilot.Controlled;
+            if (drone == null) return false;
+            BallisticLauncher launcher = drone.Ballistic;
+            return launcher != null && launcher.Armed;
+        }
+
+        /// <summary>Turkish reason line for a balistik füze launch attempt that did not fire.</summary>
+        private static string BallisticResultText(BallisticFireResult result)
+        {
+            switch (result)
+            {
+                case BallisticFireResult.NoRounds: return "BALİSTİK FÜZE KALMADI — ÜSSE DÖN VEYA HANGARDAN AL";
+                case BallisticFireResult.Cooling: return "BALİSTİK FÜZE DOLUYOR";
+                case BallisticFireResult.NoTarget: return "BALİSTİK FÜZE: HEDEF YOK";
+                case BallisticFireResult.OutOfRange:
+                    return $"BALİSTİK FÜZE: HEDEF MENZİL DIŞI (AZAMİ {BallisticMissile.MaxRange:0} m)";
+                case BallisticFireResult.NoSolution: return "BALİSTİK FÜZE: ATIŞ ÇÖZÜMÜ YOK";
+                case BallisticFireResult.NoLauncher: return "BALİSTİK FÜZE: BU UÇAKTA FIRLATICI YOK";
+                default: return string.Empty;
+            }
         }
 
         /// <summary>A bordered instrument readout: dim caption, big value and a unit suffix.</summary>
@@ -1239,9 +1480,17 @@ namespace Sim.Runtime
                               + (piloting ? " (ÇIKIŞ)" : string.Empty)
                               + (piloting ? (cockpit ? " · V: TAKİP KAMERASI" : " · V: KOKPİT") : string.Empty),
                           HudTheme.Centered, HudTheme.TextFaint);
-            HudTheme.Draw(l2, "W/S: GAZ · A/D: DÖNÜŞ · ↑/↓: YUNUSLAMA · SPACE: TOP · F: FÜZE · "
-                              + "Q: FLARE · E: ART YAKICI · X: KAÇIŞ MANEVRASI · K: KARIŞTIRICI",
-                          HudTheme.Centered, HudTheme.TextFaint);
+            // While the balistik füze is ARMED the strip switches to the targeting keys instead of
+            // growing: the two arrows and the release key are the only thing the pilot needs then, and
+            // the flight keys are repeated so it is obvious the aircraft is still theirs to fly.
+            string weaponHints = BallisticArmed()
+                ? "BALİSTİK FÜZE KURULU · ←/→: HEDEF SEÇ · F: ATEŞ · "
+                  + $"{PlayerDroneController.BallisticArmKey}: İPTAL · "
+                  + "W/S: GAZ · A/D: DÖNÜŞ · ↑/↓: YUNUSLAMA"
+                : "W/S: GAZ · A/D: DÖNÜŞ · ↑/↓: YUNUSLAMA · SPACE: TOP · F: FÜZE · "
+                  + "Q: FLARE · E: ART YAKICI · X: KAÇIŞ MANEVRASI · K: KARIŞTIRICI · "
+                  + $"{PlayerDroneController.BallisticArmKey}: BALİSTİK FÜZE";
+            HudTheme.Draw(l2, weaponHints, HudTheme.Centered, HudTheme.TextFaint);
             string fleetHint = fleetVisible ? "GİZLE" : "GÖSTER";
             // Master volume state comes from the shared (rebuild-proof) SoundSettings, so the strip
             // shows what the player will actually hear: "SES %70" or "SES KAPALI".

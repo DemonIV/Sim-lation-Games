@@ -79,9 +79,16 @@ namespace Sim.Runtime
         private const int LevelColumns = 4;
         private const float MinLevelCardH = 104f;
 
-        // Hangar: one row per upgrade track.
+        // Hangar: one row per upgrade track. HangarRowH is the PREFERRED height; DrawHangar shrinks
+        // the rows toward HangarRowMinH when the track list does not fit the panel, which it stopped
+        // doing on a short window once the balistik füze hattı made nine tracks.
         private const float HangarRowH = 34f;
         private const float HangarRowGap = 4f;
+        // Two 14px text lines plus 2px of padding top and bottom. Below this a row clips its own
+        // second line, so the rows never shrink past it.
+        private const float HangarRowMinH = 32f;
+        // Gap used when the rows are compressed; the preferred HangarRowGap is restored when they fit.
+        private const float HangarRowMinGap = 2f;
         private const float HangarBuyW = 118f;
 
         /// <summary>How long (unscaled seconds) a hangar message stays on screen.</summary>
@@ -415,10 +422,24 @@ namespace Sim.Runtime
             float x = body.x + 14f;
             float w = Mathf.Max(240f, body.width - 28f);
 
+            // LAYOUT. The row pitch is DERIVED from the space actually left in the panel instead of
+            // being fixed, because the track list grows: it is NINE rows since the balistik füze hattı
+            // was appended, and a previous turn already flagged it as crowded at eight. Everything
+            // below the rows is reserved first (feedback line, separator, footer), then what remains is
+            // divided by the row count and clamped into a readable band. Consequences:
+            //   · where the rows already fitted, the pitch clamps to the old 34 + 4 and NOTHING moves;
+            //   · on a short window they compress to HangarRowMinH instead of running over the footer;
+            //   · a tenth track tightens the rows rather than pushing the reset button off the panel.
+            const float reservedBelow = 30f + 8f + 22f;
+            float available = Mathf.Max(HangarRowMinH, (body.yMax - reservedBelow) - y);
+            float pitch = tracks.Length > 0 ? available / tracks.Length : HangarRowH + HangarRowGap;
+            pitch = Mathf.Clamp(pitch, HangarRowMinH + HangarRowMinGap, HangarRowH + HangarRowGap);
+            float rowH = Mathf.Min(HangarRowH, pitch - HangarRowMinGap);
+
             for (int i = 0; i < tracks.Length; i++)
             {
-                DrawHangarRow(new Rect(x, y, w, HangarRowH), tracks[i]);
-                y += HangarRowH + HangarRowGap;
+                DrawHangarRow(new Rect(x, y, w, rowH), tracks[i]);
+                y += pitch;
             }
 
             // Feedback line: why the last purchase was refused, or what was bought.
@@ -454,17 +475,24 @@ namespace Sim.Runtime
             HudTheme.Fill(r, HudTheme.PanelAlt);
             HudTheme.Border(r, HudTheme.Line);
 
+            // The row carries TWO text lines, and its height is no longer fixed (see DrawHangar: nine
+            // tracks compress the rows on a short window). So both baselines are derived from the
+            // height instead of hard-coded — at the preferred 34 px these land on the original
+            // offsets, and at the 32 px minimum the second line still clears the first.
+            float topY = r.y + 2f;
+            float botY = r.y + r.height - 16f;
+
             float x = r.x + 10f;
-            HudTheme.Draw(new Rect(x, r.y + 3f, 150f, 15f), Upper(UpgradeCatalog.Name(track)),
+            HudTheme.Draw(new Rect(x, topY, 150f, 15f), Upper(UpgradeCatalog.Name(track)),
                           HudTheme.SectionLabel, maxed ? HudTheme.Ok : HudTheme.Amber);
-            HudTheme.Draw(new Rect(x, r.y + 17f, 210f, 14f), UpgradeCatalog.Description(track),
+            HudTheme.Draw(new Rect(x, botY, 210f, 14f), UpgradeCatalog.Description(track),
                           HudTheme.Small, HudTheme.TextFaint);
 
             // Level pips: one small block per level, the bought ones filled.
             float pipsX = x + 220f;
-            DrawLevelPips(new Rect(pipsX, r.y + 6f, 9f * max + 3f * (max - 1), 9f), level, max,
+            DrawLevelPips(new Rect(pipsX, topY + 3f, 9f * max + 3f * (max - 1), 9f), level, max,
                           maxed ? HudTheme.Ok : HudTheme.Amber);
-            HudTheme.Draw(new Rect(pipsX, r.y + 18f, 180f, 14f),
+            HudTheme.Draw(new Rect(pipsX, botY, 180f, 14f),
                           $"SV {level}/{max}  ·  {UpgradeCatalog.EffectSummary(track, level)}",
                           HudTheme.Small, HudTheme.TextDim);
 
@@ -473,15 +501,15 @@ namespace Sim.Runtime
             float nextW = Mathf.Max(60f, r.xMax - 10f - HangarBuyW - 10f - nextX);
             if (nextW > 60f)
             {
-                HudTheme.Draw(new Rect(nextX, r.y + 3f, nextW, 15f),
+                HudTheme.Draw(new Rect(nextX, topY, nextW, 15f),
                               maxed ? "AZAMİ SEVİYE" : $"SONRAKİ: {UpgradeCatalog.EffectSummary(track, level + 1)}",
                               HudTheme.Small, maxed ? HudTheme.Ok : HudTheme.Text);
-                HudTheme.Draw(new Rect(nextX, r.y + 17f, nextW, 14f),
+                HudTheme.Draw(new Rect(nextX, botY, nextW, 14f),
                               maxed ? string.Empty : $"BEDEL {cost} KREDİ",
                               HudTheme.Small, affordable ? HudTheme.TextDim : HudTheme.Critical);
             }
 
-            var buy = new Rect(r.xMax - 10f - HangarBuyW, r.y + 6f, HangarBuyW, r.height - 12f);
+            var buy = new Rect(r.xMax - 10f - HangarBuyW, r.y + 5f, HangarBuyW, r.height - 10f);
             if (DrawBuyButton(buy, maxed, affordable, cost)) Purchase(track, maxed, affordable, cost);
         }
 
@@ -782,8 +810,12 @@ namespace Sim.Runtime
             HudTheme.Draw(new Rect(x, y + 18f, w, 18f),
                           "C: PİLOT MODU · W/S: GAZ · A/D: DÖNÜŞ · ↑/↓: YUNUSLAMA",
                           HudTheme.Small, HudTheme.TextDim);
+            // The balistik füze is listed with its arrow keys inline, because the whole point of the
+            // binding is that B routes ←/→ into target selection — naming B on its own would not
+            // tell the player how to aim it. Only the fighter jet carries the launcher.
             HudTheme.Draw(new Rect(x, y + 36f, w, 18f),
-                          "SPACE: TOP · F: FÜZE · Q: FLARE · E: ART YAKICI · X: KAÇIŞ",
+                          $"SPACE: TOP · F: FÜZE · {PlayerDroneController.BallisticArmKey}: BALİSTİK FÜZE"
+                          + " (←/→ HEDEF SEÇ, F ATEŞ) · Q: FLARE · E: ART YAKICI · X: KAÇIŞ",
                           HudTheme.Small, HudTheme.TextDim);
             HudTheme.Draw(new Rect(x, y + 54f, w, 18f),
                           "P: DURAKLAT · +/−: HIZ · R: YENİDEN · M: MENÜ · H: HANGAR",
