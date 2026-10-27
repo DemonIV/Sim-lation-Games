@@ -546,9 +546,15 @@ namespace Sim.Runtime
             lake.transform.position = new Vector3(l.x, bed, l.y);
 
             float r = FreeFlightWorld.LakeRadius;
-            Prop(lake.transform, PrimitiveType.Cylinder, "Shore", new Vector3(0f, 0.22f, 0f),
-                 new Vector3((r + 13f) * 2f, 0.05f, (r + 13f) * 2f), Vector3.zero, shore);
-            Prop(lake.transform, PrimitiveType.Cylinder, "Water", new Vector3(0f, 0.7f, 0f),
+
+            // The shore ring overhangs the level bed by 8 m, i.e. into the first fifth of the shore
+            // ramp. Its height is set so its OUTER edge still clears the ramp's ground there
+            // (-3 + 8/45 * 3 = -2.47 m): a wet-sand ring that reads as a rim rather than a disc with
+            // its edge buried in the hillside. The water sheet then sits above it, which is also what
+            // keeps the two from z-fighting where they overlap.
+            Prop(lake.transform, PrimitiveType.Cylinder, "Shore", new Vector3(0f, 0.55f, 0f),
+                 new Vector3((r + 8f) * 2f, 0.05f, (r + 8f) * 2f), Vector3.zero, shore);
+            Prop(lake.transform, PrimitiveType.Cylinder, "Water", new Vector3(0f, 0.72f, 0f),
                  new Vector3(r * 2f, 0.06f, r * 2f), Vector3.zero, water);
         }
 
