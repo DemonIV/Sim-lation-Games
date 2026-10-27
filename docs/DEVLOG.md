@@ -125,6 +125,18 @@ yenileniyor ve hangarın dokuzuncu hattı **Balistik Füze** (450/725/1150/1850,
 - **Derleme yok.** Web ortamında `dotnet`/Unity kurulu değildir; kod burada derlenemez ve
   çalıştırılamaz. Doğruluk dikkatli okumayla sağlanır; EditMode testlerini Editor'de **kullanıcı**
   çalıştırır.
+- **`sim-unity-lint` mod'u (makine denetimi, depoda değil).** CLAUDE.md'deki "Worker kuralları"nın
+  beş tanesi artık elle değil mekanik olarak denetleniyor: `Assets/` altındaki her `.cs` yazımında
+  (Write / Edit / dosya yazan Bash) **yalnızca o dosya** kontrol edilir — (1) Unity 6'da kaldırılmış
+  API'ler (`FindObjectOfType`, `FindObjectsOfType`, `GetInstanceID`), (2) `UnityEngine.Object`
+  üzerinde `?.`, (3) süslü/normal/köşeli parantez dengesi ve kapanmamış yorum/literal,
+  (4) `Assets/Scripts/Core/` saflığı (MonoBehaviour, ScriptableObject, `[SerializeField]`, sıfır
+  argümanlı `Awake()`/`Start()`/`Update()`, `using UnityEngine.<Alt>`), (5) yeni Core dosyası için
+  EditMode testi hatırlatması. **Asla bir aracı engellemez** — bulguları araç sonucunun `context`
+  alanıyla modele iletir, yanlış pozitif bir engelleme hiç denetim olmamasından kötü olurdu.
+  Mod **depoda değildir**: kabın içinde `/root/.claude/dev-mods/<oturum>/sim-unity-lint/` altında
+  durur ve kapla birlikte yok olur. Elle çalıştırmak için o klasörde
+  `node tools/lint-cs.ts <dosya.cs>`, oturum içinde `/unity-lint <dosya.cs>`.
 - **Depoda `.unity` sahne varlığı yok.** Sahne çalışma zamanında `SimulationBootstrap.Awake` içinde
   kurulur. Kullanıcının tek seferlik kurulumu: boş sahne → boş GameObject → `SimulationBootstrap`
   ekle → Play.
@@ -243,6 +255,8 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `SoundSettings` | Ana ses seviyesi + sessize alma kuralları. Sessize alma "seviyeyi 0 yap" DEĞİL, altındaki seviyeyi hatırlar; `CycleVolume` tek tuşluk merdiveni (%100 → %70 → %40 → KAPALI) yürütür ve merdiven dışı bir seviyeden bile mutlaka hareket eder; `Restore` bozuk/NaN değerde varsayılana düşer. `EffectiveVolume` Runtime'ın mixer'a yazdığı tek sayı. |
 | `TargetDesignator` | Görünen düşmanları **1, 2, 3 …** diye numaralandırır ve pilotun seçimini tutar (savaş uçağının balistik füzesi için). Sıralama kuralı **ARTAN HEDEF ID**'sidir ve bütün espri budur: menzil ya da burun kerterizi gibi ATICIYA bağlı bir ölçüt kullanılsaydı uçak biraz ilerleyince tüm numaralar oyuncunun parmağı altında kayardı. `Targetable.Id` `TargetRegistry.NextId()`'den bir kez verilir ve asla değişmez, dolayısıyla numaralandırma kare kare **kararlı**: yeni düşman listenin SONUNA eklenir ve ekrandaki hiçbir numarayı oynatmaz, ölen düşman yalnızca kendisinden sonrakileri bir basamak yukarı çeker. Seçim indeksle değil **ID ile** tutulur, böylece liste şekil değiştirince hayatta kalır; seçili hedef ölünce aynı SLOT'a (yani bir sonraki düşmana) düşülür, asla boşluğa nişan alınmaz ve asla bayat ID'de kalınmaz. `CycleNext`/`CyclePrevious` iki yönde de sarar. |
 | `BallisticMissile` | Savaş uçağının balistik füzesinin **ortak tanımı**. Hasar TÜRETİLİR, hiçbir yere yazılmaz: `Damage(normalFüzeHasarı) = DamageMultiplier (2) × hasar`, yani "iki kat hasar" sözü inşa gereği doğru kalır ve normal füze ayarlanınca bu da onunla gelir. Fırlatma hızı **70 m/s** (güdümlü füzenin 180'inin çok altında: ağır, yay çizen, geç varan mermi), yerçekimi `GunPipper.EarthGravity`, tapa yarıçapı 7 m, azami menzil **400 m** (düz azami menzil v²/g ≈ 499 m olduğu için dürüst sınır), atışlar arası 2 sn. |
+| `SimMode` / `FreeFlightRules` | Oyuncunun NE yaptığı — kampanya seviyesi mi, serbest uçuş kum havuzu mu. Bir zorluk ya da senaryo değil, hepsinin bir ÜST katmanı. `FreeFlightRules` kum havuzunun kurallarını tek yerde tutuyor: düşman spawn'ı, kayıt defterine yazma, HUD'ın görev satırları, yakıt saati, kokpitte başlama ve YZ kanat uçakları. Hepsi aksi hâlde ayrı bir Runtime dosyasında ayrı bir `if` olurdu ve modun bütün esprisi bu cevapların birbiriyle çelişmemesi: kredi ödemeyip seviye açan ya da skor satırını saklayıp görev sonucunu defterine işleyen bir kum havuzu, kum havuzu olmamasından kötüdür. En kritiği `TouchesCampaignSave` — serbest uçuşta `false`, ve Runtime buna `CampaignSession.CompleteMission`'a hiç ulaşmayarak uyuyor (para ödeyen, seviye tamamlayan ve `PlayerPrefs`'e yazan tek fonksiyon o). `AircraftId` savaş uçağı: mod "bir jet ile uçmak" diye istendi. |
+| `FreeFlightWorld` | Kum havuzunun DÜNYASI: ne kadar büyük (1200 × 1200 m arazi, 12 m ızgara), zemini ne yapıyor, nirengi noktaları nerede ve ne kadar yoğun döşenmiş. `TerrainField` gibi deterministik, ama onun YERİNE geçmiyor: muharebe sahasının zemini taşıyıcı bir eleman (`FlightEnvelope` 18 m seyir tabanını onun 3 m genliğinden türetiyor), bu yüzden kum havuzu kendi alanını alıyor — aynı Perlin yasası, 222 m dalga boyu, 7 m genlik ve zemine oyulmuş üç özellik: **tepe kümesi** (üç örtüşen kubbe, 55 m; `Mathf.Max` ile birleştiği için zirve `HillClusterHeight` ile sınırlı, üç katına yığılmıyor), **göl düzlüğü** (110 m yarıçapında dümdüz tabaka −3 m'de, 45 m kıyı rampası) ve **boğaz** (22 m derin, Z boyunca uzanan, genişliği boyunca smoothstep'li ve uçlarda kapanan vadi). `BridgeDeckAltitude` yazılmıyor, iki ayağının zemininden TÜRETİLİYOR. Prop bütçesi de burada ve asıl nokta orada: `PropDensityFactor` = 0.15, yani metrekare başına yoğunluk 6.7 kat DÜŞÜYOR ve 15.5 kat büyük alan yalnızca ~2.3 kat prop taşıyor (`ScaleCount`: 220/70/18 → 510/162/42). `IsScatterable` üs, göl ve kıyısı, boğaz ve rampaları, direk/köprü çevresini boş tutuyor — kritik olan göl, çünkü açık suda duran bir ağaç manzara değil hata gibi okunur. Sis (0.0009) ve uzak kırpma (2600 m > köşegen 1697 m) de sınırdan türediği için burada. |
 
 ### Sim.Runtime (ince MonoBehaviour'lar)
 | Bileşen | Görevi |
@@ -292,6 +306,7 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 ### Testler (Sim.Tests.EditMode)
 Her Core sistemi için bir test dosyası. Toplam **47** test dosyası. Çalıştırma:
 `Window > General > Test Runner > EditMode > Run All`.
+| `CampaignSession` (mod) | Statik kampanya sahibinin yanında artık `SelectedMode` de duruyor (+ `IsFreeFlight`, `FreeFlightProfile`, `ActiveProfile`). `SelectedLevelIndex` gibi statik, çünkü moda girip çıkmak `Rebuild()`'den geçiyor. **KASITLI OLARAK KAYDEDİLMİYOR:** `CampaignSaveData`'da ve `Save()`'de yok, yani kum havuzu uçuşu `PlayerPrefs`'te iz bırakmıyor ve oyun her açılışta kampanyada başlıyor. `FreeFlightProfile` garajı OKUYOR ama yazmıyor ve menüdeki kampanya uçak seçimine hiç dokunmuyor — kum havuzu oyuncuyu her zaman kendi jetine, yükseltmeleri dâhil, bindiriyor. `CompleteMission` serbest uçuşta en başta `0` dönüyor. |
 
 ---
 
@@ -417,6 +432,7 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
 | `b618f0e` | `AircraftProfile.BallisticRounds` (jet 2, diğerleri 0), `BallisticMissile` (hasar = 2 × normal füze, TÜRETİLMİŞ) ve dokuzuncu hangar hattı **Balistik Füze** (450/725/1150/1850, seviye başına +1 füze, listenin sonunda). |
 | `0989b0c` | `BallisticLauncher` + `BallisticRound` (Runtime): hedefleme modu (**B**, ←/→ seç, **F** ateş), yay çizen ağır mermi, jete özel stok, `BuildFighterJet`'e görünür gövde altı istasyonu. |
 | `2c5101d` | Balistik füze HUD'u: ekrandaki hedef numaraları (seçili olan dört işaretle ayrışıyor), ekran dışı/kamera arkası kenetlemesi, dördüncü silah satırı, gerekçe satırı, Türkçe tuş şeridi; hangar satır yüksekliği artık kalan yerden türetiliyor (dokuz hat). |
+| `bu tur` | DEVLOG: `sim-unity-lint` mod'u (CLAUDE.md'nin beş Unity kuralını her `.cs` yazımında mekanik denetler; mod'un kendisi kabın içinde, depoda değil). **Hiçbir Unity kaynak dosyası değişmedi.** |
 
 ---
 
@@ -1582,3 +1598,44 @@ metal değil ACCENT boyalı; sivri konili ve kuyruk kanatçıklı. Karın sensö
 **Hiçbir mevcut oyun değeri değişmedi** (menzil, hasar, can, atış hızı, irtifa, spawn konumu).
 Mevcut füze/top/flare/karıştırıcı yolları ve `ResupplyPoint` mantığı **hiç değişmedi**; eklenen her
 şey yeni.
+
+---
+
+### Tur — kuralları elle değil mekanik denetleyen `sim-unity-lint` mod'u
+
+Bu tur **hiçbir Unity kaynak dosyası değişmedi.** Eklenen tek şey bir Claude Code mod'u ve bu not.
+
+**Neden.** `### Ortam gerçekleri` yıllardır aynı şeyi söylüyor: burada derleme yok, doğruluk
+"dikkatli okuma" ile sağlanıyor. `### Çalışma yöntemi` ise bunun bir kez başarısız olduğunu
+kaydediyor — derlenmeyen bir dilim commit'lendi ve **geri alınmak zorunda kaldı**. Bu tur o
+başarısızlık biçimini bir özen meselesi olmaktan çıkarıp mekanik hale getiriyor.
+
+**Ne.** `sim-unity-lint`, `Assets/` altındaki her `.cs` yazımından sonra **yalnızca o dosyayı**
+okuyup CLAUDE.md'nin beş kuralını denetleyen bir hook. Ayrıntı ve elle çalıştırma komutu
+`### Ortam gerçekleri`'nin son maddesinde.
+
+**Tasarım kararları, gerekçeleriyle:**
+- **Engellemez, bildirir.** Bulgular araç sonucunun `context` alanına yazılır (modelin sonuçtan
+  hemen sonra okuduğu kanal) ve kişiye kısa bir toast/durum satırı düşer. `?.` kuralı tip bilgisi
+  olmadan kesin denetlenemez, dolayısıyla sezgisel; yanlış pozitifte bir yazmayı **engellemek** hiç
+  denetim olmamasından kötü olurdu. Her hook'un `.catch`'i `next(e)`'yi yeniden oynatır, yani
+  denetçideki bir çökme hiçbir aracı bozmaz; her dosya okuması korumalı — okunamayan dosya sessiz
+  çıkıştır, yığın izi değil.
+- **Dar kapsam.** `.cs` olmayan ya da o `Assets/` ağacının dışındaki her yol anında ve sessizce
+  çıkar. Depo geneli tarama **yoktur**; bir `?.` alıcısının tipi bilinmiyorsa yalnızca o tipin
+  kendi dosyası okunur.
+- **Sezgiselin sınırı dürüstçe yazıldı.** Kural 2 yalnızca alıcısının Unity nesnesi olduğunu
+  *gösterebildiği* yerde bayrak kaldırır; `string`, koleksiyon, delege/olay ve `Sim.Core` tipleri
+  hiç bayraklanmaz. Kaçırdıkları mod'un README'sinde listeli (`??`, `?[`, `Dictionary<K,V>`,
+  zincirin ilk halkasından sonrası, iki kalıtım seviyesi uzaktaki proje tipleri).
+
+**Doğrulama.** Denetçi deponun **137 `.cs` dosyasının tamamında** 0.3 s'de çalıştırıldı: hiçbir
+hata bulgusu yok, yani yanlış pozitif yok. (`TargetTracker.Update(Vector3, float)` bilerek
+kurtarıldı — Unity mesajı sadece sıfır argümanlı biçimdir; `Hud.cs`/`BallisticRound.cs`/
+`TargetRegistry.cs` içindeki "asla `?.`" yorumları da yorum oldukları için görülmüyor.) Beş kural
+ayrı örnek dosyalarla ayrı ayrı sınandı, mod'un kendi testleri (`claude plugin test`) 9/9 geçiyor.
+
+**Tek gerçek bulgu (bilgi amaçlı, iş emri değil):** `Assets/Scripts/Core/` altındaki şu dört tipin
+eşleşen EditMode testi yok — `BallisticMissile`, `CampaignLevel`, `DetectableTarget`, `Upgrades`.
+Dördü de sabit/veri tipi; kural 5 yalnızca **yeni** dosyada uyarır, yani bunlar bundan sonra
+sessizdir.
