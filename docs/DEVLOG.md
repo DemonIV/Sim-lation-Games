@@ -113,6 +113,19 @@ yenileniyor ve hangarın dokuzuncu hattı **Balistik Füze** (450/725/1150/1850,
 6 füze) ile artırılıyor. Mermi yay çizen, yavaş ve güdümsüz: nişan NOKTASINA varır, kıvrak hedef
 ıskalanır. Ayrıntı `## 9`'un son maddesinde.
 
+En son tur oyuna **ikinci bir mod** geldi (kullanıcı isteği: "kendi başımıza bir jet ile
+uçabileceğimiz bir ortam geliştir"): **Serbest Uçuş**, kampanyanın yanında duran, görev baskısı
+olmayan bir kum havuzu. Görev seçim ekranında seviye ızgarasının altında tam genişlikte bir bant
+olarak seçiliyor; düşman, dalga, skor ve görev sonu yok, **ESC** (artık M'nin eşi) menüye döndürür.
+Kampanyadan **üç ayrı katla** yalıtıldı: mod `CampaignSession.SelectedMode`'da statik durur ama
+**kaydedilmez**, serbest uçuşta `ScenarioController` **hiç başlatılmaz** (dolayısıyla kazan/kaybet
+ve defter yolu kendiliğinden ölü), üstüne `CompleteMission` ve `Hud.TryBookMissionResult` o modda en
+başta döner. Dünya muharebe sahasının 300 × 300 m arazisi yerine **1200 × 1200 m** (yeni
+`FreeFlightWorld`; `TerrainField` taşıyıcı olduğu için **değiştirilmedi**), içinde tepe kümesi, göl
+düzlüğü, boğaz, 88 m kafes direk ve boğazı geçen köprü var. Prop sayısı çarpılmadı,
+**yoğunluk düşürüldü** (alan 15.5×, prop ~2.3×). Yakıt tüketimi **kapatıldı** (cömertleştirilmedi),
+silahlar açık, oyuncu ilk kareden kokpitte. Ayrıntı `## 9`'un son maddesinde.
+
 ### Yeni oturum için okuma sırası
 1. Bu bölüm.
 2. `CLAUDE.md` → `## Worker kuralları`.
@@ -302,11 +315,14 @@ Her katman kendi `.asmdef` dosyasına sahiptir: `Sim.Core`, `Sim.Runtime` (→ S
 | `MissileWarningAudio` | Kokpit füze uyarı tonu. HUD'un `FÜZE!` bandı ve `KAÇIŞ MANEVRASI` satırıyla **aynı iki bayrağı** okur (`MissileIncoming` / `BreakWindowOpen`), böylece göz ile kulak çelişemez: 0.6 sn aralıklı alçak bip, kaçış penceresi açılınca anında 0.2 sn aralıklı yüksek/sert bip. 2D ve ölçekli zamanda (duraklamada susar). |
 | `BallisticLauncher` | Savaş uçağının **gövde altı balistik füze fırlatıcısı** — iki Core çekirdeğinin üstünde ince kapak: `TargetDesignator` (numaralandırma + seçim) ve `WeaponSystem` (stok + atışlar arası bekleme; top, füze ve hava savunmasının kullandığı aynı atış kontrolü, `rps = 1 / BallisticMissile.ReloadSeconds`). Yeni bir stok sınıfı yazılmadı. Hasar **fırlatma anında** türetiliyor: kardeş `SihaController.MissileDamage` × 2 = **80**. **Jete özel inşa gereği:** bileşen yalnızca `AircraftProfile.BallisticRounds > 0` olduğunda takılıyor, bu da yalnız savaş uçağı. Stok **yalnızca füze şarjörü gibi** yenileniyor — zamanlayıcı/damlama yok, tek çağrı yeri `IhaController.Resupply`. Her ret yolu bir `BallisticFireResult` kaydeder, böylece HUD boşa giden tuşun sebebini söyleyebilir. |
 | `BallisticRound` | Merminin kendisi: `Ballistics.TryLoftedLaunchVelocity`'nin **YÜKSEK** yayı ile fırlatılıp Core'un `BallisticProjectile`'ı ile uçar. Güdümlü füzeden dört farkı: **hiç güdüm yok** (fırlatışta tek hız, düzeltme yapmaz), **yay çizer** (yatık hat değil), **yavaştır** (70 m/s, saniyeler sürer) ve **görünür şekilde ağırdır** (2.8 s / 0.95 genişlikte iz — füzenin 1.1 s / 0.38'ine karşı —, yoğun duman ve `NormalMissileBlastSize × DamageMultiplier = 6` büyüklüğünde patlama, füzenin 3'üne karşı). Güdümsüz olduğu için **nişan NOKTASINA** varır: hedef oradan çekilmişse ıskalar — sabit yer hedefi/SAM/AAA'ya karşı isabetli, kıvrak bir avcıya karşı değil. Ağır kafanın bilinçli bedeli. |
+| `CampaignSession` (mod) | Statik kampanya sahibinin yanında artık `SelectedMode` de duruyor (+ `IsFreeFlight`, `FreeFlightProfile`, `ActiveProfile`). `SelectedLevelIndex` gibi statik, çünkü moda girip çıkmak `Rebuild()`'den geçiyor. **KASITLI OLARAK KAYDEDİLMİYOR:** `CampaignSaveData`'da ve `Save()`'de yok, yani kum havuzu uçuşu `PlayerPrefs`'te iz bırakmıyor ve oyun her açılışta kampanyada başlıyor. `FreeFlightProfile` garajı OKUYOR ama yazmıyor ve menüdeki kampanya uçak seçimine hiç dokunmuyor — kum havuzu oyuncuyu her zaman kendi jetine, yükseltmeleri dâhil, bindiriyor. `CompleteMission` serbest uçuşta en başta `0` dönüyor. |
+| `EnvironmentBuilder` (serbest uçuş) | Arazi ve dağılım artık bir yükseklik alanı ALIYOR (`Func<float,float,float>`, null = `TerrainField.Height`) ve dağılım bir de yerleşim filtresi (`accept`); muharebe sahasının prop bütçesi sabit (`DefaultTreeCount`/`RockCount`/`BuildingCount` = 220/70/18), çünkü ölçekleme YASASI testli olarak Core'da, SAYILAR burada ve ikisi de iki kez yazılmıyor. `ApplyAtmosphere` sis ve uzak kırpma alıyor. `BuildLandmarks()` kum havuzunun **inşa edilmiş** üç nirengi noktasını kuruyor, ~40 parça: **direk** (17 — beton temel, tabanda açılıp tepede toplanan dört bacak, dört halka, iki kat çapraz takviye, iki konsol, mızrak, kırmızı emisyonlu şamandıra; tek kalın silindir yerine KAFES, çünkü nesnenin tek işi 1.2 km'nin öbür ucundan tanınmak), **köprü** (21 — güverte, korkuluklar, boğaza inen iki ayak, iki pilon, sekiz askı; güverte kotu ayak zeminlerinden, ayak uzunluğu altındaki boğaz tabanından türüyor) ve **göl** (2 — oyulmuş dümdüz tabanın üstünde pürüzsüz disk + ıslak kıyı halkası). Tepe kümesi ve boğazın kendisi zemine oyulu, hiç nesne tutmuyor. Yeni `Strut` yardımcısı iki nokta arasına silindir geriyor (`Quaternion.FromToRotation`). Hepsi yine collider'sız dekor. |
+| `IhaController.UnlimitedFuel` | Serbest uçuşta deponun hiç boşalmaması. İki tüketim noktasını da kapatıyor (pilotun sürdüğü `ConsumeFuel` ve `Update`'teki YZ yakımı), deponun KENDİSİNİ değil — böylece `FuelFraction` 1 okumaya devam ediyor ve HUD'ın yakıt göstergesi boşalmak yerine dolu kalıyor. Her kampanya spawn'ı `false` bırakıyor. |
+| `PlayerDroneController.RequestImmediateControl` | **C**'ye basılmadan kokpitte başlama. Orada değil bir sonraki `Update`'te devralıyor, çünkü spawner bunu `Awake`'den çağırıyor ve o noktada uçağın `Start`'ı çalışmadığı için `FlightModel` yok, `Speed` 0 okunur — pilot durumu kurulmamış bir gövdeden tohumlanırdı. Devralınan gaz `AutoTakeoverThrottle01` (0.66) ile seyir hızına çekiliyor: sıfır gazla başlamak havada asılı kalmak gibi okunuyor. |
 
 ### Testler (Sim.Tests.EditMode)
-Her Core sistemi için bir test dosyası. Toplam **47** test dosyası. Çalıştırma:
+Her Core sistemi için bir test dosyası. Toplam **49** test dosyası. Çalıştırma:
 `Window > General > Test Runner > EditMode > Run All`.
-| `CampaignSession` (mod) | Statik kampanya sahibinin yanında artık `SelectedMode` de duruyor (+ `IsFreeFlight`, `FreeFlightProfile`, `ActiveProfile`). `SelectedLevelIndex` gibi statik, çünkü moda girip çıkmak `Rebuild()`'den geçiyor. **KASITLI OLARAK KAYDEDİLMİYOR:** `CampaignSaveData`'da ve `Save()`'de yok, yani kum havuzu uçuşu `PlayerPrefs`'te iz bırakmıyor ve oyun her açılışta kampanyada başlıyor. `FreeFlightProfile` garajı OKUYOR ama yazmıyor ve menüdeki kampanya uçak seçimine hiç dokunmuyor — kum havuzu oyuncuyu her zaman kendi jetine, yükseltmeleri dâhil, bindiriyor. `CompleteMission` serbest uçuşta en başta `0` dönüyor. |
 
 ---
 
@@ -432,6 +448,14 @@ Pilot modunda (**C**): kamera varsayılan olarak **kokpite** oturur, **V** kokpi
 | `b618f0e` | `AircraftProfile.BallisticRounds` (jet 2, diğerleri 0), `BallisticMissile` (hasar = 2 × normal füze, TÜRETİLMİŞ) ve dokuzuncu hangar hattı **Balistik Füze** (450/725/1150/1850, seviye başına +1 füze, listenin sonunda). |
 | `0989b0c` | `BallisticLauncher` + `BallisticRound` (Runtime): hedefleme modu (**B**, ←/→ seç, **F** ateş), yay çizen ağır mermi, jete özel stok, `BuildFighterJet`'e görünür gövde altı istasyonu. |
 | `2c5101d` | Balistik füze HUD'u: ekrandaki hedef numaraları (seçili olan dört işaretle ayrışıyor), ekran dışı/kamera arkası kenetlemesi, dördüncü silah satırı, gerekçe satırı, Türkçe tuş şeridi; hangar satır yüksekliği artık kalan yerden türetiliyor (dokuz hat). |
+| `0b8c467` | DEVLOG: balistik füze turu (numaralandırma, hedefleme modu, ekonomi). |
+| `4df1b11` | `SimMode` + `FreeFlightRules` (Core, testli): serbest uçuş modunun tanımı ve altı kuralı tek yerde. |
+| `e10f9f2` | `FreeFlightWorld` (Core, testli): 1200 × 1200 m kum havuzu arazisi, tepe kümesi / göl / boğaz, nirengi çıpaları ve yoğunluğu düşüren prop bütçesi. |
+| `995ab00` | Serbest uçuş tesisatı: `CampaignSession.SelectedMode`/`ActiveProfile` (kaydedilmiyor), `CompleteMission` kum havuzu kalkanı, `IhaController.UnlimitedFuel`, `PlayerDroneController.RequestImmediateControl`, HUD defter kalkanı. |
+| `a927073` | `EnvironmentBuilder`: enjekte edilebilir yükseklik alanı + yerleşim filtresi, sis/uzak-kırpma parametreleri, `BuildLandmarks()` (direk 17 / köprü 21 / göl 2 parça) ve `Strut` yardımcısı. |
+| `32ad1ef` | `SimulationBootstrap` kum havuzu dünyasını kuruyor: geniş arazi + nirengi noktaları, kanat uçağı yok, jet profili, 70 m spawn, sınırsız yakıt, kokpitte başlama. |
+| `67df2a0` | Menüde tam genişlikte **SERBEST UÇUŞ** bandı, `ChooseFreeFlight`/mod geri alma, **ESC** = menü, moda göre HUD (görev paneli yerine mod paneli, bitiş ekranı kapalı). |
+| `5cb8b2b` | Göl kıyı halkası kıyı rampasına gömülmüyor (taşma 13 → 8 m, kot 0.22 → 0.55 m). |
 | `bu tur` | DEVLOG: `sim-unity-lint` mod'u (CLAUDE.md'nin beş Unity kuralını her `.cs` yazımında mekanik denetler; mod'un kendisi kabın içinde, depoda değil). **Hiçbir Unity kaynak dosyası değişmedi.** |
 
 ---
@@ -1639,3 +1663,69 @@ ayrı örnek dosyalarla ayrı ayrı sınandı, mod'un kendi testleri (`claude pl
 eşleşen EditMode testi yok — `BallisticMissile`, `CampaignLevel`, `DetectableTarget`, `Upgrades`.
 Dördü de sabit/veri tipi; kural 5 yalnızca **yeni** dosyada uyarır, yani bunlar bundan sonra
 sessizdir.
+
+- **Serbest Uçuş modu (kullanıcı isteği: "kendi başımıza bir jet ile uçabileceğimiz bir ortam
+  geliştir").** Oyuna kampanyanın YANINDA ikinci bir mod geldi: görev baskısı olmadan uçulan bir kum
+  havuzu. Görev seçim ekranında seviye ızgarasının altında tam genişlikte bir **SERBEST UÇUŞ** bandı
+  duruyor — ızgaraya dokuzuncu kart olarak değil, çünkü ızgara numaralı kampanya ve bu onun parçası
+  değil; yerleşimin bunu metinden önce söylemesi gerekiyordu. Kartın kaş satırı tıklamadan önce
+  bilinmesi gereken üç şeyi yazıyor (kampanya dışı, savaş uçağı, kredi ve ilerleme etkilenmez),
+  çünkü güvenli olduğundan emin olunmayan bir kum havuzu kullanılmaz.
+
+  **Kampanyadan nasıl yalıtıldı (üç ayrı kat).** (1) Mod `CampaignSession.SelectedMode`'da statik
+  duruyor ve **kaydedilmiyor** — `CampaignSaveData`'da ve `Save()`'de yok, yani kum havuzu uçuşu
+  `PlayerPrefs`'te hiç iz bırakmıyor ve oyun her açılışta kampanyada başlıyor. (2) Serbest uçuşta
+  `ScenarioController` **hiç başlatılmıyor** (`BeginMission` çağrılmıyor): `Update`'i tamamen boşta,
+  dolayısıyla dalga spawn'ı, filo-etkisizlik kontrolü ve kazan/kaybet yok, durum sonsuza kadar
+  `InProgress` — ve HUD'ın bitiş ekranı ile defter yolu bu yüzden kendiliğinden devre dışı.
+  (3) Buna rağmen hem `Hud.TryBookMissionResult` hem `CampaignSession.CompleteMission` serbest
+  uçuşta en başta dönüyor; "hiçbir şeye dokunmuyor" sözü başka bir bileşenin boşta kalmasına
+  güvenmemeli. `FreeFlightProfile` garajı okuyor ama yazmıyor ve menüdeki kampanya uçak seçimine
+  dokunmuyor. Modu terk etmek de `ChooseLevel`'da modu Campaign'e almakla oluyor — bu olmasa ESC ile
+  çıkıp bir seviye seçmek kampanya görevini düşmansız kum havuzu dünyasında uçururdu.
+
+  **Dünya.** Muharebe sahası 80 × 80 m'lik bir arena (`ThreatEnvelope`) ve 300 × 300 m'lik bir
+  arazi; serbest uçuşu kısıtlayan bir angajman zarfı olmadığı için arazi **1200 × 1200 m** oldu
+  (`FreeFlightWorld`, 12 m ızgara = 10 201 tepe / 20 000 üçgen, muharebenin 3 721 / 7 200'üne
+  karşı). `TerrainField` **değiştirilmedi**, çünkü taşıyıcı: `FlightEnvelope` 18 m seyir tabanını
+  onun 3 m genliğinden türetiyor ve kampanyadaki her prop/spawn onun üstünde duruyor. Kum havuzu
+  kendi alanını aldı — aynı Perlin yasası, 222 m dalga boyu, 7 m genlik — ve zemine üç özellik
+  oyuldu: **tepe kümesi** (55 m, üç örtüşen kubbe), **göl düzlüğü** (110 m yarıçapında dümdüz
+  tabaka) ve **boğaz** (22 m derin vadi). İnşa edilen nirengi noktaları: **88 m kafes direk**
+  (kırmızı şamandıralı) ve **boğazı geçen 88 m açıklıklı köprü**; ikisi birlikte ~40 parça, yani
+  bir buçuk dağılım binası kadar. Hepsi üsten 390–455 m uzakta, yani uçulacak bir mesafede.
+
+  **Prop bütçesi — sayı çarpılmadı, yoğunluk düşürüldü.** Alan 15.5 kat büyüdü;
+  `FreeFlightWorld.PropDensityFactor` = 0.15 metrekare başına yoğunluğu 6.7 kat düşürüyor ve sonuç
+  **~2.3 kat prop**: 220/70/18 → **510/162/42** (toplam 308 → 714 grup, ~1300 → ~3050 ilkel + 40
+  nirengi parçası). Ortalama aralık ~16 m'den ~42 m'ye çıkıyor: havadan hâlâ döşenmiş bir manzara,
+  orman değil. Yoğunluğun gerçekten düştüğü ve sayının aynı büyüklük mertebesinde kaldığı
+  `FreeFlightWorldTests` tarafından doğrulanıyor.
+
+  **Yakıt: tüketim KAPATILDI** (cömertleştirilmedi). `IhaController.UnlimitedFuel` iki tüketim
+  noktasını da kapatıyor, deponun kendisini değil — `FuelFraction` 1 okumaya devam ediyor, yani
+  HUD'ın yakıt göstergesi boşalmak yerine dolu kalıyor. Gerekçe: on birinci dakikada susuz
+  çakılmayla biten bir oturum, hâlâ üstünde sayaç olan bir oturumdur. Silahlar **açık** kaldı
+  (vurulacak bir şey yok, ama yer propları duruyor).
+
+  **Uçuş hissi.** Oyuncu ilk kareden **kokpitte** başlıyor (`RequestImmediateControl`; C'ye basmak
+  gerekmiyor) ve `CameraRig` zaten pilot aktifken kokpite geçtiği için kamera da oradan açılıyor —
+  **V** takip kamerasına geçiyor. Jet 70 m'de doğuyor (tepe kümesinin 62 m zirvesinin üstü, yani
+  manzara ilk kareden AŞAĞIDA okunuyor ve üstüne dalış yapılabiliyor), gaz 0.66 ile seyirde. Sis
+  0.0025 → **0.0009** (0.0025'te 400 m'deki nirengi noktasının yalnızca %28'i görünürdü) ve uzak
+  kırpma 1200 → **2600 m** (köşegen 1697 m). YZ kanat uçakları spawn edilmiyor: 1.2 km'lik bir
+  dünyada 30 m'lik devriye kutusu çizen bir kanat uçağı dekordur.
+
+  **HUD satırları silinmedi, moda koşullandı:** kampanya paneli birebir eskisi; serbest uçuşta
+  yerine mod paneli çıkıyor (mod adı, uçuş kronometresi, "TEHDİT YOK"). Uçuş biçimli her şey —
+  pilot katmanı, radar skopu, imza bloğu, yakıt/mühimmat göstergeleri, filo paneli — iki modda da
+  aynı kodla çiziliyor. **ESC** artık M'nin eşi (proje genelinde hiçbir yere bağlı değildi) ve
+  serbest uçuşun kendi bitiş ekranı olmadığı için çıkmanın yolu o.
+
+  **Yapılmayanlar / bilinen sınırlar:** (a) arazinin ve nirengi noktalarının **collider'ı yok**
+  (projede hiç olmadı), yani tepeye uçulunca içinden geçiliyor; pilotu durduran tek şey 5 m'lik
+  irtifa tabanı. (b) Kum havuzunda **ikmal** teknik olarak hâlâ çalışıyor (spawn noktasının 12 m'si
+  içinde beklemek) ama yakıt bitmediği için pratikte işlevsiz. (c) Göl 110 m yarıçapında ama yalnız
+  3 m derin: yukarıdan bir çanak değil, rengiyle su olarak okunan bir **düzlük**. (d) Bu turda
+  bilinçli olarak **hiçbir ikili 3B model varlığı** eklenmedi; nirengi noktaları da mevcut
+  prosedürel ilkel dağarcığından.
